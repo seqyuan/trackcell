@@ -12,11 +12,11 @@ from shapely import wkt, geometry
 import numpy as np
 import json
 import imageio.v3 as iio
-from pathlib import Path
+import os
 from typing import Optional, Union, Dict, Any
 
 def read_hd_cellseg(
-    path: Union[str, Path],
+    datapath: Union[str, Path],
     sample: Optional[str] = None,
     cell_segmentations_file: str = "cell_segmentations.geojson",
     matrix_file: str = "filtered_feature_cell_matrix.h5",
@@ -32,18 +32,18 @@ def read_hd_cellseg(
     
     Parameters
     ----------
-    cellsegpath : str or Path
+    datapath : str or Path
         Path to the SpaceRanger output directory containing segmented outputs.
     sample : str, optional
-        Sample name. If None, will be inferred from the cellsegpath.
+        Sample name. If None, will be inferred from the path.
     cell_segmentations_file : str, default "cell_segmentations.geojson"
         Name of the cell segmentations file.
     matrix_file : str, default "filtered_feature_cell_matrix.h5"
         Name of the filtered feature-cell matrix file.
     hires_image_file : str, default "spatial/tissue_hires_image.png"
-        Path to the high-resolution tissue image relative to cellsegpath.
+        Path to the high-resolution tissue image relative to datapath.
     lowres_image_file : str, default "spatial/tissue_lowres_image.png"
-        Path to the low-resolution tissue image relative to cellsegpath.
+        Path to the low-resolution tissue image relative to datapath.
     scalefactors_file : str, default "scalefactors_json.json"
         Name of the scalefactors JSON file.
     
@@ -79,19 +79,19 @@ def read_hd_cellseg(
     """
     
     # Convert to Path object for easier handling
-    cellsegpath = Path(path)
+    datapath = os.path.abspath(datapath)
     
     # If sample is not provided, try to infer from path
     if sample is None:
-        sample = cellsegpath.parent.parent.name
+        sample = 'sample'
     
     # Read cell segmentations
-    gdf_seg = gpd.read_file(cellsegpath / cell_segmentations_file)
+    gdf_seg = gpd.read_file(os.path.join(datapath, cell_segmentations_file))
     df = pd.DataFrame(gdf_seg)
     df['cellid'] = df['cell_id'].apply(lambda x: f"cellid_{str(x).zfill(9)}-1")
     
     # Read expression matrix
-    adata = sc.read_10x_h5(cellsegpath / matrix_file)
+    adata = sc.read_10x_h5(os.path.join(datapath, matrix_file))
     
     # Align cell segmentations with expression data
     adata = adata[adata.obs_names.isin(df['cellid']),:]
@@ -115,8 +115,8 @@ def read_hd_cellseg(
     
     # Read tissue images
     try:
-        hires_img = iio.imread(cellsegpath / hires_image_file)
-        lowres_img = iio.imread(cellsegpath / lowres_image_file)
+        hires_img = iio.imread(os.path.join(datapath, hires_image_file))
+        lowres_img = iio.imread(os.path.join(datapath, lowres_image_file))
     except FileNotFoundError as e:
         print(f"Warning: Could not load tissue images: {e}")
         hires_img = None
@@ -128,7 +128,7 @@ def read_hd_cellseg(
     
     # Load scalefactors
     try:
-        with open(cellsegpath / scalefactors_file, 'r', encoding='utf-8') as file:
+        with open(os.path.join(datapath, scalefactors_file), 'r', encoding='utf-8') as file:
             scalefactor = json.load(file)
     except FileNotFoundError as e:
         print(f"Warning: Could not load scalefactors: {e}")
