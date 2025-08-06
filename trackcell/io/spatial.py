@@ -120,8 +120,8 @@ def read_hd_cellseg(
 
     # Read tissue images
     try:
-        hires_img = iio.imread(f'{datapath}/{hires_image_file}')
-        lowres_img = iio.imread(f'{datapath}/{lowres_image_file}')
+        hires_img = iio.imread(f'{datapath}/spatial/{hires_image_file}')
+        lowres_img = iio.imread(f'{datapath}/spatial/{lowres_image_file}')
     except FileNotFoundError as e:
         print(f"Warning: Could not load tissue images: {e}")
         hires_img = None
@@ -133,7 +133,7 @@ def read_hd_cellseg(
     
     # Load scalefactors
     try:
-        with open(f'{datapath}/{scalefactors_file}', 'r', encoding='utf-8') as file:
+        with open(f'{datapath}/spatial/scalefactors_json.json', 'r', encoding='utf-8') as file:
             scalefactor = json.load(file)
     except FileNotFoundError as e:
         print(f"Warning: Could not load scalefactors: {e}")
