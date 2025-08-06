@@ -17,7 +17,7 @@ import trackcell as tcl
 
 # Read SpaceRanger output
 adata = tcl.io.read_hd_cellseg(
-    cellsegpath="SpaceRanger4.0/Cse1/outs/segmented_outputs",
+    path="SpaceRanger4.0/Cse1/outs/segmented_outputs",
     sample="Cse1"
 )
 
