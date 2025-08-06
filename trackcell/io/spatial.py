@@ -86,12 +86,12 @@ def read_hd_cellseg(
         sample = 'sample'
     
     # Read cell segmentations
-    gdf_seg = gpd.read_file(os.path.join(datapath, cell_segmentations_file))
+    gdf_seg = gpd.read_file(f'{datapath}/{cell_segmentations_file}')
     df = pd.DataFrame(gdf_seg)
     df['cellid'] = df['cell_id'].apply(lambda x: f"cellid_{str(x).zfill(9)}-1")
     
     # Read expression matrix
-    adata = sc.read_10x_h5(os.path.join(datapath, matrix_file))
+    adata = sc.read_10x_h5(f'{datapath}/{matrix_file}')
     
     # Align cell segmentations with expression data
     adata = adata[adata.obs_names.isin(df['cellid']),:]
@@ -115,8 +115,8 @@ def read_hd_cellseg(
     
     # Read tissue images
     try:
-        hires_img = iio.imread(os.path.join(datapath, hires_image_file))
-        lowres_img = iio.imread(os.path.join(datapath, lowres_image_file))
+        hires_img = iio.imread(f'{datapath}/{hires_image_file}')
+        lowres_img = iio.imread(f'{datapath}/{lowres_image_file}')
     except FileNotFoundError as e:
         print(f"Warning: Could not load tissue images: {e}")
         hires_img = None
@@ -128,7 +128,7 @@ def read_hd_cellseg(
     
     # Load scalefactors
     try:
-        with open(os.path.join(datapath, scalefactors_file), 'r', encoding='utf-8') as file:
+        with open(f'{datapath}/{scalefactors_file}', 'r', encoding='utf-8') as file:
             scalefactor = json.load(file)
     except FileNotFoundError as e:
         print(f"Warning: Could not load scalefactors: {e}")
