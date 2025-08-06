@@ -14,6 +14,7 @@ import json
 import imageio.v3 as iio
 import os
 from typing import Optional
+import ast
 
 def read_hd_cellseg(
     datapath: str,
@@ -110,9 +111,13 @@ def read_hd_cellseg(
     adata.obsm["spatial"] = np.array(df[["x", "y"]])
     
     if 'classification' in df.columns:
-        adata.obs['classification'] = [i['name'] for i in df['classification']]
+        if isinstance(df['classification'].iloc[0], str):
+            classifications = df['classification'].apply(ast.literal_eval)
+        else:
+            classifications = df['classification']
+        adata.obs['classification'] = [i['name'] for i in classifications]
         adata.uns['classification_colors'] = convert_classification_to_color_dict(df, 'classification')
-    
+
     # Read tissue images
     try:
         hires_img = iio.imread(f'{datapath}/{hires_image_file}')
