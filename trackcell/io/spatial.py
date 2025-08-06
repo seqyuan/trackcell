@@ -14,7 +14,6 @@ import json
 import imageio.v3 as iio
 from pathlib import Path
 from typing import Optional, Union, Dict, Any
-from ast
 
 def read_hd_cellseg(
     path: Union[str, Path],
@@ -160,10 +159,7 @@ def convert_classification_to_color_dict(df, classification_col='classification'
         dict: {分类名称: 十六进制颜色代码}
     """
     # 确保数据是字典格式（如果是字符串则转换为字典）
-    if isinstance(df[classification_col].iloc[0], str):
-        classifications = df[classification_col].apply(ast.literal_eval)
-    else:
-        classifications = df[classification_col]
+    classifications = df[classification_col]
     
     # 获取唯一的分类
     unique_classes = classifications.explode().unique()
