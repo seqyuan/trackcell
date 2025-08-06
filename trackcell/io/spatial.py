@@ -19,11 +19,11 @@ import ast
 def read_hd_cellseg(
     datapath: str,
     sample: Optional[str] = None,
-    cell_segmentations_file: str = "cell_segmentations.geojson",
+    cell_segmentations_file: str = "graphclust_annotated_cell_segmentations.geojson",
     matrix_file: str = "filtered_feature_cell_matrix.h5",
     hires_image_file: str = "spatial/tissue_hires_image.png",
     lowres_image_file: str = "spatial/tissue_lowres_image.png",
-    scalefactors_file: str = "scalefactors_json.json"
+    scalefactors_file: str = "spatial/scalefactors_json.json"
 ) -> sc.AnnData:
     """
     Read 10X HD SpaceRanger cell segmentation output and create an AnnData object with spatial information.
@@ -120,8 +120,8 @@ def read_hd_cellseg(
 
     # Read tissue images
     try:
-        hires_img = iio.imread(f'{datapath}/spatial/{hires_image_file}')
-        lowres_img = iio.imread(f'{datapath}/spatial/{lowres_image_file}')
+        hires_img = iio.imread(f'{datapath}/{hires_image_file}')
+        lowres_img = iio.imread(f'{datapath}/{lowres_image_file}')
     except FileNotFoundError as e:
         print(f"Warning: Could not load tissue images: {e}")
         hires_img = None
@@ -133,7 +133,7 @@ def read_hd_cellseg(
     
     # Load scalefactors
     try:
-        with open(f'{datapath}/spatial/scalefactors_json.json', 'r', encoding='utf-8') as file:
+        with open(f'{datapath}/{scalefactors_file}', 'r', encoding='utf-8') as file:
             scalefactor = json.load(file)
     except FileNotFoundError as e:
         print(f"Warning: Could not load scalefactors: {e}")
