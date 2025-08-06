@@ -13,10 +13,10 @@ import numpy as np
 import json
 import imageio.v3 as iio
 import os
-from typing import Optional, Union, Dict, Any
+from typing import Optional
 
 def read_hd_cellseg(
-    datapath: Union[str, Path],
+    datapath: str,
     sample: Optional[str] = None,
     cell_segmentations_file: str = "cell_segmentations.geojson",
     matrix_file: str = "filtered_feature_cell_matrix.h5",
