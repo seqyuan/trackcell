@@ -62,7 +62,7 @@ def read_hd_cellseg(
     Examples
     --------
     >>> import trackcell.io as tcio
-    >>> adata = tcio.read_spaceranger_output("SpaceRanger4.0/Case1/outs/segmented_outputs", sample="Case1")
+    >>> adata = tcio.read_hd_cellseg("SpaceRanger4.0/Case1/outs/segmented_outputs", sample="Cas1")
     >>> print(adata)
     AnnData object with n_obs × n_vars = 1000 × 2000
         obs: 'cellid'
