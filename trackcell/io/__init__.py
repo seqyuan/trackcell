@@ -6,4 +6,4 @@ This module provides functions for reading and writing single-cell and spatial t
 
 from .spatial import read_hd_cellseg
 
-__all__ = ["read_hd_cellseg"] 
+__all__ = ["read_hd_cellseg"]
