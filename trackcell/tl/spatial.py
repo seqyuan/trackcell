@@ -2,7 +2,6 @@
 Tools for spatial analyses.
 """
 
-import scanpy as sc
 import numpy as np
 import pandas as pd
 
