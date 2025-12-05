@@ -4,9 +4,11 @@ Tools for spatial analyses.
 
 import numpy as np
 import pandas as pd
+from scipy.spatial import cKDTree
+from scipy.spatial.distance import cdist
 
 
-def hd_labeldist(adata, group: str, label: str, inplace: bool = True):
+def hd_labeldist(adata, group: str, label: str, inplace: bool = True, method: str = "kdtree"):
     """
     Compute the distance from every cell to the nearest cell annotated with a specific label (10x HD data).
     
@@ -27,6 +29,12 @@ def hd_labeldist(adata, group: str, label: str, inplace: bool = True):
         `{label}_px` (pixel distance on the hires/registered image) and
         `{label}_dist` (physical distance in microns).
         If False, the function returns a dataframe with the two columns.
+    method : str, default "kdtree"
+        Method to use for distance computation:
+        - "kdtree": Use KDTree spatial indexing (recommended, O(n log n) time, O(n) memory).
+                   Best for large datasets with many cells.
+        - "cdist": Use scipy's cdist function (O(n*m) time and memory, where m is number of label cells).
+                   Faster for small datasets but memory-intensive for large ones.
     
     Returns
     -------
@@ -52,8 +60,19 @@ def hd_labeldist(adata, group: str, label: str, inplace: bool = True):
     coords_all = np.asarray(coords, dtype=float)
     coords_label = coords_all[mask_label]
     
-    diff = coords_all[:, None, :] - coords_label[None, :, :]
-    dist_px = np.sqrt(np.sum(diff**2, axis=2)).min(axis=1)
+    # Compute distances using selected method
+    if method == "kdtree":
+        # Method 1: KDTree (recommended for large datasets)
+        # Memory: O(n + m), Time: O(n log m) where n=all cells, m=label cells
+        tree = cKDTree(coords_label)
+        dist_px, _ = tree.query(coords_all, k=1)
+    elif method == "cdist":
+        # Method 2: cdist (faster for small datasets, but memory-intensive)
+        # Memory: O(n*m), Time: O(n*m)
+        dist_matrix = cdist(coords_all, coords_label, metric='euclidean')
+        dist_px = dist_matrix.min(axis=1)
+    else:
+        raise ValueError(f"Unknown method: {method}. Choose 'kdtree' or 'cdist'.")
     
     spatial_meta = adata.uns.get("spatial")
     if not spatial_meta:
