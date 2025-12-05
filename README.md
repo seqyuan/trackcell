@@ -30,7 +30,6 @@ adata = tcl.io.read_hd_cellseg(
 # - Scalefactors in .uns["spatial"][sample]["scalefactors"]
 ```
 
-
 #### visualisation
 ```python
 sc.pl.spatial(adata, color='classification', size=2, 
@@ -52,7 +51,6 @@ sq.pl.spatial_scatter(
     #basis="spatial_cropped_150_buffer"
 )
 ```
-
 
 ### Computing Distances to a Label (10x HD)
 
@@ -79,4 +77,15 @@ sc.pl.spatial(adata, color='Cluster-2_dist', size=2,
 
 
 ## License
+
+
+
+## update
+```shell
+git tag v0.1.5
+git push origin v0.1.5
+
+# In GitHub, go to “Releases” → “Draft a new release”.
+```
+
 
