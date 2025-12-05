@@ -16,6 +16,10 @@ def hd_labeldist(adata, group: str, label: str, inplace: bool = True, method: st
     (SpaceRanger target/hires layer) and in microns using the scalefactors embedded in
     `adata.uns["spatial"]`.
     
+    The function automatically detects whether coordinates are in hires or full-res resolution
+    by comparing the computed tissue size with the expected chip size (6.5mm for 10X HD).
+    This ensures compatibility with both SpaceRanger output and bin2cell-processed data.
+    
     Parameters
     ----------
     adata : sc.AnnData
@@ -85,7 +89,45 @@ def hd_labeldist(adata, group: str, label: str, inplace: bool = True, method: st
         raise ValueError("`microns_per_pixel` not found in scalefactors.")
     
     hires_scale = scalefactors.get("tissue_hires_scalef") or scalefactors.get("regist_target_img_scalef") or 1.0
-    dist_um = dist_px * (microns_per_pixel / hires_scale)
+    
+    # Auto-detect coordinate resolution by comparing computed size with expected chip size
+    # 10X HD chip is 6.5mm x 6.5mm, VisiumHD is similar
+    # Calculate coordinate range in both possible resolutions
+    coord_range = np.ptp(coords_all, axis=0)  # [max_x - min_x, max_y - min_y]
+    max_range_px = np.max(coord_range)
+    
+    # Test both hypotheses:
+    # 1. Coordinates are hires: need to divide by hires_scale
+    size_um_hires = max_range_px * (microns_per_pixel / hires_scale)
+    # 2. Coordinates are full-res: use directly
+    size_um_fullres = max_range_px * microns_per_pixel
+    
+    # Expected chip size: 6.5mm = 6500um (with some tolerance for tissue coverage)
+    # Typical tissue coverage is 60-90% of chip, so reasonable range is 4000-7000um
+    expected_max_size_um = 7000  # Upper bound for reasonable chip size
+    
+    # Determine which resolution gives more reasonable results
+    # If hires calculation gives reasonable size (< expected_max_size_um), coordinates are hires
+    # If fullres calculation gives reasonable size, coordinates are full-res
+    # If hires_scale is 1.0 or very close, assume full-res
+    if hires_scale < 1.01:  # hires_scale close to 1.0 means likely full-res
+        is_hires = False
+    elif size_um_hires <= expected_max_size_um and size_um_fullres > expected_max_size_um:
+        # hires calculation gives reasonable result, fullres doesn't
+        is_hires = True
+    elif size_um_fullres <= expected_max_size_um and size_um_hires > expected_max_size_um:
+        # fullres calculation gives reasonable result, hires doesn't
+        is_hires = False
+    else:
+        # Both or neither give reasonable results, prefer hires if hires_scale is significantly < 1.0
+        # This handles edge cases where tissue might be larger than chip
+        is_hires = (hires_scale < 0.5)  # If hires_scale is significantly < 1, likely hires coords
+    
+    # Calculate physical distance based on detected resolution
+    if is_hires:
+        dist_um = dist_px * (microns_per_pixel / hires_scale)
+    else:
+        dist_um = dist_px * microns_per_pixel
     
     col_px = f"{label}_px"
     col_um = f"{label}_dist"
