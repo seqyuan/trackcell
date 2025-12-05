@@ -138,4 +138,3 @@ def hd_labeldist(adata, group: str, label: str, inplace: bool = True, method: st
         return None
     
     return pd.DataFrame({col_px: dist_px, col_um: dist_um}, index=adata.obs.index)
-
