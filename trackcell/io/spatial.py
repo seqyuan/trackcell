@@ -16,6 +16,199 @@ from pathlib import Path
 from typing import Optional, Union
 import ast
 
+def read_hd_bin(
+    datapath: Union[str, Path],
+    sample: Optional[str] = None,
+    binsize: int = 16,
+    matrix_file_h5: str = "filtered_feature_bc_matrix.h5",
+    matrix_file_dir: str = "filtered_feature_bc_matrix",
+    tissue_positions_file: str = "spatial/tissue_positions.parquet",
+    hires_image_file: str = "spatial/tissue_hires_image.png",
+    lowres_image_file: str = "spatial/tissue_lowres_image.png",
+    scalefactors_file: str = "spatial/scalefactors_json.json"
+) -> sc.AnnData:
+    """
+    Read 10X HD SpaceRanger bin-level output (2um/8um/16um) and create an AnnData object with spatial information.
+    
+    This function reads the output from SpaceRanger pipeline and creates an AnnData object
+    that includes spatial coordinates, tissue images, and scalefactors for bin-level data.
+    
+    Parameters
+    ----------
+    datapath : str or Path
+        Path to the SpaceRanger output directory containing bin-level outputs.
+    sample : str, optional
+        Sample name. If None, will be inferred from the path.
+    binsize : int, default 16
+        Bin size in micrometers. Common values are 2, 8, or 16. This information
+        will be stored in adata.uns["spatial"][sample]["binsize"].
+    matrix_file_h5 : str, default "filtered_feature_bc_matrix.h5"
+        Name of the H5 matrix file. Will be tried first.
+    matrix_file_dir : str, default "filtered_feature_bc_matrix"
+        Name of the matrix directory. Will be used if H5 file is not available.
+    tissue_positions_file : str, default "spatial/tissue_positions.parquet"
+        Path to tissue positions file (parquet or csv format).
+    hires_image_file : str, default "spatial/tissue_hires_image.png"
+        Path to the high-resolution tissue image relative to datapath.
+    lowres_image_file : str, default "spatial/tissue_lowres_image.png"
+        Path to the low-resolution tissue image relative to datapath.
+    scalefactors_file : str, default "spatial/scalefactors_json.json"
+        Name of the scalefactors JSON file.
+    
+    Returns
+    -------
+    sc.AnnData
+        AnnData object containing:
+        - Expression matrix in .X
+        - Cell metadata in .obs
+        - Gene metadata in .var
+        - Spatial coordinates in .obsm["spatial"]
+        - Tissue images in .uns["spatial"][sample]["images"]
+        - Scalefactors in .uns["spatial"][sample]["scalefactors"]
+        - Bin size in .uns["spatial"][sample]["binsize"]
+    
+    Examples
+    --------
+    >>> import trackcell.io as tcio
+    >>> adata = tcio.read_hd_bin("SpaceRanger4.0/Case1/outs", sample="Case1")
+    >>> print(adata)
+    AnnData object with n_obs × n_vars = 10000 × 2000
+        obs: 'barcode'
+        obsm: 'spatial'
+        uns: 'spatial'
+    
+    Notes
+    -----
+    This function expects the SpaceRanger output to have the following structure:
+    - filtered_feature_bc_matrix.h5 or filtered_feature_bc_matrix/: Expression matrix
+    - spatial/tissue_positions.parquet or spatial/tissue_positions.csv: Spatial coordinates
+    - spatial/tissue_hires_image.png: High-resolution tissue image
+    - spatial/tissue_lowres_image.png: Low-resolution tissue image
+    - spatial/scalefactors_json.json: Image scaling factors
+    """
+    
+    # Convert to Path object for easier handling
+    datapath = Path(datapath).resolve()
+    
+    # If sample is not provided, try to infer from path
+    if sample is None:
+        sample = datapath.parent.parent.name if datapath.name == "outs" else datapath.name
+    
+    # Read expression matrix - try H5 first, then directory
+    h5_path = datapath / matrix_file_h5
+    matrix_dir_path = datapath / matrix_file_dir
+    
+    if h5_path.exists():
+        try:
+            adata = sc.read_10x_h5(h5_path)
+        except Exception as e:
+            print(f"Warning: Could not read H5 file {h5_path}: {e}")
+            print(f"Trying to read from directory {matrix_dir_path}")
+            if matrix_dir_path.exists():
+                adata = sc.read_10x_mtx(matrix_dir_path)
+            else:
+                raise FileNotFoundError(f"Neither H5 file nor matrix directory found in {datapath}")
+    elif matrix_dir_path.exists():
+        adata = sc.read_10x_mtx(matrix_dir_path)
+    else:
+        raise FileNotFoundError(f"Neither {h5_path} nor {matrix_dir_path} found")
+    
+    # Load the Spatial Coordinates
+    tissue_pos_path = datapath / tissue_positions_file
+    
+    if not tissue_pos_path.exists():
+        # Try CSV format as fallback
+        tissue_pos_path_csv = datapath / tissue_positions_file.replace('.parquet', '.csv')
+        if tissue_pos_path_csv.exists():
+            tissue_pos_path = tissue_pos_path_csv
+        else:
+            raise FileNotFoundError(f"Tissue positions file not found: {tissue_pos_path} or {tissue_pos_path_csv}")
+    
+    # Read tissue positions file
+    try:
+        if tissue_pos_path.suffix == '.parquet':
+            df_tissue_positions = pd.read_parquet(tissue_pos_path)
+        else:
+            # Try CSV with different separators
+            try:
+                df_tissue_positions = pd.read_csv(tissue_pos_path, sep=',')
+            except Exception:
+                try:
+                    df_tissue_positions = pd.read_csv(tissue_pos_path, sep='\t')
+                except Exception:
+                    df_tissue_positions = pd.read_csv(tissue_pos_path, sep=None, engine='python')
+    except Exception as e:
+        raise ValueError(f"Could not read tissue positions file {tissue_pos_path}: {e}")
+    
+    # Set the index of the dataframe to the barcodes
+    if 'barcode' in df_tissue_positions.columns:
+        df_tissue_positions = df_tissue_positions.set_index('barcode')
+    elif df_tissue_positions.index.name == 'barcode' or 'barcode' in str(df_tissue_positions.index.name):
+        # Already indexed by barcode
+        pass
+    else:
+        # Try to use first column as barcode if it's not already indexed
+        if len(df_tissue_positions.columns) > 0:
+            df_tissue_positions = df_tissue_positions.set_index(df_tissue_positions.columns[0])
+    
+    # Adding the tissue positions to the metadata
+    adata.obs = pd.merge(adata.obs, df_tissue_positions, left_index=True, right_index=True, how='left')
+    
+    # Extract spatial coordinates
+    # Try different possible column names for spatial coordinates
+    coord_cols = None
+    for col_pair in [
+        ["pxl_col_in_fullres", "pxl_row_in_fullres"],
+        ["pxl_col", "pxl_row"],
+        ["x", "y"],
+        ["array_col", "array_row"]
+    ]:
+        if all(col in adata.obs.columns for col in col_pair):
+            coord_cols = col_pair
+            break
+    
+    if coord_cols is None:
+        raise ValueError(
+            "Could not find spatial coordinate columns. "
+            "Expected one of: ['pxl_col_in_fullres', 'pxl_row_in_fullres'], "
+            "['pxl_col', 'pxl_row'], ['x', 'y'], or ['array_col', 'array_row']"
+        )
+    
+    adata.obsm['spatial'] = adata.obs[coord_cols].values
+    
+    # Read tissue images
+    try:
+        hires_img = iio.imread(datapath / hires_image_file)
+        lowres_img = iio.imread(datapath / lowres_image_file)
+    except FileNotFoundError as e:
+        print(f"Warning: Could not load tissue images: {e}")
+        hires_img = None
+        lowres_img = None
+    
+    # Initialize spatial metadata
+    adata.uns["spatial"] = {}
+    adata.uns["spatial"][sample] = {}
+    
+    # Load scalefactors
+    try:
+        with open(datapath / scalefactors_file, 'r', encoding='utf-8') as file:
+            scalefactor = json.load(file)
+    except FileNotFoundError as e:
+        print(f"Warning: Could not load scalefactors: {e}")
+        scalefactor = {}
+    
+    # Store images and scalefactors
+    if hires_img is not None and lowres_img is not None:
+        adata.uns["spatial"][sample]["images"] = {
+            "hires": hires_img,
+            "lowres": lowres_img
+        }
+    
+    adata.uns["spatial"][sample]["scalefactors"] = scalefactor
+    adata.uns["spatial"][sample]["binsize"] = binsize
+    
+    return adata
+
 def read_hd_cellseg(
     datapath: Union[str, Path],
     sample: Optional[str] = None,

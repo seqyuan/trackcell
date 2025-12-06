@@ -8,7 +8,7 @@ from scipy.spatial import cKDTree
 from scipy.spatial.distance import cdist
 
 
-def hd_labeldist(adata, group: str, label: str, inplace: bool = True, method: str = "kdtree"):
+def hd_labeldist(adata, groupby: str, label: str, inplace: bool = True, method: str = "kdtree"):
     """
     Compute the distance from every cell to the nearest cell annotated with a specific label (10x HD data).
     
@@ -24,10 +24,10 @@ def hd_labeldist(adata, group: str, label: str, inplace: bool = True, method: st
     ----------
     adata : sc.AnnData
         Annotated data matrix with spatial coordinates and SpaceRanger scalefactors.
-    group : str
+    groupby : str
         Column name in `adata.obs` that contains the annotation labels.
     label : str
-        Target label within `group` for which distances will be computed.
+        Target label within `groupby` for which distances will be computed.
     inplace : bool, default True
         If True, the function adds two columns to `adata.obs`:
         `{label}_px` (pixel distance on the hires/registered image) and
@@ -48,16 +48,16 @@ def hd_labeldist(adata, group: str, label: str, inplace: bool = True, method: st
     """
     if "spatial" not in adata.obsm:
         raise ValueError("`adata.obsm['spatial']` is required but missing.")
-    if group not in adata.obs.columns:
-        raise ValueError(f"`{group}` not found in `adata.obs`.")
-    if label not in adata.obs[group].unique():
-        raise ValueError(f"`{label}` not present in `adata.obs['{group}']`.")
+    if groupby not in adata.obs.columns:
+        raise ValueError(f"`{groupby}` not found in `adata.obs`.")
+    if label not in adata.obs[groupby].unique():
+        raise ValueError(f"`{label}` not present in `adata.obs['{groupby}']`.")
     
     coords = adata.obsm["spatial"]
     if coords is None or len(coords) == 0:
         raise ValueError("Spatial coordinates are empty.")
     
-    mask_label = (adata.obs[group] == label).to_numpy()
+    mask_label = (adata.obs[groupby] == label).to_numpy()
     if not mask_label.any():
         raise ValueError(f"No observations with label `{label}` were found.")
     
