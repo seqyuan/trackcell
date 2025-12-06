@@ -1,6 +1,24 @@
 Changelog
 =========
 
+Version 0.2.5
+-------------
+
+* Fixed ``read_hd_cellseg`` bug where ``cellid`` column was lost after ``reset_index()``
+* Added robust handling for cases where ``reset_index()`` creates ``'index'`` column instead of ``'cellid'``
+* Improved error messages for better debugging
+
+Version 0.2.4
+-------------
+
+* Fixed ``read_hd_cellseg`` bug where ``cellid`` column was missing when creating GeoDataFrame
+* Added field name detection for ``cell_id`` column (supports multiple naming variants)
+
+Version 0.2.3
+-------------
+
+* Fixed ``read_hd_cellseg`` to properly store cell geometries in GeoDataFrame format
+
 Version 0.2.2
 -------------
 

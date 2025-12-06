@@ -285,22 +285,8 @@ def read_hd_cellseg(
     gdf_seg = gpd.read_file(datapath / cell_segmentations_file)
     df = pd.DataFrame(gdf_seg)
     
-    # Check for cell_id column (try different possible names)
-    cell_id_col = None
-    for col_name in ['cell_id', 'cellId', 'cellID', 'Cell_ID', 'CellID']:
-        if col_name in df.columns:
-            cell_id_col = col_name
-            break
-    
-    if cell_id_col is None:
-        raise ValueError(
-            f"Could not find cell_id column in {cell_segmentations_file}. "
-            f"Expected one of: cell_id, cellId, cellID, Cell_ID, CellID. "
-            f"Available columns: {list(df.columns)}"
-        )
-    
     # Create cellid in the format expected by SpaceRanger
-    df['cellid'] = df[cell_id_col].apply(lambda x: f"cellid_{str(x).zfill(9)}-1")
+    df['cellid'] = df['cell_id'].apply(lambda x: f"cellid_{str(x).zfill(9)}-1")
     
     # Read expression matrix
     adata = sc.read_10x_h5(datapath / matrix_file)
@@ -313,13 +299,19 @@ def read_hd_cellseg(
     # Keep cellid as a column throughout (reset_index converts index back to column)
     df = df.set_index("cellid").loc[adata.obs_names].reset_index()
     
-    # Verify cellid is a column (reset_index should always work, but check just in case)
+    # Handle case where reset_index creates 'index' column instead of 'cellid'
+    # This can happen if the index name was lost during operations
+    """
     if "cellid" not in df.columns:
-        raise ValueError(
-            f"Unexpected: cellid is not a column after reset_index(). "
-            f"This should not happen. Index name: {df.index.name}, Columns: {list(df.columns)}"
-        )
-    
+        if "index" in df.columns:
+            # Rename 'index' to 'cellid' if it exists
+            df = df.rename(columns={"index": "cellid"})
+        else:
+            raise ValueError(
+                f"Unexpected: cellid is not a column after reset_index(). "
+                f"Index name: {df.index.name}, Columns: {list(df.columns)}"
+            )
+    """
     # Convert geometry strings to shapely objects if needed
     if isinstance(df["geometry"].iloc[0], str):
         df["geometry"] = df["geometry"].apply(wkt.loads)
