@@ -31,6 +31,8 @@ adata = tcl.io.read_hd_cellseg(
 # - Spatial coordinates in .obsm["spatial"]
 # - Tissue images in .uns["spatial"][sample]["images"]
 # - Scalefactors in .uns["spatial"][sample]["scalefactors"]
+# - Cell geometries in .uns["spatial"][sample]["geometries"] (GeoDataFrame)
+# - Cell geometries in .obs["geometry"] (WKT strings for serialization)
 ```
 
 #### Reading Bin-Level Data (2um/8um/16um)
@@ -40,7 +42,7 @@ import trackcell as tcl
 
 # Read SpaceRanger bin-level output (2um/8um/16um bins)
 adata = tcl.io.read_hd_bin(
-    datapath="SpaceRanger4.0/Cse1/outs",
+    datapath="SpaceRanger4.0/Cse1/binned_outputs",
     sample="Cse1",
     binsize=16  # Bin size in micrometers (default: 16, common values: 2, 8, or 16)
 )
@@ -64,8 +66,37 @@ adata = tcl.io.read_hd_bin(
 print(f"Bin size: {adata.uns['spatial']['Cse1']['binsize']} um")
 ```
 
-#### visualisation
+#### Visualization
+
+##### Plotting with Cell Polygons
+
 ```python
+# Plot cells as polygons (requires data loaded with read_hd_cellseg)
+tcl.pl.spatial_cell(
+    adata, 
+    color="classification",  # Color by cell type
+    groups=['Cluster-2', 'Cluster-3'],  # Optional: filter specific groups
+    figsize=(10, 10),
+    edges_width=0.5,
+    edges_color="black",
+    alpha=0.8
+)
+```
+
+```python
+# Plot continuous values (e.g., distance to a label)
+tcl.pl.spatial_cell(
+    adata,
+    color="Cluster-2_dist",  # Distance to Cluster-2
+    cmap="Reds",
+    figsize=(10, 10)
+)
+```
+
+##### Traditional Point-based Visualization
+
+```python
+# Using scanpy (point-based)
 sc.pl.spatial(adata, color='classification', size=2, 
               groups=['Cluster-2', 'Cluster-3'],
               legend_fontsize=12, spot_size=10, frameon=True
@@ -73,6 +104,7 @@ sc.pl.spatial(adata, color='classification', size=2,
 ```
 
 ```python
+# Using squidpy (point-based)
 sq.pl.spatial_scatter(
     adata, shape=None, color=["classification"], 
     edges_width=0, size=0.1, 
@@ -102,6 +134,10 @@ dist_df = tcl.tl.hd_labeldist(adata, groupby="group_col", label="Neuron", inplac
 ```
 
 ```python
+# Visualize distance using cell polygons
+tcl.pl.spatial_cell(adata, color='Cluster-2_dist', cmap='Reds', figsize=(10, 10))
+
+# Or using traditional point-based visualization
 sc.pl.spatial(adata, color='Cluster-2_dist', size=2, 
               legend_fontsize=12, spot_size=10, frameon=True
              )

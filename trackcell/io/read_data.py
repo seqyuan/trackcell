@@ -1,8 +1,8 @@
 """
-Spatial transcriptomics data input/output functions.
+Data reading functions for TrackCell package.
 
-This module provides functions for reading and writing spatial transcriptomics data,
-particularly from SpaceRanger output.
+This module provides functions for reading spatial transcriptomics data,
+particularly from SpaceRanger output (both bin-level and cell segmentation data).
 """
 
 import scanpy as sc
@@ -251,6 +251,8 @@ def read_hd_cellseg(
         - Spatial coordinates in .obsm["spatial"]
         - Tissue images in .uns["spatial"][sample]["images"]
         - Scalefactors in .uns["spatial"][sample]["scalefactors"]
+        - Cell geometries in .uns["spatial"][sample]["geometries"] (GeoDataFrame)
+        - Cell geometries in .obs["geometry"] (WKT strings for serialization)
     
     Examples
     --------
@@ -340,6 +342,15 @@ def read_hd_cellseg(
         }
     
     adata.uns["spatial"][sample]["scalefactors"] = scalefactor
+    
+    # Store geometries: GeoDataFrame for fast access and WKT strings for serialization
+    # Create GeoDataFrame indexed by cellid for easy lookup
+    gdf_indexed = gpd.GeoDataFrame(df[["geometry"]], geometry="geometry")
+    gdf_indexed = gdf_indexed.set_index("cellid")
+    adata.uns["spatial"][sample]["geometries"] = gdf_indexed
+    
+    # Also store WKT strings in obs for serialization compatibility
+    adata.obs["geometry"] = df["geometry"].apply(lambda g: wkt.dumps(g) if g is not None else None)
     
     return adata 
 

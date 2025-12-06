@@ -1,8 +1,9 @@
 """
-PL (Processing) module for TrackCell package.
+PL (Plotting) module for TrackCell package.
 
-This module provides functions for processing and analyzing single-cell and spatial transcriptomics data.
+This module provides functions for plotting and visualizing single-cell and spatial transcriptomics data.
 """
 
-# Add processing functions here as they are implemented
-__all__ = [] 
+from .plot import spatial_cell
+
+__all__ = ["spatial_cell"] 
