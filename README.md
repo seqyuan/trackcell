@@ -5,17 +5,20 @@ A Python package for processing and vis single-cell and spatial transcriptomics 
 ## Installation
 
 ```bash
-pip install trackcell
+pip install trackcell -i https://pypi.org/simple
+# pip install --upgrade trackcell==0.1.9 -i https://pypi.org/simple
 ```
 
 ## Usage
 
 ### Reading SpaceRanger Output
 
+#### Reading Cell Segmentation Data
+
 ```python
 import trackcell as tcl
 
-# Read SpaceRanger output
+# Read SpaceRanger cell segmentation output
 adata = tcl.io.read_hd_cellseg(
     datapath="SpaceRanger4.0/Cse1/outs/segmented_outputs",
     sample="Cse1"
@@ -28,6 +31,37 @@ adata = tcl.io.read_hd_cellseg(
 # - Spatial coordinates in .obsm["spatial"]
 # - Tissue images in .uns["spatial"][sample]["images"]
 # - Scalefactors in .uns["spatial"][sample]["scalefactors"]
+```
+
+#### Reading Bin-Level Data (2um/8um/16um)
+
+```python
+import trackcell as tcl
+
+# Read SpaceRanger bin-level output (2um/8um/16um bins)
+adata = tcl.io.read_hd_bin(
+    datapath="SpaceRanger4.0/Cse1/outs",
+    sample="Cse1",
+    binsize=16  # Bin size in micrometers (default: 16, common values: 2, 8, or 16)
+)
+
+# The function automatically handles:
+# - filtered_feature_bc_matrix.h5 (preferred) or filtered_feature_bc_matrix/ directory
+# - tissue_positions.parquet or tissue_positions.csv
+# - tissue_hires_image.png and tissue_lowres_image.png
+# - scalefactors_json.json
+
+# The resulting AnnData object contains:
+# - Expression matrix in .X
+# - Bin metadata in .obs (with spatial coordinates)
+# - Gene metadata in .var
+# - Spatial coordinates in .obsm["spatial"]
+# - Tissue images in .uns["spatial"][sample]["images"]
+# - Scalefactors in .uns["spatial"][sample]["scalefactors"]
+# - Bin size in .uns["spatial"][sample]["binsize"] (e.g., 2, 8, or 16)
+
+# Access the bin size information:
+print(f"Bin size: {adata.uns['spatial']['Cse1']['binsize']} um")
 ```
 
 #### visualisation
@@ -58,13 +92,13 @@ sq.pl.spatial_scatter(
 # Compute distance to a specific annotation label stored in adata.obs["group_col"]
 tcl.tl.hd_labeldist(
     adata,
-    group="classification",    # obs column containing cell type annotations
+    groupby="classification",    # obs column containing cell type annotations
     label="Cluster-2",       # target label to measure distances from
     inplace=True          # add "{label}_px" and "{label}_dist" to adata.obs
 )
 
 # When inplace=False the function returns a DataFrame with the two columns:
-dist_df = tcl.tl.hd_labeldist(adata, group="group_col", label="Neuron", inplace=False)
+dist_df = tcl.tl.hd_labeldist(adata, groupby="group_col", label="Neuron", inplace=False)
 ```
 
 ```python
@@ -82,8 +116,8 @@ sc.pl.spatial(adata, color='Cluster-2_dist', size=2,
 
 ## update
 ```shell
-git tag v0.1.5
-git push origin v0.1.5
+git tag v0.2.0
+git push origin v0.2.0
 
 # In GitHub, go to “Releases” → “Draft a new release”.
 ```
