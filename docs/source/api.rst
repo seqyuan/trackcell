@@ -11,10 +11,6 @@ Input/Output Functions
    :undoc-members:
    :show-inheritance:
 
-.. autofunction:: trackcell.io.read_hd_bin
-
-.. autofunction:: trackcell.io.read_hd_cellseg
-
 Plotting Functions
 ------------------
 
@@ -23,8 +19,6 @@ Plotting Functions
    :undoc-members:
    :show-inheritance:
 
-.. autofunction:: trackcell.pl.spatial_cell
-
 Tools Functions
 ---------------
 
@@ -32,6 +26,4 @@ Tools Functions
    :members:
    :undoc-members:
    :show-inheritance:
-
-.. autofunction:: trackcell.tl.hd_labeldist
 

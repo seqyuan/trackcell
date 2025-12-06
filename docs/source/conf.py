@@ -39,12 +39,16 @@ exclude_patterns = ['_build', 'Thumbs.db', '.DS_Store', '**.ipynb_checkpoints']
 
 html_theme = 'pydata_sphinx_theme'
 html_static_path = ['_static']
+html_logo = '_static/images/logo_icon.svg'
+html_favicon = '_static/images/logo_icon.svg'
 
 # PyData theme options
 html_theme_options = {
     "github_url": "https://github.com/seqyuan/trackcell",
     "logo": {
         "text": "TrackCell",
+        "image_light": "_static/images/logo_icon.svg",
+        "image_dark": "_static/images/logo_icon.svg",
     },
     "use_edit_page_button": True,
     "show_toc_level": 2,
