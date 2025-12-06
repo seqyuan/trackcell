@@ -284,7 +284,23 @@ def read_hd_cellseg(
     # Read cell segmentations
     gdf_seg = gpd.read_file(datapath / cell_segmentations_file)
     df = pd.DataFrame(gdf_seg)
-    df['cellid'] = df['cell_id'].apply(lambda x: f"cellid_{str(x).zfill(9)}-1")
+    
+    # Check for cell_id column (try different possible names)
+    cell_id_col = None
+    for col_name in ['cell_id', 'cellId', 'cellID', 'Cell_ID', 'CellID']:
+        if col_name in df.columns:
+            cell_id_col = col_name
+            break
+    
+    if cell_id_col is None:
+        raise ValueError(
+            f"Could not find cell_id column in {cell_segmentations_file}. "
+            f"Expected one of: cell_id, cellId, cellID, Cell_ID, CellID. "
+            f"Available columns: {list(df.columns)}"
+        )
+    
+    # Create cellid in the format expected by SpaceRanger
+    df['cellid'] = df[cell_id_col].apply(lambda x: f"cellid_{str(x).zfill(9)}-1")
     
     # Read expression matrix
     adata = sc.read_10x_h5(datapath / matrix_file)
@@ -345,7 +361,8 @@ def read_hd_cellseg(
     
     # Store geometries: GeoDataFrame for fast access and WKT strings for serialization
     # Create GeoDataFrame indexed by cellid for easy lookup
-    gdf_indexed = gpd.GeoDataFrame(df[["geometry"]], geometry="geometry")
+    # Include cellid column so we can set it as index
+    gdf_indexed = gpd.GeoDataFrame(df[["cellid", "geometry"]], geometry="geometry")
     gdf_indexed = gdf_indexed.set_index("cellid")
     adata.uns["spatial"][sample]["geometries"] = gdf_indexed
     
