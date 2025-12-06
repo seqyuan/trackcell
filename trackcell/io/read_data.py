@@ -297,7 +297,7 @@ def read_hd_cellseg(
     
     # Filter and reorder df to match adata.obs_names order
     # Keep cellid as a column throughout (reset_index converts index back to column)
-    df = df.set_index("cellid").loc[adata.obs_names].reset_index()
+    df = df.set_index("cellid").loc[adata.obs_names]
     
     # Handle case where reset_index creates 'index' column instead of 'cellid'
     # This can happen if the index name was lost during operations
@@ -352,6 +352,27 @@ def read_hd_cellseg(
         print(f"Warning: Could not load scalefactors: {e}")
         scalefactor = {}
     
+    # Add spot_diameter_fullres if missing (required by scanpy's sc.pl.spatial)
+    # For cell segmentation data, this is not a real spot diameter but needed for plotting
+    # 
+    # Note: This is only used when spot_size parameter is NOT provided to sc.pl.spatial()
+    # - If spot_size is provided: scanpy uses the provided value directly
+    # - If spot_size is None: scanpy reads from scalefactors["spot_diameter_fullres"]
+    # 
+    # Setting this ensures compatibility when users don't specify spot_size parameter
+    if "spot_diameter_fullres" not in scalefactor:
+        # Use a reasonable default for cell segmentation data
+        # Typical cell diameter in pixels (scaled to fullres)
+        # If we have fiducial_diameter_fullres, we can estimate based on that
+        if "fiducial_diameter_fullres" in scalefactor:
+            # Estimate spot diameter as a fraction of fiducial diameter
+            # Fiducial markers are typically much larger than cells/spots
+            estimated_spot_diameter = scalefactor["fiducial_diameter_fullres"] / 40.0
+        else:
+            # Default to 20 pixels for cell segmentation (cells are smaller than spots)
+            estimated_spot_diameter = 20.0
+        scalefactor["spot_diameter_fullres"] = estimated_spot_diameter
+    
     # Store images and scalefactors
     if hires_img is not None and lowres_img is not None:
         adata.uns["spatial"][sample]["images"] = {
@@ -364,8 +385,8 @@ def read_hd_cellseg(
     # Store geometries: GeoDataFrame for fast access and WKT strings for serialization
     # Create GeoDataFrame indexed by cellid for easy lookup
     # cellid should already be a column from the reset_index() above
-    gdf_indexed = gpd.GeoDataFrame(df[["cellid", "geometry"]], geometry="geometry")
-    gdf_indexed = gdf_indexed.set_index("cellid")
+    gdf_indexed = gpd.GeoDataFrame(df[["geometry"]], geometry="geometry")
+    #gdf_indexed = gdf_indexed.set_index(df.index)
     adata.uns["spatial"][sample]["geometries"] = gdf_indexed
     
     # Also store WKT strings in obs for serialization compatibility
