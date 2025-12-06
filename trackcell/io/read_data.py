@@ -306,9 +306,19 @@ def read_hd_cellseg(
     adata = sc.read_10x_h5(datapath / matrix_file)
     
     # Align cell segmentations with expression data
+    # Filter adata to only include cells that have segmentations
     adata = adata[adata.obs_names.isin(df['cellid']),:]
     
+    # Filter and reorder df to match adata.obs_names order
+    # Keep cellid as a column throughout (reset_index converts index back to column)
     df = df.set_index("cellid").loc[adata.obs_names].reset_index()
+    
+    # Verify cellid is a column (reset_index should always work, but check just in case)
+    if "cellid" not in df.columns:
+        raise ValueError(
+            f"Unexpected: cellid is not a column after reset_index(). "
+            f"This should not happen. Index name: {df.index.name}, Columns: {list(df.columns)}"
+        )
     
     # Convert geometry strings to shapely objects if needed
     if isinstance(df["geometry"].iloc[0], str):
@@ -361,7 +371,7 @@ def read_hd_cellseg(
     
     # Store geometries: GeoDataFrame for fast access and WKT strings for serialization
     # Create GeoDataFrame indexed by cellid for easy lookup
-    # Include cellid column so we can set it as index
+    # cellid should already be a column from the reset_index() above
     gdf_indexed = gpd.GeoDataFrame(df[["cellid", "geometry"]], geometry="geometry")
     gdf_indexed = gdf_indexed.set_index("cellid")
     adata.uns["spatial"][sample]["geometries"] = gdf_indexed
