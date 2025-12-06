@@ -169,14 +169,6 @@ def spatial_cell(
             # Should not happen, but handle gracefully
             continue
         
-        # Get background image if available
-        if img_key is None:
-            img_key = "hires" if "hires" in spatial_info.get("images", {}) else None
-        
-        if img_key and "images" in spatial_info and img_key in spatial_info["images"]:
-            img = spatial_info["images"][img_key]
-            current_ax.imshow(img, extent=[0, img.shape[1], img.shape[0], 0], origin='upper', alpha=0.5)
-        
         # Filter cells if groups is specified
         if groups is not None:
             if color_key is not None and color_key in adata.obs.columns:
@@ -189,6 +181,64 @@ def spatial_cell(
         
         # Get cell indices to plot
         cells_to_plot = adata.obs_names[mask]
+        
+        # Calculate coordinate range from actual data to be plotted
+        # This ensures image extent matches the data range, especially for subset data
+        if len(cells_to_plot) > 0:
+            # Get coordinates from geometries or spatial coordinates
+            coords_list = []
+            for cell_id in cells_to_plot:
+                if use_wkt:
+                    if cell_id in adata.obs.index and pd.notna(adata.obs.loc[cell_id, "geometry"]):
+                        try:
+                            geom = wkt.loads(adata.obs.loc[cell_id, "geometry"])
+                            if hasattr(geom, 'bounds'):
+                                coords_list.append(geom.bounds)  # (minx, miny, maxx, maxy)
+                        except Exception:
+                            continue
+                else:
+                    if cell_id in geometries.index:
+                        geom = geometries.loc[cell_id, "geometry"]
+                        if geom is not None and hasattr(geom, 'bounds'):
+                            coords_list.append(geom.bounds)
+            
+            if coords_list:
+                # Calculate overall bounds from all geometries
+                all_bounds = np.array(coords_list)
+                x_min = all_bounds[:, 0].min()
+                y_min = all_bounds[:, 1].min()
+                x_max = all_bounds[:, 2].max()
+                y_max = all_bounds[:, 3].max()
+            else:
+                # Fallback to spatial coordinates if available
+                if basis in adata.obsm and len(adata.obsm[basis]) > 0:
+                    spatial_coords = adata.obsm[basis][mask]
+                    if len(spatial_coords) > 0:
+                        x_min, y_min = spatial_coords.min(axis=0)
+                        x_max, y_max = spatial_coords.max(axis=0)
+                    else:
+                        x_min = y_min = 0
+                        x_max = y_max = 1
+                else:
+                    x_min = y_min = 0
+                    x_max = y_max = 1
+        else:
+            # No cells to plot, use default range
+            x_min = y_min = 0
+            x_max = y_max = 1
+        
+        # Get background image if available
+        if img_key is None:
+            img_key = "hires" if "hires" in spatial_info.get("images", {}) else None
+        
+        if img_key and "images" in spatial_info and img_key in spatial_info["images"]:
+            img = spatial_info["images"][img_key]
+            # Use full image extent - the axis limits will be set based on data range
+            # This ensures the image and cells are in the same coordinate system
+            # extent format is [left, right, bottom, top] in data coordinates
+            # For full data, use full image; for subset, axis limits will crop the view
+            img_extent = [0, img.shape[1], img.shape[0], 0]  # Full image extent
+            current_ax.imshow(img, extent=img_extent, origin='upper', alpha=0.5)
         
         # Prepare color values
         if color_key is None:
@@ -291,6 +341,17 @@ def spatial_cell(
         # Set axis properties
         current_ax.set_aspect('equal')
         current_ax.invert_yaxis()  # Match image coordinates
+        
+        # Set axis limits based on actual data range
+        # Add small padding (5% of range) for better visualization
+        x_range = x_max - x_min
+        y_range = y_max - y_min
+        x_padding = x_range * 0.05 if x_range > 0 else 1
+        y_padding = y_range * 0.05 if y_range > 0 else 1
+        
+        current_ax.set_xlim(x_min - x_padding, x_max + x_padding)
+        current_ax.set_ylim(y_max + y_padding, y_min - y_padding)  # Inverted for y-axis
+        
         current_ax.set_xlabel('X coordinate')
         current_ax.set_ylabel('Y coordinate')
         
