@@ -17,7 +17,6 @@ particularly designed for 10X Genomics HD spatial transcriptomics data.
 
    installation
    usage
-   visualization
    api
    examples
    changelog
