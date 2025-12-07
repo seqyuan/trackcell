@@ -8,9 +8,7 @@ including cell polygon visualization.
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
-import matplotlib.patches as mpatches
-from matplotlib.collections import PatchCollection
-from matplotlib.colors import Normalize, ListedColormap
+from matplotlib.colors import Normalize
 from typing import Optional, Union, List
 import warnings
 
@@ -21,6 +19,57 @@ try:
 except ImportError:
     HAS_GEOPANDAS = False
     warnings.warn("geopandas and shapely are required for spatial_cell function")
+
+
+def _process_background_image(spatial_info, img_key, data_coords_range=None):
+    """
+    Process background image similar to scanpy's approach.
+    
+    Parameters
+    ----------
+    spatial_info : dict
+        Spatial information dictionary from adata.uns['spatial'][library_id]
+    img_key : str or None
+        Key for the image to use
+    data_coords_range : tuple, optional
+        Tuple of (x_min, y_min, x_max, y_max) for data coordinate range
+        
+    Returns
+    -------
+    img : numpy.ndarray or None
+        Background image array
+    img_extent : list or None
+        Image extent [left, right, bottom, top] in data coordinates
+    """
+    if img_key is None:
+        img_key = "hires" if "hires" in spatial_info.get("images", {}) else None
+    
+    if not img_key or "images" not in spatial_info or img_key not in spatial_info["images"]:
+        return None, None
+    
+    img = spatial_info["images"][img_key]
+    scalefactors = spatial_info.get("scalefactors", {})
+    
+    # Get scale factor for the image (scanpy way)
+    # For hires: tissue_hires_scalef (~0.05-0.2)
+    # For lowres: tissue_lowres_scalef (~0.03)
+    # For fullres: scale_factor = 1.0
+    scale_key = f"tissue_{img_key}_scalef"
+    scale_factor = scalefactors.get(scale_key, 1.0)
+    
+    # Calculate image extent in data coordinates
+    # Image shape is (height, width) in pixels
+    img_height, img_width = img.shape[:2]
+    
+    if scale_factor < 1.0:
+        # Image is downscaled, need to scale up the extent
+        # The image pixels represent a smaller region in full-res coordinates
+        img_extent = [0, img_width / scale_factor, img_height / scale_factor, 0]
+    else:
+        # Full resolution image
+        img_extent = [0, img_width, img_height, 0]
+    
+    return img, img_extent
 
 
 def spatial_cell(
@@ -37,8 +86,10 @@ def spatial_cell(
     edges_width: float = 0.5,
     edges_color: str = "black",
     alpha: float = 0.8,
+    alpha_img: float = 0.5,
     show: bool = True,
     ax: Optional[plt.Axes] = None,
+    legend: bool = True,
     **kwargs
 ):
     """
@@ -46,6 +97,7 @@ def spatial_cell(
     
     This function visualizes cells as polygons (from cell segmentation) rather than
     simple points, providing a more accurate representation of cell boundaries.
+    Uses GeoDataFrame.plot() for efficient rendering and automatic legend generation.
     
     Parameters
     ----------
@@ -77,12 +129,16 @@ def spatial_cell(
         Color of cell polygon edges.
     alpha : float, default 0.8
         Transparency of cell polygons.
+    alpha_img : float, default 0.5
+        Transparency of background image.
     show : bool, default True
         Whether to display the plot.
     ax : matplotlib.Axes, optional
         Axes object to plot on. If None, creates a new figure.
+    legend : bool, default True
+        Whether to show legend for categorical values or colorbar for continuous values.
     **kwargs
-        Additional arguments passed to matplotlib plotting functions.
+        Additional arguments passed to GeoDataFrame.plot().
     
     Returns
     -------
@@ -182,161 +238,181 @@ def spatial_cell(
         # Get cell indices to plot
         cells_to_plot = adata.obs_names[mask]
         
+        if len(cells_to_plot) == 0:
+            warnings.warn("No cells to plot after filtering.")
+            axes_list.append(current_ax)
+            continue
+        
         # Calculate coordinate range from actual data to be plotted
         # This ensures image extent matches the data range, especially for subset data
-        if len(cells_to_plot) > 0:
-            # Get coordinates from geometries or spatial coordinates
-            coords_list = []
-            for cell_id in cells_to_plot:
-                if use_wkt:
-                    if cell_id in adata.obs.index and pd.notna(adata.obs.loc[cell_id, "geometry"]):
-                        try:
-                            geom = wkt.loads(adata.obs.loc[cell_id, "geometry"])
-                            if hasattr(geom, 'bounds'):
-                                coords_list.append(geom.bounds)  # (minx, miny, maxx, maxy)
-                        except Exception:
-                            continue
-                else:
-                    if cell_id in geometries.index:
-                        geom = geometries.loc[cell_id, "geometry"]
-                        if geom is not None and hasattr(geom, 'bounds'):
-                            coords_list.append(geom.bounds)
-            
-            if coords_list:
-                # Calculate overall bounds from all geometries
-                all_bounds = np.array(coords_list)
-                x_min = all_bounds[:, 0].min()
-                y_min = all_bounds[:, 1].min()
-                x_max = all_bounds[:, 2].max()
-                y_max = all_bounds[:, 3].max()
+        coords_list = []
+        for cell_id in cells_to_plot:
+            if use_wkt:
+                if cell_id in adata.obs.index and pd.notna(adata.obs.loc[cell_id, "geometry"]):
+                    try:
+                        geom = wkt.loads(adata.obs.loc[cell_id, "geometry"])
+                        if hasattr(geom, 'bounds'):
+                            coords_list.append(geom.bounds)  # (minx, miny, maxx, maxy)
+                    except Exception:
+                        continue
             else:
-                # Fallback to spatial coordinates if available
-                if basis in adata.obsm and len(adata.obsm[basis]) > 0:
-                    spatial_coords = adata.obsm[basis][mask]
-                    if len(spatial_coords) > 0:
-                        x_min, y_min = spatial_coords.min(axis=0)
-                        x_max, y_max = spatial_coords.max(axis=0)
-                    else:
-                        x_min = y_min = 0
-                        x_max = y_max = 1
+                if cell_id in geometries.index:
+                    geom = geometries.loc[cell_id, "geometry"]
+                    if geom is not None and hasattr(geom, 'bounds'):
+                        coords_list.append(geom.bounds)
+        
+        if coords_list:
+            # Calculate overall bounds from all geometries
+            all_bounds = np.array(coords_list)
+            x_min = all_bounds[:, 0].min()
+            y_min = all_bounds[:, 1].min()
+            x_max = all_bounds[:, 2].max()
+            y_max = all_bounds[:, 3].max()
+        else:
+            # Fallback to spatial coordinates if available
+            if basis in adata.obsm and len(adata.obsm[basis]) > 0:
+                spatial_coords = adata.obsm[basis][mask]
+                if len(spatial_coords) > 0:
+                    x_min, y_min = spatial_coords.min(axis=0)
+                    x_max, y_max = spatial_coords.max(axis=0)
                 else:
                     x_min = y_min = 0
                     x_max = y_max = 1
-        else:
-            # No cells to plot, use default range
-            x_min = y_min = 0
-            x_max = y_max = 1
-        
-        # Get background image if available
-        if img_key is None:
-            img_key = "hires" if "hires" in spatial_info.get("images", {}) else None
-        
-        if img_key and "images" in spatial_info and img_key in spatial_info["images"]:
-            img = spatial_info["images"][img_key]
-            # Use full image extent - the axis limits will be set based on data range
-            # This ensures the image and cells are in the same coordinate system
-            # extent format is [left, right, bottom, top] in data coordinates
-            # For full data, use full image; for subset, axis limits will crop the view
-            img_extent = [0, img.shape[1], img.shape[0], 0]  # Full image extent
-            current_ax.imshow(img, extent=img_extent, origin='upper', alpha=0.5)
-        
-        # Prepare color values
-        if color_key is None:
-            # No coloring, use default color
-            color_values = None
-            face_colors = ['lightblue'] * len(cells_to_plot)
-        elif color_key in adata.obs.columns:
-            color_data = adata.obs.loc[cells_to_plot, color_key]
-            
-            # Check if continuous or categorical
-            if pd.api.types.is_numeric_dtype(color_data):
-                # Continuous values
-                norm = Normalize(vmin=color_data.min(), vmax=color_data.max())
-                cmap_obj = plt.get_cmap(cmap)
-                face_colors = [cmap_obj(norm(v)) for v in color_data]
-                
-                # Add colorbar
-                sm = plt.cm.ScalarMappable(cmap=cmap_obj, norm=norm)
-                sm.set_array([])
-                plt.colorbar(sm, ax=current_ax, label=color_key)
             else:
-                # Categorical values
-                unique_cats = color_data.unique()
-                
-                if palette is not None:
-                    # Use provided palette
-                    face_colors = [palette.get(cat, 'gray') for cat in color_data]
-                else:
-                    # Generate colors
-                    if hasattr(adata.uns, 'classification_colors') and color_key == 'classification':
-                        # Use stored classification colors if available
-                        cat_palette = adata.uns['classification_colors']
-                    else:
-                        # Generate default colors
-                        n_cats = len(unique_cats)
-                        default_cmap = plt.get_cmap('tab20' if n_cats <= 20 else 'tab20b')
-                        cat_palette = {cat: default_cmap(i / n_cats) for i, cat in enumerate(unique_cats)}
-                    
-                    face_colors = [cat_palette.get(cat, 'gray') for cat in color_data]
+                x_min = y_min = 0
+                x_max = y_max = 1
+        
+        data_coords_range = (x_min, y_min, x_max, y_max)
+        
+        # Process and draw background image (scanpy way)
+        img, img_extent = _process_background_image(spatial_info, img_key, data_coords_range)
+        if img is not None and img_extent is not None:
+            current_ax.imshow(img, extent=img_extent, origin='upper', alpha=alpha_img)
+        
+        # Create temporary GeoDataFrame for plotting
+        # This combines geometry and color data in one structure
+        if use_wkt:
+            # Convert WKT strings to geometries
+            geom_list = []
+            valid_cells = []
+            for cell_id in cells_to_plot:
+                if cell_id in adata.obs.index and pd.notna(adata.obs.loc[cell_id, "geometry"]):
+                    try:
+                        geom = wkt.loads(adata.obs.loc[cell_id, "geometry"])
+                        geom_list.append(geom)
+                        valid_cells.append(cell_id)
+                    except Exception:
+                        continue
+            temp_geometries = gpd.GeoSeries(geom_list, index=valid_cells)
+        else:
+            # Use geometries from GeoDataFrame
+            temp_geometries = geometries.loc[cells_to_plot, "geometry"]
+            valid_cells = list(cells_to_plot)
+        
+        if len(temp_geometries) == 0:
+            warnings.warn("No valid geometries found for plotting.")
+            axes_list.append(current_ax)
+            continue
+        
+        # Create GeoDataFrame with color data
+        if color_key is None:
+            # No coloring, use default
+            temp_gdf = gpd.GeoDataFrame(
+                geometry=temp_geometries,
+                index=valid_cells
+            )
+            plot_column = None
+        elif color_key in adata.obs.columns:
+            # Get color data for valid cells
+            color_data = adata.obs.loc[valid_cells, color_key]
+            temp_gdf = gpd.GeoDataFrame(
+                {color_key: color_data},
+                geometry=temp_geometries,
+                index=valid_cells
+            )
+            plot_column = color_key
         else:
             raise ValueError(f"`color` key '{color_key}' not found in `adata.obs`.")
         
-        # Create patches for polygons
-        patches = []
-        valid_colors = []
+        # Determine if continuous or categorical
+        is_categorical = False
+        use_custom_palette = False
+        custom_palette = None
         
-        for cell_id in cells_to_plot:
-            # Get geometry
-            if use_wkt:
-                # Read from WKT string in obs
-                if cell_id in adata.obs.index and pd.notna(adata.obs.loc[cell_id, "geometry"]):
-                    geom_str = adata.obs.loc[cell_id, "geometry"]
-                    try:
-                        geom = wkt.loads(geom_str)
-                    except Exception:
-                        continue
-                else:
-                    continue
-            else:
-                # Read from GeoDataFrame
-                if cell_id in geometries.index:
-                    geom = geometries.loc[cell_id, "geometry"]
-                else:
-                    continue
+        if plot_column is not None:
+            is_categorical = not pd.api.types.is_numeric_dtype(temp_gdf[plot_column])
             
-            if geom is not None:
-                # Convert shapely geometry to matplotlib polygon
-                if hasattr(geom, 'exterior'):
-                    # Polygon
-                    coords = np.array(geom.exterior.coords)
-                elif hasattr(geom, 'coords'):
-                    # Point or LineString (fallback to point)
-                    coords = np.array(geom.coords)
-                else:
-                    continue
-                
-                # Create polygon patch
-                polygon = mpatches.Polygon(coords, closed=True)
-                patches.append(polygon)
-                
-                # Get corresponding color
-                if color_key is None:
-                    valid_colors.append('lightblue')
-                else:
-                    color_idx = list(cells_to_plot).index(cell_id)
-                    valid_colors.append(face_colors[color_idx])
+            # Check if we need to use custom palette
+            if is_categorical:
+                if palette is not None:
+                    use_custom_palette = True
+                    custom_palette = palette
+                elif hasattr(adata.uns, 'classification_colors') and color_key == 'classification':
+                    use_custom_palette = True
+                    custom_palette = adata.uns['classification_colors']
         
-        # Create patch collection for efficient rendering
-        if patches:
-            p = PatchCollection(
-                patches,
-                facecolors=valid_colors,
-                edgecolors=edges_color,
-                linewidths=edges_width,
-                alpha=alpha,
-                **kwargs
-            )
-            current_ax.add_collection(p)
+        # Prepare plot arguments for GeoDataFrame.plot()
+        plot_kwargs = {
+            'ax': current_ax,
+            'edgecolor': edges_color,
+            'linewidth': edges_width,
+            'alpha': alpha,
+            **kwargs
+        }
+        
+        if plot_column is not None:
+            plot_kwargs['column'] = plot_column
+            
+            if is_categorical:
+                # Categorical values
+                plot_kwargs['categorical'] = True
+                plot_kwargs['legend'] = legend
+                
+                # If using custom palette, we'll plot manually
+                # Otherwise, let GeoPandas handle it automatically
+                if not use_custom_palette:
+                    # Use default GeoPandas categorical plotting
+                    temp_gdf.plot(**plot_kwargs)
+                else:
+                    # Plot each category with custom color
+                    for cat in temp_gdf[plot_column].unique():
+                        if pd.notna(cat):
+                            mask_cat = temp_gdf[plot_column] == cat
+                            if mask_cat.any():
+                                # Use custom color if available, otherwise use gray
+                                cat_color = custom_palette.get(cat, 'gray')
+                                temp_gdf[mask_cat].plot(
+                                    ax=current_ax,
+                                    color=cat_color,
+                                    edgecolor=edges_color,
+                                    linewidth=edges_width,
+                                    alpha=alpha,
+                                    **{k: v for k, v in kwargs.items() if k != 'column'}
+                                )
+                    # Add legend manually if requested
+                    if legend:
+                        from matplotlib.patches import Patch
+                        legend_elements = [
+                            Patch(facecolor=custom_palette.get(cat, 'gray'), 
+                                  label=str(cat))
+                            for cat in sorted(temp_gdf[plot_column].unique())
+                            if pd.notna(cat)
+                        ]
+                        if legend_elements:
+                            current_ax.legend(handles=legend_elements, loc='best')
+            else:
+                # Continuous values
+                plot_kwargs['cmap'] = cmap
+                plot_kwargs['legend'] = legend
+                if legend:
+                    plot_kwargs['legend_kwds'] = {'label': color_key}
+                # Plot using GeoDataFrame.plot() - handles colorbar automatically
+                temp_gdf.plot(**plot_kwargs)
+        else:
+            # No coloring, just plot geometries
+            temp_gdf.plot(ax=current_ax, color='lightblue',
+                         edgecolor=edges_color, linewidth=edges_width,
+                         alpha=alpha, **kwargs)
         
         # Set axis properties
         current_ax.set_aspect('equal')
@@ -368,4 +444,3 @@ def spatial_cell(
         return axes_list[0]
     else:
         return axes_list
-
