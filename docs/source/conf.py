@@ -31,6 +31,12 @@ extensions = [
 try:
     import nbsphinx
     extensions.append('nbsphinx')  # For Jupyter notebook support
+    # Add IPython console highlighting support (like trackc project)
+    try:
+        from IPython.sphinxext import ipython_console_highlighting
+        extensions.append('IPython.sphinxext.ipython_console_highlighting')
+    except ImportError:
+        pass  # IPython extension not available, skip
 except ImportError:
     import warnings
     warnings.warn("nbsphinx not available, notebook support will be disabled")
@@ -38,12 +44,24 @@ except ImportError:
 templates_path = ['_templates']
 exclude_patterns = ['_build', 'Thumbs.db', '.DS_Store', '**.ipynb_checkpoints']
 
+# See warnings about bad links (like trackc project)
+nitpicky = False  # Set to True for stricter link checking
+nitpick_ignore = [
+    ("", "Pygments lexer name 'ipython' is not known"),
+    ("", "Pygments lexer name 'ipython3' is not known"),
+]
+
 # Suppress warnings for notebooks (docutils formatting issues are common in notebooks)
 # Note: This suppresses warnings but not errors. For errors, we rely on nbsphinx_allow_errors = True
 suppress_warnings = [
     'ref.docutils',  # Suppress docutils warnings in notebooks
     'misc.highlighting_failure',  # Suppress highlighting failures
     'misc.highlighting_failure.*',  # Suppress all highlighting failures
+    'docutils.warnings.misc',  # Suppress docutils misc warnings
+    'docutils',  # Suppress all docutils warnings
+    'docutils.warnings.misc.UnexpectedIndentation',  # Suppress unexpected indentation warnings
+    'docutils.warnings.misc.DefinitionListEndsWithoutBlankLine',  # Suppress definition list warnings
+    'docutils.warnings.misc.BlockQuoteEndsWithoutBlankLine',  # Suppress block quote warnings
 ]
 
 # -- Options for HTML output -------------------------------------------------
@@ -113,21 +131,12 @@ nbsphinx_allow_errors = True  # Allow errors in notebooks
 nbsphinx_timeout = 60  # Timeout for notebook execution (not used when execute='never')
 # Suppress warnings about docutils formatting issues in notebooks
 nbsphinx_requirejs_path = ''  # Disable requirejs if not needed
+# Process raw cells as markdown (helps with formatting)
+nbsphinx_process_signals = False
 
 # Pygments configuration for ipython3 lexer
-# Ensure ipython3 lexer is available (requires ipython package)
-# If ipython is not installed, this will use python3 as fallback
-try:
-    import pygments.lexers
-    # Try to get ipython3 lexer, if not available, register python3 as fallback
-    try:
-        pygments.lexers.get_lexer_by_name('ipython3')
-    except (ValueError, KeyError):
-        # Register python3 as fallback for ipython3
-        from pygments.lexers import Python3Lexer
-        pygments.lexers._lexer_cache['ipython3'] = Python3Lexer
-except ImportError:
-    pass  # Pygments not available, skip
+# IPython.sphinxext.ipython_console_highlighting handles this automatically
+# If IPython extension is not available, nbsphinx will use python3 as fallback
 
 # -- Options for LaTeX/PDF output -------------------------------------------------
 # LaTeX configuration for Chinese character support
