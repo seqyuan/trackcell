@@ -76,6 +76,7 @@ def spatial_cell(
     adata,
     color: Optional[Union[str, List[str]]] = None,
     groups: Optional[List[str]] = None,
+    groupby: Optional[str] = None,
     library_id: Optional[str] = None,
     size: float = 1.0,
     figsize: Optional[tuple] = None,
@@ -116,12 +117,19 @@ def spatial_cell(
         - A gene name in `adata.var_names` (gene expression)
     groups : list of str, optional
         Subset of groups to plot. If None, plots all groups.
+        Requires either `color` to be a categorical column in `adata.obs` or `groupby` to be specified.
+    groupby : str, optional
+        Column name in `adata.obs` to use for filtering with `groups` parameter.
+        If None and `groups` is specified, will use `color` if it's a categorical column in `adata.obs`.
+        This is useful when `color` is a continuous variable (e.g., gene expression) but you want
+        to filter by a categorical column (e.g., 'classification').
     library_id : str, optional
         Key in adata.uns["spatial"] containing spatial information.
         If None, uses the first available library_id (similar to sc.pl.spatial).
         Default is None, which will auto-select the first library_id.
     size : float, default 1.0
         Size scaling factor for cells (not used for polygons, kept for API compatibility).
+        This parameter is currently not implemented for polygon-based visualization.
     figsize : tuple, optional
         Figure size (width, height) in inches.
     cmap : str, default "viridis"
@@ -237,6 +245,26 @@ def spatial_cell(
     else:
         colors_to_plot = color
     
+    # Validate all color keys upfront (before creating figures)
+    # This avoids repeated checks later and provides early error feedback
+    for color_key in colors_to_plot:
+        if color_key is not None:
+            # Check if color_key exists in obs.columns or var_names
+            if color_key not in adata.obs.columns and color_key not in adata.var_names:
+                # Check if it's in layers (not supported yet)
+                if hasattr(adata, 'layers') and color_key in adata.layers:
+                    raise ValueError(
+                        f"`color` key '{color_key}' found in `adata.layers`, but gene expression "
+                        f"from layers is not yet supported. Please use gene names from `adata.var_names` "
+                        f"or metadata from `adata.obs.columns`."
+                    )
+                else:
+                    raise ValueError(
+                        f"`color` key '{color_key}' not found in `adata.obs.columns` or `adata.var_names`. "
+                        f"Available obs keys: {list(adata.obs.columns[:10])}... "
+                        f"Available var names (genes): {list(adata.var_names[:10])}..."
+                    )
+    
     # Create figure if needed
     if ax is None:
         if figsize is None:
@@ -270,11 +298,30 @@ def spatial_cell(
         
         # Filter cells if groups is specified
         if groups is not None:
-            if color_key is not None and color_key in adata.obs.columns:
-                mask = adata.obs[color_key].isin(groups)
+            # Determine which column to use for filtering
+            filter_column = None
+            if groupby is not None:
+                # Use explicitly specified groupby column
+                if groupby not in adata.obs.columns:
+                    raise ValueError(
+                        f"`groupby` column '{groupby}' not found in `adata.obs.columns`. "
+                        f"Available columns: {list(adata.obs.columns[:10])}..."
+                    )
+                filter_column = groupby
+            elif color_key is not None and color_key in adata.obs.columns:
+                # Use color_key if it's a categorical column in obs
+                filter_column = color_key
             else:
-                # If no color key, need another way to filter
-                raise ValueError("`groups` parameter requires a valid `color` parameter.")
+                # Cannot determine filter column
+                raise ValueError(
+                    "`groups` parameter requires either:\n"
+                    "  - `color` to be a categorical column in `adata.obs`, or\n"
+                    "  - `groupby` to specify the column name for filtering.\n"
+                    f"Current `color` value: {color_key}"
+                )
+            
+            # Apply groups filter
+            mask = adata.obs[filter_column].isin(groups)
         else:
             mask = pd.Series(True, index=adata.obs_names)
         
@@ -358,6 +405,7 @@ def spatial_cell(
             continue
         
         # Create GeoDataFrame with color data
+        # color_key has already been validated upfront, so we can safely proceed
         if color_key is None:
             # No coloring, use default
             temp_gdf = gpd.GeoDataFrame(
@@ -374,9 +422,9 @@ def spatial_cell(
                 index=valid_cells
             )
             plot_column = color_key
-        elif color_key in adata.var_names:
+        else:
+            # color_key must be in var_names (already validated upfront)
             # Get color data from gene expression (var)
-            # Find the gene index
             gene_idx = adata.var_names.get_loc(color_key)
             
             # Get expression values for valid cells
@@ -397,74 +445,70 @@ def spatial_cell(
                 index=valid_cells
             )
             plot_column = color_key
-        else:
-            # Check if it's in layers
-            if hasattr(adata, 'layers') and color_key in adata.layers:
-                # Try to get from layers (assuming it's a gene name)
-                # This is less common, but handle it if needed
-                raise ValueError(
-                    f"`color` key '{color_key}' found in `adata.layers`, but gene expression "
-                    f"from layers is not yet supported. Please use gene names from `adata.var_names` "
-                    f"or metadata from `adata.obs.columns`."
-                )
-            else:
-                raise ValueError(
-                    f"`color` key '{color_key}' not found in `adata.obs.columns` or `adata.var_names`. "
-                    f"Available obs keys: {list(adata.obs.columns[:10])}... "
-                    f"Available var names (genes): {list(adata.var_names[:10])}..."
-                )
         
-        # Determine if continuous or categorical
+        # Determine if continuous or categorical immediately after creating temp_gdf
+        # This allows all subsequent logic to use is_categorical directly
         is_categorical = False
         use_custom_palette = False
         custom_cmap = None
         categories = None
         color_list_for_legend = None  # Store color list for legend creation
         
-        if plot_column is not None:
+        if color_key is not None:
+            # plot_column is guaranteed to be color_key at this point (already validated)
             is_categorical = not pd.api.types.is_numeric_dtype(temp_gdf[plot_column])
+        
+        # Process categorical data (palette, categories, etc.)
+        if color_key is not None and is_categorical:
+            # Get categories (prioritize Categorical's original order)
+            if pd.api.types.is_categorical_dtype(temp_gdf[plot_column]):
+                # Categorical type: use original order
+                categories = temp_gdf[plot_column].cat.categories.tolist()
+            else:
+                # Regular column: use sorted unique values
+                categories = sorted(temp_gdf[plot_column].dropna().unique())
             
-            # Check if we need to use custom palette
-            if is_categorical:
-                # Get categories (prioritize Categorical's original order)
-                if pd.api.types.is_categorical_dtype(temp_gdf[plot_column]):
-                    # Categorical type: use original order
-                    categories = temp_gdf[plot_column].cat.categories.tolist()
+            if palette is not None:
+                use_custom_palette = True
+                # Convert palette to color list (in categories order)
+                if isinstance(palette, dict):
+                    # Dictionary: map categories to colors
+                    color_list = [palette.get(cat, 'gray') for cat in categories]
+                elif isinstance(palette, (list, np.ndarray)):
+                    # List/array: assign colors sequentially
+                    palette_array = np.asarray(palette)
+                    if len(palette_array) < len(categories):
+                        warnings.warn(
+                            f"Palette has {len(palette_array)} colors but there are "
+                            f"{len(categories)} categories. Colors will be cycled."
+                        )
+                    color_list = [
+                        palette_array[i % len(palette_array)]
+                        for i in range(len(categories))
+                    ]
                 else:
-                    # Regular column: use sorted unique values
-                    categories = sorted(temp_gdf[plot_column].dropna().unique())
+                    raise ValueError(f"Unsupported palette type: {type(palette)}")
                 
-                if palette is not None:
-                    use_custom_palette = True
-                    # Convert palette to color list (in categories order)
-                    if isinstance(palette, dict):
-                        # Dictionary: map categories to colors
-                        color_list = [palette.get(cat, 'gray') for cat in categories]
-                    elif isinstance(palette, (list, np.ndarray)):
-                        # List/array: assign colors sequentially
-                        palette_array = np.asarray(palette)
-                        if len(palette_array) < len(categories):
-                            warnings.warn(
-                                f"Palette has {len(palette_array)} colors but there are "
-                                f"{len(categories)} categories. Colors will be cycled."
-                            )
-                        color_list = [
-                            palette_array[i % len(palette_array)]
-                            for i in range(len(categories))
-                        ]
-                    else:
-                        raise ValueError(f"Unsupported palette type: {type(palette)}")
-                    
-                    # Create custom colormap from color list
-                    custom_cmap = ListedColormap(color_list)
-                    color_list_for_legend = color_list  # Store for legend
-                elif hasattr(adata.uns, 'classification_colors') and color_key == 'classification':
-                    use_custom_palette = True
-                    custom_palette = adata.uns['classification_colors']
-                    # Convert dictionary palette to color list
-                    color_list = [custom_palette.get(cat, 'gray') for cat in categories]
-                    custom_cmap = ListedColormap(color_list)
-                    color_list_for_legend = color_list  # Store for legend
+                # Create custom colormap from color list
+                custom_cmap = ListedColormap(color_list)
+                color_list_for_legend = color_list  # Store for legend
+                
+                # Convert column to Categorical type with specified categories order
+                # This ensures GeoPandas uses the correct order for color mapping
+                # GeoPandas will automatically use cat.categories for color assignment
+                if not pd.api.types.is_categorical_dtype(temp_gdf[plot_column]):
+                    # Convert to Categorical with our categories order
+                    temp_gdf[plot_column] = pd.Categorical(
+                        temp_gdf[plot_column],
+                        categories=categories,
+                        ordered=False
+                    )
+                else:
+                    # If already Categorical, reorder categories to match our color list
+                    # Only reorder if the current order is different
+                    current_cats = temp_gdf[plot_column].cat.categories.tolist()
+                    if current_cats != categories:
+                        temp_gdf[plot_column] = temp_gdf[plot_column].cat.reorder_categories(categories)
         
         # Prepare plot arguments for GeoDataFrame.plot()
         # Filter out parameters that GeoPandas doesn't support or that we handle separately
@@ -481,21 +525,29 @@ def spatial_cell(
             **filtered_kwargs
         }
         
-        if plot_column is not None:
+        if color_key is not None:
+            # plot_column is guaranteed to be color_key at this point (already validated)
             plot_kwargs['column'] = plot_column
             
             if is_categorical:
                 # Categorical values
                 plot_kwargs['legend'] = False  # Disable automatic legend, we'll add it manually
-                plot_kwargs['categorical'] = True
                 
-                # If using custom palette, use custom colormap with categories parameter
-                # This uses GeoPandas native column + categorical + cmap approach
+                # Only set categorical=True if column is not already Categorical type
+                # GeoPandas can automatically detect Categorical columns, so we don't need
+                # to set categorical=True for Categorical columns (as shown in the example)
+                if not pd.api.types.is_categorical_dtype(temp_gdf[plot_column]):
+                    plot_kwargs['categorical'] = True
+                
+                # If using custom palette, use custom colormap
+                # GeoPandas will automatically use the Categorical column's cat.categories
+                # for color assignment, so we don't need to set categories parameter
                 # Reference: https://geopandas.org/en/stable/docs/reference/api/geopandas.GeoDataFrame.plot.html
                 if use_custom_palette:
-                    # Use custom colormap with categories parameter
+                    # Use custom colormap
+                    # The column is already converted to Categorical with correct order
+                    # GeoPandas will use cat.categories automatically
                     plot_kwargs['cmap'] = custom_cmap
-                    plot_kwargs['categories'] = categories  # Ensure category order matches colormap
                 # else: use default GeoPandas categorical plotting with column
                 
                 # Plot using GeoDataFrame.plot() - uses column + categorical + cmap
@@ -528,7 +580,8 @@ def spatial_cell(
             else:
                 # Continuous values
                 plot_kwargs['cmap'] = cmap
-                plot_kwargs['legend'] = False  # Disable automatic colorbar, we'll add it manually
+                # Use GeoPandas automatic colorbar for continuous values
+                plot_kwargs['legend'] = legend
                 
                 # Handle vmin and vmax for continuous values
                 # If not provided, GeoPandas will use data min/max automatically
@@ -538,29 +591,8 @@ def spatial_cell(
                     plot_kwargs['vmax'] = vmax
                 
                 # Plot using GeoDataFrame.plot()
+                # GeoPandas will automatically create colorbar if legend=True
                 temp_gdf.plot(**plot_kwargs)
-                
-                # Add colorbar outside the plot if requested
-                if legend:
-                    # Get the mappable from the plot
-                    # GeoPandas plot returns a collection, we need to get the colormap
-                    import matplotlib.cm as cm
-                    from matplotlib.colors import Normalize
-                    
-                    # Get value range for normalization
-                    values = temp_gdf[plot_column]
-                    # Use provided vmin/vmax or calculate from data
-                    vmin_actual = vmin if vmin is not None else values.min()
-                    vmax_actual = vmax if vmax is not None else values.max()
-                    norm = Normalize(vmin=vmin_actual, vmax=vmax_actual)
-                    sm = plt.cm.ScalarMappable(cmap=plt.get_cmap(cmap), norm=norm)
-                    sm.set_array([])
-                    
-                    # Add colorbar outside the plot
-                    cbar = plt.colorbar(sm, ax=current_ax, 
-                                       label=color_key,
-                                       shrink=0.8,
-                                       pad=0.02)
         else:
             # No coloring, just plot geometries
             temp_gdf.plot(ax=current_ax, color='lightblue',
