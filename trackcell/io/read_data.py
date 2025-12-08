@@ -282,7 +282,35 @@ def read_hd_cellseg(
         sample = datapath.parent.parent.name
     
     # Read cell segmentations
-    gdf_seg = gpd.read_file(datapath / cell_segmentations_file)
+    # Try the specified file first, then try common alternative names if not found
+    seg_file_path = datapath / cell_segmentations_file
+    if not seg_file_path.exists():
+        # Try common alternative filenames
+        alternative_names = [
+            "cell_segmentations.geojson",
+            "cell_segmentations_annotated.geojson",
+            "annotated_cell_segmentations.geojson"
+        ]
+        found_file = None
+        for alt_name in alternative_names:
+            alt_path = datapath / alt_name
+            if alt_path.exists():
+                found_file = alt_name
+                warnings.warn(
+                    f"Specified file '{cell_segmentations_file}' not found. "
+                    f"Using alternative file '{alt_name}' instead."
+                )
+                break
+        
+        if found_file is None:
+            raise FileNotFoundError(
+                f"Cell segmentations file not found: {seg_file_path}\n"
+                f"Also tried: {alternative_names}\n"
+                f"Please specify the correct filename using the `cell_segmentations_file` parameter."
+            )
+        seg_file_path = datapath / found_file
+    
+    gdf_seg = gpd.read_file(seg_file_path)
     df = pd.DataFrame(gdf_seg)
     
     # Create cellid in the format expected by SpaceRanger

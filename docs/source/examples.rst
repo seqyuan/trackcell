@@ -31,7 +31,7 @@ A complete workflow example:
    tcl.pl.spatial_cell(
        adata,
        color=["classification", "Cluster-2_dist"],
-       figsize=(20, 10)
+       figsize=(12, 6)
    )
 
 Jupyter Notebooks

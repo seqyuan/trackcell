@@ -76,7 +76,7 @@ def spatial_cell(
     adata,
     color: Optional[Union[str, List[str]]] = None,
     groups: Optional[List[str]] = None,
-    library_id: str = "spatial",
+    library_id: Optional[str] = None,
     size: float = 1.0,
     figsize: Optional[tuple] = None,
     cmap: str = "viridis",
@@ -90,6 +90,9 @@ def spatial_cell(
     show: bool = True,
     ax: Optional[plt.Axes] = None,
     legend: bool = True,
+    xlabel: Optional[str] = "spatial 1",
+    ylabel: Optional[str] = "spatial 2",
+    show_ticks: bool = False,
     **kwargs
 ):
     """
@@ -106,10 +109,15 @@ def spatial_cell(
     color : str or list of str, optional
         Keys for observation/categorical or continuous variables to color cells.
         Can be a single key or a list of keys for multiple plots.
+        Can be:
+        - A column name in `adata.obs` (metadata)
+        - A gene name in `adata.var_names` (gene expression)
     groups : list of str, optional
         Subset of groups to plot. If None, plots all groups.
-    library_id : str, default "spatial"
+    library_id : str, optional
         Key in adata.uns["spatial"] containing spatial information.
+        If None, uses the first available library_id (similar to sc.pl.spatial).
+        Default is None, which will auto-select the first library_id.
     size : float, default 1.0
         Size scaling factor for cells (not used for polygons, kept for API compatibility).
     figsize : tuple, optional
@@ -137,6 +145,12 @@ def spatial_cell(
         Axes object to plot on. If None, creates a new figure.
     legend : bool, default True
         Whether to show legend for categorical values or colorbar for continuous values.
+    xlabel : str, optional, default "spatial 1"
+        Label for the x-axis. Set to None to hide the label.
+    ylabel : str, optional, default "spatial 2"
+        Label for the y-axis. Set to None to hide the label.
+    show_ticks : bool, default False
+        Whether to show axis ticks and tick labels. If False, ticks are hidden.
     **kwargs
         Additional arguments passed to GeoDataFrame.plot().
     
@@ -149,8 +163,13 @@ def spatial_cell(
     --------
     >>> import trackcell as tcl
     >>> adata = tcl.io.read_hd_cellseg("path/to/data", sample="sample1")
+    >>> # Plot by metadata (categorical)
     >>> tcl.pl.spatial_cell(adata, color="classification")
+    >>> # Plot by metadata (continuous)
     >>> tcl.pl.spatial_cell(adata, color="Cluster-2_dist", cmap="Reds")
+    >>> # Plot by gene expression
+    >>> tcl.pl.spatial_cell(adata, color="PDPN", cmap="viridis")
+    >>> # Plot with groups filter
     >>> tcl.pl.spatial_cell(adata, color="classification", groups=["Cluster-1", "Cluster-2"])
     """
     if not HAS_GEOPANDAS:
@@ -160,8 +179,23 @@ def spatial_cell(
     if "spatial" not in adata.uns:
         raise ValueError("`adata.uns['spatial']` is required but missing.")
     
+    # Auto-select library_id if not provided (similar to sc.pl.spatial)
+    if library_id is None:
+        available_library_ids = list(adata.uns["spatial"].keys())
+        if len(available_library_ids) == 0:
+            raise ValueError("No library_id found in `adata.uns['spatial']`.")
+        library_id = available_library_ids[0]
+        if len(available_library_ids) > 1:
+            warnings.warn(
+                f"Multiple library_ids found: {available_library_ids}. "
+                f"Using '{library_id}'. Specify `library_id` explicitly to use a different one."
+            )
+    
     if library_id not in adata.uns["spatial"]:
-        raise ValueError(f"`library_id` '{library_id}' not found in `adata.uns['spatial']`.")
+        raise ValueError(
+            f"`library_id` '{library_id}' not found in `adata.uns['spatial']`. "
+            f"Available library_ids: {list(adata.uns['spatial'].keys())}"
+        )
     
     spatial_info = adata.uns["spatial"][library_id]
     
@@ -323,7 +357,7 @@ def spatial_cell(
             )
             plot_column = None
         elif color_key in adata.obs.columns:
-            # Get color data for valid cells
+            # Get color data from obs (metadata)
             color_data = adata.obs.loc[valid_cells, color_key]
             temp_gdf = gpd.GeoDataFrame(
                 {color_key: color_data},
@@ -331,8 +365,45 @@ def spatial_cell(
                 index=valid_cells
             )
             plot_column = color_key
+        elif color_key in adata.var_names:
+            # Get color data from gene expression (var)
+            # Find the gene index
+            gene_idx = adata.var_names.get_loc(color_key)
+            
+            # Get expression values for valid cells
+            # Handle both sparse and dense matrices
+            if hasattr(adata.X, 'toarray'):
+                # Sparse matrix
+                expression_values = adata.X[adata.obs_names.get_indexer(valid_cells), gene_idx].toarray().flatten()
+            else:
+                # Dense matrix
+                expression_values = adata.X[adata.obs_names.get_indexer(valid_cells), gene_idx]
+            
+            # Create Series with valid cells as index
+            color_data = pd.Series(expression_values, index=valid_cells, name=color_key)
+            
+            temp_gdf = gpd.GeoDataFrame(
+                {color_key: color_data},
+                geometry=temp_geometries,
+                index=valid_cells
+            )
+            plot_column = color_key
         else:
-            raise ValueError(f"`color` key '{color_key}' not found in `adata.obs`.")
+            # Check if it's in layers
+            if hasattr(adata, 'layers') and color_key in adata.layers:
+                # Try to get from layers (assuming it's a gene name)
+                # This is less common, but handle it if needed
+                raise ValueError(
+                    f"`color` key '{color_key}' found in `adata.layers`, but gene expression "
+                    f"from layers is not yet supported. Please use gene names from `adata.var_names` "
+                    f"or metadata from `adata.obs.columns`."
+                )
+            else:
+                raise ValueError(
+                    f"`color` key '{color_key}' not found in `adata.obs.columns` or `adata.var_names`. "
+                    f"Available obs keys: {list(adata.obs.columns[:10])}... "
+                    f"Available var names (genes): {list(adata.var_names[:10])}..."
+                )
         
         # Determine if continuous or categorical
         is_categorical = False
@@ -366,13 +437,30 @@ def spatial_cell(
             if is_categorical:
                 # Categorical values
                 plot_kwargs['categorical'] = True
-                plot_kwargs['legend'] = legend
+                plot_kwargs['legend'] = False  # Disable automatic legend, we'll add it manually
                 
                 # If using custom palette, we'll plot manually
                 # Otherwise, let GeoPandas handle it automatically
                 if not use_custom_palette:
                     # Use default GeoPandas categorical plotting
+                    # First plot without legend to get the collections
                     temp_gdf.plot(**plot_kwargs)
+                    # Create legend manually from unique categories
+                    if legend:
+                        unique_cats = sorted(temp_gdf[plot_column].dropna().unique())
+                        from matplotlib.patches import Patch
+                        # Generate colors matching GeoPandas default
+                        n_cats = len(unique_cats)
+                        default_cmap = plt.get_cmap('tab20' if n_cats <= 20 else 'tab20b')
+                        legend_elements = [
+                            Patch(facecolor=default_cmap(i / n_cats), label=str(cat))
+                            for i, cat in enumerate(unique_cats)
+                        ]
+                        if legend_elements:
+                            current_ax.legend(handles=legend_elements, 
+                                            bbox_to_anchor=(1.05, 1), 
+                                            loc='upper left',
+                                            frameon=True)
                 else:
                     # Plot each category with custom color
                     for cat in temp_gdf[plot_column].unique():
@@ -389,7 +477,7 @@ def spatial_cell(
                                     alpha=alpha,
                                     **{k: v for k, v in kwargs.items() if k != 'column'}
                                 )
-                    # Add legend manually if requested
+                    # Add legend manually if requested, positioned outside
                     if legend:
                         from matplotlib.patches import Patch
                         legend_elements = [
@@ -399,15 +487,36 @@ def spatial_cell(
                             if pd.notna(cat)
                         ]
                         if legend_elements:
-                            current_ax.legend(handles=legend_elements, loc='best')
+                            current_ax.legend(handles=legend_elements, 
+                                            bbox_to_anchor=(1.05, 1), 
+                                            loc='upper left',
+                                            frameon=True)
             else:
                 # Continuous values
                 plot_kwargs['cmap'] = cmap
-                plot_kwargs['legend'] = legend
-                if legend:
-                    plot_kwargs['legend_kwds'] = {'label': color_key}
-                # Plot using GeoDataFrame.plot() - handles colorbar automatically
+                plot_kwargs['legend'] = False  # Disable automatic colorbar, we'll add it manually
+                # Plot using GeoDataFrame.plot()
                 temp_gdf.plot(**plot_kwargs)
+                
+                # Add colorbar outside the plot if requested
+                if legend:
+                    # Get the mappable from the plot
+                    # GeoPandas plot returns a collection, we need to get the colormap
+                    import matplotlib.cm as cm
+                    from matplotlib.colors import Normalize
+                    
+                    # Get value range for normalization
+                    values = temp_gdf[plot_column]
+                    vmin, vmax = values.min(), values.max()
+                    norm = Normalize(vmin=vmin, vmax=vmax)
+                    sm = plt.cm.ScalarMappable(cmap=plt.get_cmap(cmap), norm=norm)
+                    sm.set_array([])
+                    
+                    # Add colorbar outside the plot
+                    cbar = plt.colorbar(sm, ax=current_ax, 
+                                       label=color_key,
+                                       shrink=0.8,
+                                       pad=0.02)
         else:
             # No coloring, just plot geometries
             temp_gdf.plot(ax=current_ax, color='lightblue',
@@ -428,8 +537,16 @@ def spatial_cell(
         current_ax.set_xlim(x_min - x_padding, x_max + x_padding)
         current_ax.set_ylim(y_max + y_padding, y_min - y_padding)  # Inverted for y-axis
         
-        current_ax.set_xlabel('X coordinate')
-        current_ax.set_ylabel('Y coordinate')
+        # Set axis labels
+        if xlabel is not None:
+            current_ax.set_xlabel(xlabel)
+        if ylabel is not None:
+            current_ax.set_ylabel(ylabel)
+        
+        # Control ticks visibility
+        if not show_ticks:
+            current_ax.set_xticks([])
+            current_ax.set_yticks([])
         
         if color_key:
             current_ax.set_title(color_key)
@@ -437,7 +554,12 @@ def spatial_cell(
         axes_list.append(current_ax)
     
     if show:
-        plt.tight_layout()
+        # Adjust layout to make room for legend/colorbar on the right
+        # This is similar to scanpy's approach
+        if ax is None:  # Only adjust if we created the figure
+            fig.tight_layout(rect=[0, 0, 0.95, 1])  # Leave 5% space on the right
+        else:
+            fig.tight_layout()
         plt.show()
     
     if len(axes_list) == 1:
