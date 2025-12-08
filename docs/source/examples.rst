@@ -34,15 +34,15 @@ A complete workflow example:
        figsize=(12, 6)
    )
 
-Jupyter Notebooks
------------------
 
-Example notebooks are available below. These notebooks can be viewed directly in the documentation or downloaded for interactive use.
+Examples
+----------
 
 Colon Cancer Demo
-~~~~~~~~~~~~~~~~~
 
-This notebook demonstrates a complete workflow for analyzing colon cancer spatial transcriptomics data:
+.. toctree::
+   :maxdepth: 1
+   :caption: Example Notebooks:
 
-.. nbsphinx:: notebooks/Colon_Cancer_demo.ipynb
+   notebooks/Colon_Cancer_demo
 

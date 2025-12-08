@@ -38,6 +38,14 @@ except ImportError:
 templates_path = ['_templates']
 exclude_patterns = ['_build', 'Thumbs.db', '.DS_Store', '**.ipynb_checkpoints']
 
+# Suppress warnings for notebooks (docutils formatting issues are common in notebooks)
+# Note: This suppresses warnings but not errors. For errors, we rely on nbsphinx_allow_errors = True
+suppress_warnings = [
+    'ref.docutils',  # Suppress docutils warnings in notebooks
+    'misc.highlighting_failure',  # Suppress highlighting failures
+    'misc.highlighting_failure.*',  # Suppress all highlighting failures
+]
+
 # -- Options for HTML output -------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#options-for-html-output
 
@@ -101,17 +109,10 @@ intersphinx_mapping = {
 
 # nbsphinx settings
 nbsphinx_execute = 'never'  # Don't execute notebooks on build
-nbsphinx_allow_errors = True
+nbsphinx_allow_errors = True  # Allow errors in notebooks
 nbsphinx_timeout = 60  # Timeout for notebook execution (not used when execute='never')
-nbsphinx_prolog = """
-.. raw:: html
-
-    <div class="admonition note">
-    <p class="admonition-title">Note</p>
-    <p>This is a Jupyter notebook. You can download it from the 
-    <a href="https://github.com/seqyuan/trackcell/tree/main/docs/source/notebooks">GitHub repository</a>.</p>
-    </div>
-"""
+# Suppress warnings about docutils formatting issues in notebooks
+nbsphinx_requirejs_path = ''  # Disable requirejs if not needed
 
 # Pygments configuration for ipython3 lexer
 # Ensure ipython3 lexer is available (requires ipython package)
