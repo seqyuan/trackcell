@@ -8,7 +8,7 @@ including cell polygon visualization.
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
-from matplotlib.colors import Normalize
+from matplotlib.colors import Normalize, ListedColormap
 from typing import Optional, Union, List, Dict
 import warnings
 
@@ -81,6 +81,8 @@ def spatial_cell(
     figsize: Optional[tuple] = None,
     cmap: str = "viridis",
     palette: Optional[Union[dict, list, np.ndarray]] = None,
+    vmin: Optional[float] = None,
+    vmax: Optional[float] = None,
     img_key: Optional[str] = None,
     basis: str = "spatial",
     edges_width: float = 0.5,
@@ -124,6 +126,10 @@ def spatial_cell(
         Figure size (width, height) in inches.
     cmap : str, default "viridis"
         Colormap for continuous values.
+    vmin : float, optional
+        Minimum value for colormap normalization. If None, uses the minimum value in the data.
+    vmax : float, optional
+        Maximum value for colormap normalization. If None, uses the maximum value in the data.
     palette : dict, list, or array, optional
         Color palette for categorical variables. Can be:
         - A dictionary mapping category names to colors (e.g., {'A': 'red', 'B': 'blue'})
@@ -411,37 +417,54 @@ def spatial_cell(
         # Determine if continuous or categorical
         is_categorical = False
         use_custom_palette = False
-        custom_palette = None
+        custom_cmap = None
+        categories = None
+        color_list_for_legend = None  # Store color list for legend creation
         
         if plot_column is not None:
             is_categorical = not pd.api.types.is_numeric_dtype(temp_gdf[plot_column])
             
             # Check if we need to use custom palette
             if is_categorical:
+                # Get categories (prioritize Categorical's original order)
+                if pd.api.types.is_categorical_dtype(temp_gdf[plot_column]):
+                    # Categorical type: use original order
+                    categories = temp_gdf[plot_column].cat.categories.tolist()
+                else:
+                    # Regular column: use sorted unique values
+                    categories = sorted(temp_gdf[plot_column].dropna().unique())
+                
                 if palette is not None:
                     use_custom_palette = True
-                    # Convert array/list palette to dictionary if needed
-                    if isinstance(palette, (list, np.ndarray)):
-                        # Get unique categories in sorted order
-                        unique_cats = sorted(temp_gdf[plot_column].dropna().unique())
-                        # Map colors from array to categories
+                    # Convert palette to color list (in categories order)
+                    if isinstance(palette, dict):
+                        # Dictionary: map categories to colors
+                        color_list = [palette.get(cat, 'gray') for cat in categories]
+                    elif isinstance(palette, (list, np.ndarray)):
+                        # List/array: assign colors sequentially
                         palette_array = np.asarray(palette)
-                        if len(palette_array) < len(unique_cats):
+                        if len(palette_array) < len(categories):
                             warnings.warn(
                                 f"Palette has {len(palette_array)} colors but there are "
-                                f"{len(unique_cats)} categories. Colors will be cycled."
+                                f"{len(categories)} categories. Colors will be cycled."
                             )
-                        # Create dictionary mapping category to color
-                        custom_palette = {
-                            cat: palette_array[i % len(palette_array)]
-                            for i, cat in enumerate(unique_cats)
-                        }
+                        color_list = [
+                            palette_array[i % len(palette_array)]
+                            for i in range(len(categories))
+                        ]
                     else:
-                        # Already a dictionary
-                        custom_palette = palette
+                        raise ValueError(f"Unsupported palette type: {type(palette)}")
+                    
+                    # Create custom colormap from color list
+                    custom_cmap = ListedColormap(color_list)
+                    color_list_for_legend = color_list  # Store for legend
                 elif hasattr(adata.uns, 'classification_colors') and color_key == 'classification':
                     use_custom_palette = True
                     custom_palette = adata.uns['classification_colors']
+                    # Convert dictionary palette to color list
+                    color_list = [custom_palette.get(cat, 'gray') for cat in categories]
+                    custom_cmap = ListedColormap(color_list)
+                    color_list_for_legend = color_list  # Store for legend
         
         # Prepare plot arguments for GeoDataFrame.plot()
         # Filter out parameters that GeoPandas doesn't support or that we handle separately
@@ -464,55 +487,37 @@ def spatial_cell(
             if is_categorical:
                 # Categorical values
                 plot_kwargs['legend'] = False  # Disable automatic legend, we'll add it manually
+                plot_kwargs['categorical'] = True
                 
-                # If using custom palette, map categories to colors and use color parameter
-                # This is more efficient than manually plotting each category
-                # GeoPandas.plot() supports color parameter as array/Series (see documentation)
+                # If using custom palette, use custom colormap with categories parameter
+                # This uses GeoPandas native column + categorical + cmap approach
                 # Reference: https://geopandas.org/en/stable/docs/reference/api/geopandas.GeoDataFrame.plot.html
                 if use_custom_palette:
-                    # Map each category to its color from palette
-                    # Create a color Series/array with same index as temp_gdf
-                    # Ensure the mapping preserves the index order
-                    color_values = temp_gdf[plot_column].map(
-                        lambda x: custom_palette.get(x, 'gray') if pd.notna(x) else 'gray'
-                    )
-                    # Convert to array to ensure compatibility with GeoPandas
-                    # GeoPandas accepts both Series and array for color parameter
-                    color_array = np.asarray(color_values)
-                    
-                    # Use color parameter instead of column for custom palette
-                    # When using color parameter, we don't need categorical=True
-                    # because color already provides specific color values
-                    plot_kwargs['color'] = color_array
-                    # Remove 'column' and 'categorical' from plot_kwargs when using color
-                    plot_kwargs.pop('column', None)
-                    plot_kwargs.pop('categorical', None)
-                else:
-                    # Use default GeoPandas categorical plotting with column
-                    plot_kwargs['categorical'] = True
+                    # Use custom colormap with categories parameter
+                    plot_kwargs['cmap'] = custom_cmap
+                    plot_kwargs['categories'] = categories  # Ensure category order matches colormap
+                # else: use default GeoPandas categorical plotting with column
                 
-                # Plot using GeoDataFrame.plot() - it handles both column and color
+                # Plot using GeoDataFrame.plot() - uses column + categorical + cmap
                 temp_gdf.plot(**plot_kwargs)
                 
-                # Create legend manually from unique categories
+                # Create legend manually from categories
                 if legend:
-                    unique_cats = sorted(temp_gdf[plot_column].dropna().unique())
                     from matplotlib.patches import Patch
                     
                     if use_custom_palette:
-                        # Use colors from custom palette
+                        # Use colors from stored color list (same order as categories)
                         legend_elements = [
-                            Patch(facecolor=custom_palette.get(cat, 'gray'), 
-                                  label=str(cat))
-                            for cat in unique_cats
+                            Patch(facecolor=color_list_for_legend[i], label=str(cat))
+                            for i, cat in enumerate(categories)
                         ]
                     else:
                         # Generate colors matching GeoPandas default
-                        n_cats = len(unique_cats)
+                        n_cats = len(categories)
                         default_cmap = plt.get_cmap('tab20' if n_cats <= 20 else 'tab20b')
                         legend_elements = [
                             Patch(facecolor=default_cmap(i / n_cats), label=str(cat))
-                            for i, cat in enumerate(unique_cats)
+                            for i, cat in enumerate(categories)
                         ]
                     
                     if legend_elements:
@@ -524,6 +529,14 @@ def spatial_cell(
                 # Continuous values
                 plot_kwargs['cmap'] = cmap
                 plot_kwargs['legend'] = False  # Disable automatic colorbar, we'll add it manually
+                
+                # Handle vmin and vmax for continuous values
+                # If not provided, GeoPandas will use data min/max automatically
+                if vmin is not None:
+                    plot_kwargs['vmin'] = vmin
+                if vmax is not None:
+                    plot_kwargs['vmax'] = vmax
+                
                 # Plot using GeoDataFrame.plot()
                 temp_gdf.plot(**plot_kwargs)
                 
@@ -536,8 +549,10 @@ def spatial_cell(
                     
                     # Get value range for normalization
                     values = temp_gdf[plot_column]
-                    vmin, vmax = values.min(), values.max()
-                    norm = Normalize(vmin=vmin, vmax=vmax)
+                    # Use provided vmin/vmax or calculate from data
+                    vmin_actual = vmin if vmin is not None else values.min()
+                    vmax_actual = vmax if vmax is not None else values.max()
+                    norm = Normalize(vmin=vmin_actual, vmax=vmax_actual)
                     sm = plt.cm.ScalarMappable(cmap=plt.get_cmap(cmap), norm=norm)
                     sm.set_array([])
                     
