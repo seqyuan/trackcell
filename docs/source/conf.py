@@ -25,8 +25,15 @@ extensions = [
     'sphinx.ext.napoleon',
     'sphinx.ext.intersphinx',
     'sphinx.ext.mathjax',
-    'sphinx_gallery.load_style',  # For nbgallery directive support
 ]
+
+# Optional extensions - sphinx-gallery for nbgallery directive support
+try:
+    import sphinx_gallery
+    extensions.append('sphinx_gallery.load_style')  # For nbgallery directive support
+except ImportError:
+    import warnings
+    warnings.warn("sphinx-gallery not available, nbgallery directive will be disabled")
 
 # Optional extensions - nbsphinx for Jupyter notebook support
 try:
