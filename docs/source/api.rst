@@ -1,5 +1,5 @@
-API Reference
-=============
+API
+====
 
 This page provides detailed API documentation for TrackCell.
 

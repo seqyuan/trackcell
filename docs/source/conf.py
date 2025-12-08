@@ -99,3 +99,18 @@ intersphinx_mapping = {
 nbsphinx_execute = 'never'  # Don't execute notebooks on build
 nbsphinx_allow_errors = True
 
+# Pygments configuration for ipython3 lexer
+# Ensure ipython3 lexer is available (requires ipython package)
+# If ipython is not installed, this will use python3 as fallback
+try:
+    import pygments.lexers
+    # Try to get ipython3 lexer, if not available, register python3 as fallback
+    try:
+        pygments.lexers.get_lexer_by_name('ipython3')
+    except (ValueError, KeyError):
+        # Register python3 as fallback for ipython3
+        from pygments.lexers import Python3Lexer
+        pygments.lexers._lexer_cache['ipython3'] = Python3Lexer
+except ImportError:
+    pass  # Pygments not available, skip
+
