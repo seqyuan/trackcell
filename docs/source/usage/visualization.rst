@@ -45,6 +45,64 @@ instead of points, providing a more accurate representation of cell boundaries:
        figsize=(12, 6)
    )
 
+Custom Color Palettes
+----------------------
+
+You can customize colors for categorical variables using the ``palette`` parameter.
+The ``palette`` parameter accepts either a dictionary or a list/array of colors.
+
+**Using a Dictionary (Category-to-Color Mapping)**
+
+When using a dictionary, you explicitly map each category to a color:
+
+.. code-block:: python
+
+   # Define custom color palette as dictionary
+   custom_palette = {
+       'Cluster-1': 'red',
+       'Cluster-2': 'blue',
+       'Cluster-3': 'green',
+       'Cluster-4': 'orange'
+   }
+   
+   tcl.pl.spatial_cell(
+       adata,
+       color="classification",
+       palette=custom_palette,
+       figsize=(6, 6)
+   )
+
+**Using a List/Array (Sequential Color Assignment)**
+
+When using a list or array, colors are assigned to categories in alphabetical order:
+
+.. code-block:: python
+
+   # Define custom color palette as list
+   # Colors will be assigned to categories in sorted order
+   color_list = ['#FF0000', '#0000FF', '#00FF00', '#FFA500']
+   
+   tcl.pl.spatial_cell(
+       adata,
+       color="classification",
+       palette=color_list,
+       figsize=(6, 6)
+   )
+
+   # Or using numpy array
+   import numpy as np
+   color_array = np.array(['red', 'blue', 'green', 'yellow'])
+   
+   tcl.pl.spatial_cell(
+       adata,
+       color="classification",
+       palette=color_array,
+       figsize=(6, 6)
+   )
+
+**Note**: If the palette has fewer colors than categories, colors will be cycled.
+A warning will be issued if this occurs.
+
 Performance Optimization for Large Datasets
 --------------------------------------------
 
@@ -220,7 +278,6 @@ Here's a recommended workflow for visualizing large datasets:
        color="classification",
        groups=['Cluster-2', 'Cluster-3'],  # Focus on specific types
        edges_width=0,                      # Optimize performance
-       img_key="lowres",                   # Use low-res image
        figsize=(6, 6)
    )
    
