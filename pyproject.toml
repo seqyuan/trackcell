@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "trackcell"
-version = "0.3.5"
+version = "0.3.6"
 description = "A Python package for processing single-cell and spatial transcriptomics data"
 authors = ["Zan Yuan <yfinddream@gmail.com>"]
 readme = "README.md"

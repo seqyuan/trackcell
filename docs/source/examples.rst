@@ -40,9 +40,12 @@ Examples
 
 Colon Cancer Demo
 
-.. toctree::
-   :maxdepth: 1
-   :caption: Example Notebooks:
+.. nbsphinx:: notebooks/Colon_Cancer_demo.ipynb
+   :raw:
 
-   notebooks/Colon_Cancer_demo
+.. nbgallery::
+    :caption: varies Hi-C map
+    :name: rst-gallery1
+    :glob:
 
+    notebooks/Colon_Cancer_demo.ipynb
