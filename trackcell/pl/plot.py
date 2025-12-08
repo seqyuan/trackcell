@@ -9,7 +9,7 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 from matplotlib.colors import Normalize
-from typing import Optional, Union, List
+from typing import Optional, Union, List, Dict
 import warnings
 
 try:
@@ -80,7 +80,7 @@ def spatial_cell(
     size: float = 1.0,
     figsize: Optional[tuple] = None,
     cmap: str = "viridis",
-    palette: Optional[dict] = None,
+    palette: Optional[Union[dict, list, np.ndarray]] = None,
     img_key: Optional[str] = None,
     basis: str = "spatial",
     edges_width: float = 0.5,
@@ -124,8 +124,11 @@ def spatial_cell(
         Figure size (width, height) in inches.
     cmap : str, default "viridis"
         Colormap for continuous values.
-    palette : dict, optional
-        Dictionary mapping category names to colors for categorical variables.
+    palette : dict, list, or array, optional
+        Color palette for categorical variables. Can be:
+        - A dictionary mapping category names to colors (e.g., {'A': 'red', 'B': 'blue'})
+        - A list/array of colors that will be assigned to categories in sorted order
+          (e.g., ['red', 'blue', 'green'] will assign colors to categories alphabetically)
     img_key : str, optional
         Key in adata.uns["spatial"][library_id]["images"] for background image.
         If None, uses "hires" if available.
@@ -417,7 +420,25 @@ def spatial_cell(
             if is_categorical:
                 if palette is not None:
                     use_custom_palette = True
-                    custom_palette = palette
+                    # Convert array/list palette to dictionary if needed
+                    if isinstance(palette, (list, np.ndarray)):
+                        # Get unique categories in sorted order
+                        unique_cats = sorted(temp_gdf[plot_column].dropna().unique())
+                        # Map colors from array to categories
+                        palette_array = np.asarray(palette)
+                        if len(palette_array) < len(unique_cats):
+                            warnings.warn(
+                                f"Palette has {len(palette_array)} colors but there are "
+                                f"{len(unique_cats)} categories. Colors will be cycled."
+                            )
+                        # Create dictionary mapping category to color
+                        custom_palette = {
+                            cat: palette_array[i % len(palette_array)]
+                            for i, cat in enumerate(unique_cats)
+                        }
+                    else:
+                        # Already a dictionary
+                        custom_palette = palette
                 elif hasattr(adata.uns, 'classification_colors') and color_key == 'classification':
                     use_custom_palette = True
                     custom_palette = adata.uns['classification_colors']
@@ -442,24 +463,33 @@ def spatial_cell(
             
             if is_categorical:
                 # Categorical values
-                plot_kwargs['categorical'] = True
                 plot_kwargs['legend'] = False  # Disable automatic legend, we'll add it manually
                 
                 # If using custom palette, map categories to colors and use color parameter
                 # This is more efficient than manually plotting each category
                 # GeoPandas.plot() supports color parameter as array/Series (see documentation)
+                # Reference: https://geopandas.org/en/stable/docs/reference/api/geopandas.GeoDataFrame.plot.html
                 if use_custom_palette:
                     # Map each category to its color from palette
-                    # Create a color Series with same index as temp_gdf
-                    color_series = temp_gdf[plot_column].map(
+                    # Create a color Series/array with same index as temp_gdf
+                    # Ensure the mapping preserves the index order
+                    color_values = temp_gdf[plot_column].map(
                         lambda x: custom_palette.get(x, 'gray') if pd.notna(x) else 'gray'
                     )
+                    # Convert to array to ensure compatibility with GeoPandas
+                    # GeoPandas accepts both Series and array for color parameter
+                    color_array = np.asarray(color_values)
+                    
                     # Use color parameter instead of column for custom palette
-                    plot_kwargs['color'] = color_series
-                    # Remove 'column' from plot_kwargs when using color
+                    # When using color parameter, we don't need categorical=True
+                    # because color already provides specific color values
+                    plot_kwargs['color'] = color_array
+                    # Remove 'column' and 'categorical' from plot_kwargs when using color
                     plot_kwargs.pop('column', None)
-                # else: use default GeoPandas categorical plotting with column
-                # (plot_kwargs already has 'column' set)
+                    plot_kwargs.pop('categorical', None)
+                else:
+                    # Use default GeoPandas categorical plotting with column
+                    plot_kwargs['categorical'] = True
                 
                 # Plot using GeoDataFrame.plot() - it handles both column and color
                 temp_gdf.plot(**plot_kwargs)
