@@ -461,6 +461,7 @@ def spatial_cell(
         # Process categorical data (palette, categories, etc.)
         if color_key is not None and is_categorical:
             # Get categories (prioritize Categorical's original order)
+
             if pd.api.types.is_categorical_dtype(temp_gdf[plot_column]):
                 # Categorical type: use original order
                 categories = temp_gdf[plot_column].cat.categories.tolist()
@@ -468,11 +469,20 @@ def spatial_cell(
                 # Regular column: use sorted unique values
                 categories = sorted(temp_gdf[plot_column].dropna().unique())
             
+            color_list = []
             if palette is not None:
                 use_custom_palette = True
                 # Convert palette to color list (in categories order)
                 if isinstance(palette, dict):
                     # Dictionary: map categories to colors
+                    # Check for missing categories and warn
+                    missing_cats = [cat for cat in categories if cat not in palette]
+                    if missing_cats:
+                        warnings.warn(
+                            f"Palette dictionary is missing colors for {len(missing_cats)} categories: "
+                            f"{missing_cats[:5]}{'...' if len(missing_cats) > 5 else ''}. "
+                            f"Using 'gray' as default color for missing categories."
+                        )
                     color_list = [palette.get(cat, 'gray') for cat in categories]
                 elif isinstance(palette, (list, np.ndarray)):
                     # List/array: assign colors sequentially
@@ -496,33 +506,14 @@ def spatial_cell(
                 # Convert column to Categorical type with specified categories order
                 # This ensures GeoPandas uses the correct order for color mapping
                 # GeoPandas will automatically use cat.categories for color assignment
-                if not pd.api.types.is_categorical_dtype(temp_gdf[plot_column]):
-                    # Convert to Categorical with our categories order
-                    temp_gdf[plot_column] = pd.Categorical(
-                        temp_gdf[plot_column],
-                        categories=categories,
-                        ordered=False
-                    )
-                else:
-                    # If already Categorical, reorder categories to match our color list
-                    # Only reorder if the current order is different
-                    current_cats = temp_gdf[plot_column].cat.categories.tolist()
-                    if current_cats != categories:
-                        temp_gdf[plot_column] = temp_gdf[plot_column].cat.reorder_categories(categories)
-        
+                
         # Prepare plot arguments for GeoDataFrame.plot()
-        # Filter out parameters that GeoPandas doesn't support or that we handle separately
-        # GeoPandas plot() doesn't support 'palette' parameter directly
-        # Note: 'cmap' is supported for continuous values, but we handle it explicitly
-        excluded_params = {'palette', 'palete'}  # Handle palette separately
-        filtered_kwargs = {k: v for k, v in kwargs.items() if k not in excluded_params}
-        
         plot_kwargs = {
             'ax': current_ax,
             'edgecolor': edges_color,
             'linewidth': edges_width,
             'alpha': alpha,
-            **filtered_kwargs
+            **kwargs
         }
         
         if color_key is not None:
@@ -536,8 +527,8 @@ def spatial_cell(
                 # Only set categorical=True if column is not already Categorical type
                 # GeoPandas can automatically detect Categorical columns, so we don't need
                 # to set categorical=True for Categorical columns (as shown in the example)
-                if not pd.api.types.is_categorical_dtype(temp_gdf[plot_column]):
-                    plot_kwargs['categorical'] = True
+                #if not pd.api.types.is_categorical_dtype(temp_gdf[plot_column]):
+                #    plot_kwargs['categorical'] = True
                 
                 # If using custom palette, use custom colormap
                 # GeoPandas will automatically use the Categorical column's cat.categories
