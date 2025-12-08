@@ -25,6 +25,7 @@ extensions = [
     'sphinx.ext.napoleon',
     'sphinx.ext.intersphinx',
     'sphinx.ext.mathjax',
+    'sphinx_gallery.load_style',  # For nbgallery directive support
 ]
 
 # Optional extensions - nbsphinx for Jupyter notebook support
@@ -133,6 +134,13 @@ nbsphinx_timeout = 60  # Timeout for notebook execution (not used when execute='
 nbsphinx_requirejs_path = ''  # Disable requirejs if not needed
 # Process raw cells as markdown (helps with formatting)
 nbsphinx_process_signals = False
+
+# nbsphinx thumbnails for gallery
+# Key: notebook path relative to source directory (without .ipynb extension)
+# Value: thumbnail image path relative to source directory
+nbsphinx_thumbnails = {
+    "notebooks/Colon_Cancer_demo": "_static/notebooks/Colon_Cancer_demo.png",
+}
 
 # Pygments configuration for ipython3 lexer
 # IPython.sphinxext.ipython_console_highlighting handles this automatically
