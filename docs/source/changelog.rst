@@ -1,6 +1,31 @@
 Changelog
 =========
 
+Version 0.2.8
+-------------
+
+* **Major refactoring of ``spatial_cell`` function**:
+  * Refactored to use GeoDataFrame.plot() for efficient rendering and automatic legend generation
+  * Integrated scanpy-style background image processing with scale_factor support
+  * Fixed coordinate alignment issue when plotting subset data (image extent now matches data range)
+  * Added support for gene expression visualization (color parameter can be a gene name from adata.var_names)
+  * Legend and colorbar now positioned outside the plot area (right side) similar to sc.pl.spatial
+  * Added ``xlabel``, ``ylabel``, and ``show_ticks`` parameters for axis customization
+  * ``library_id`` parameter now auto-selects first available library_id when not specified (similar to sc.pl.spatial)
+  * Added ``alpha_img`` parameter to control background image transparency
+  * Improved categorical legend generation with custom palette support
+
+* **Enhanced ``read_hd_cellseg`` function**:
+  * Added automatic detection of alternative segmentation file names (e.g., ``cell_segmentations.geojson``)
+  * Automatically adds ``spot_diameter_fullres`` to scalefactors if missing (required for sc.pl.spatial compatibility)
+  * Improved error messages with suggestions for alternative filenames
+
+* **Documentation improvements**:
+  * Reorganized usage documentation into separate files (reading.rst, visualization.rst, computing_distances.rst)
+  * Added directory structure requirements to reading documentation
+  * Added comprehensive visualization optimization guide for large datasets
+  * Updated examples with gene expression visualization
+
 Version 0.2.5
 -------------
 
