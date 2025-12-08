@@ -6,16 +6,16 @@
 # -- Project information -----------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#project-information
 
-project = 'TrackCell'
-copyright = '2024, Zan Yuan'
+project = 'trackcell'
+copyright = '2025, Zan Yuan'
 author = 'Zan Yuan'
-release = '0.2.2'
+release = '0.3.6'
 
 # -- General configuration ---------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#general-configuration
 
 # Source file suffixes
-source_suffix = ['.rst', '.ipynb']
+source_suffix = ['.rst', '.md']
 
 # Base extensions
 extensions = [

@@ -41,11 +41,3 @@ Examples
 Colon Cancer Demo
 
 .. nbsphinx:: notebooks/Colon_Cancer_demo.ipynb
-   :raw:
-
-.. nbgallery::
-    :caption: varies Hi-C map
-    :name: rst-gallery1
-    :glob:
-
-    notebooks/Colon_Cancer_demo.ipynb
