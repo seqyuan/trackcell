@@ -129,3 +129,51 @@ try:
 except ImportError:
     pass  # Pygments not available, skip
 
+# -- Options for LaTeX/PDF output -------------------------------------------------
+# LaTeX configuration for Chinese character support
+# Use XeLaTeX for Unicode/Chinese support (required for Chinese characters in PDF)
+latex_engine = 'xelatex'
+
+latex_elements = {
+    # Use xeCJK for Chinese character support
+    # This configuration supports Chinese characters in notebooks
+    'preamble': r'''
+\usepackage{fontspec}
+\usepackage{xeCJK}
+% Configure Chinese fonts with fallbacks
+% Try common CJK fonts available on Linux systems (e.g., Read the Docs)
+\IfFontExistsTF{Noto Sans CJK SC}{
+    \setCJKmainfont{Noto Sans CJK SC}
+    \setCJKsansfont{Noto Sans CJK SC}
+    \setCJKmonofont{Noto Sans Mono CJK SC}
+}{
+    \IfFontExistsTF{Source Han Sans SC}{
+        \setCJKmainfont{Source Han Sans SC}
+        \setCJKsansfont{Source Han Sans SC}
+        \setCJKmonofont{Source Han Mono SC}
+    }{
+        \IfFontExistsTF{WenQuanYi Micro Hei}{
+            \setCJKmainfont{WenQuanYi Micro Hei}
+            \setCJKsansfont{WenQuanYi Micro Hei}
+            \setCJKmonofont{WenQuanYi Micro Hei Mono}
+        }{
+            % Fallback: try to use any available CJK font
+            % If no CJK fonts are available, XeLaTeX will use a default font
+            \setCJKmainfont{SimSun}
+            \setCJKsansfont{SimHei}
+            \setCJKmonofont{FangSong}
+        }
+    }
+}
+% Increase buffer size for long lines (fixes "Unable to read an entire line" error)
+\maxdeadcycles=1000
+% Increase input buffer size
+\makeatletter
+\maxdimen=16383pt
+\makeatother
+''',
+    'maxlistdepth': '10',
+    'pointsize': '10pt',
+    'extraclassoptions': 'openany,oneside',
+}
+
