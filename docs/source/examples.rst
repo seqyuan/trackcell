@@ -37,8 +37,7 @@ A complete workflow example:
 Jupyter Notebooks
 -----------------
 
-Example notebooks are available in the `notebooks/` directory. These notebooks can be
-viewed directly in the documentation or downloaded for interactive use.
+Example notebooks are available below. These notebooks can be viewed directly in the documentation or downloaded for interactive use.
 
 Colon Cancer Demo
 ~~~~~~~~~~~~~~~~~
@@ -46,9 +45,4 @@ Colon Cancer Demo
 This notebook demonstrates a complete workflow for analyzing colon cancer spatial transcriptomics data:
 
 .. nbsphinx:: notebooks/Colon_Cancer_demo.ipynb
-
-.. note::
-
-   To execute the notebooks, ensure you have TrackCell and all dependencies installed.
-   See :doc:`installation` for details.
 

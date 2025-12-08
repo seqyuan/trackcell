@@ -14,6 +14,9 @@ release = '0.2.2'
 # -- General configuration ---------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#general-configuration
 
+# Source file suffixes
+source_suffix = ['.rst', '.ipynb']
+
 # Base extensions
 extensions = [
     'sphinx.ext.autodoc',
@@ -24,12 +27,13 @@ extensions = [
     'sphinx.ext.mathjax',
 ]
 
-# Optional extensions
+# Optional extensions - nbsphinx for Jupyter notebook support
 try:
     import nbsphinx
     extensions.append('nbsphinx')  # For Jupyter notebook support
 except ImportError:
-    pass  # nbsphinx not available, skip notebook support
+    import warnings
+    warnings.warn("nbsphinx not available, notebook support will be disabled")
 
 templates_path = ['_templates']
 exclude_patterns = ['_build', 'Thumbs.db', '.DS_Store', '**.ipynb_checkpoints']
@@ -98,6 +102,16 @@ intersphinx_mapping = {
 # nbsphinx settings
 nbsphinx_execute = 'never'  # Don't execute notebooks on build
 nbsphinx_allow_errors = True
+nbsphinx_timeout = 60  # Timeout for notebook execution (not used when execute='never')
+nbsphinx_prolog = """
+.. raw:: html
+
+    <div class="admonition note">
+    <p class="admonition-title">Note</p>
+    <p>This is a Jupyter notebook. You can download it from the 
+    <a href="https://github.com/seqyuan/trackcell/tree/main/docs/source/notebooks">GitHub repository</a>.</p>
+    </div>
+"""
 
 # Pygments configuration for ipython3 lexer
 # Ensure ipython3 lexer is available (requires ipython package)
