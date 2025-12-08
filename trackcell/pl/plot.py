@@ -423,12 +423,18 @@ def spatial_cell(
                     custom_palette = adata.uns['classification_colors']
         
         # Prepare plot arguments for GeoDataFrame.plot()
+        # Filter out parameters that GeoPandas doesn't support or that we handle separately
+        # GeoPandas plot() doesn't support 'palette' parameter directly
+        # Note: 'cmap' is supported for continuous values, but we handle it explicitly
+        excluded_params = {'palette', 'palete'}  # Handle palette separately
+        filtered_kwargs = {k: v for k, v in kwargs.items() if k not in excluded_params}
+        
         plot_kwargs = {
             'ax': current_ax,
             'edgecolor': edges_color,
             'linewidth': edges_width,
             'alpha': alpha,
-            **kwargs
+            **filtered_kwargs
         }
         
         if plot_column is not None:
@@ -439,16 +445,38 @@ def spatial_cell(
                 plot_kwargs['categorical'] = True
                 plot_kwargs['legend'] = False  # Disable automatic legend, we'll add it manually
                 
-                # If using custom palette, we'll plot manually
-                # Otherwise, let GeoPandas handle it automatically
-                if not use_custom_palette:
-                    # Use default GeoPandas categorical plotting
-                    # First plot without legend to get the collections
-                    temp_gdf.plot(**plot_kwargs)
-                    # Create legend manually from unique categories
-                    if legend:
-                        unique_cats = sorted(temp_gdf[plot_column].dropna().unique())
-                        from matplotlib.patches import Patch
+                # If using custom palette, map categories to colors and use color parameter
+                # This is more efficient than manually plotting each category
+                # GeoPandas.plot() supports color parameter as array/Series (see documentation)
+                if use_custom_palette:
+                    # Map each category to its color from palette
+                    # Create a color Series with same index as temp_gdf
+                    color_series = temp_gdf[plot_column].map(
+                        lambda x: custom_palette.get(x, 'gray') if pd.notna(x) else 'gray'
+                    )
+                    # Use color parameter instead of column for custom palette
+                    plot_kwargs['color'] = color_series
+                    # Remove 'column' from plot_kwargs when using color
+                    plot_kwargs.pop('column', None)
+                # else: use default GeoPandas categorical plotting with column
+                # (plot_kwargs already has 'column' set)
+                
+                # Plot using GeoDataFrame.plot() - it handles both column and color
+                temp_gdf.plot(**plot_kwargs)
+                
+                # Create legend manually from unique categories
+                if legend:
+                    unique_cats = sorted(temp_gdf[plot_column].dropna().unique())
+                    from matplotlib.patches import Patch
+                    
+                    if use_custom_palette:
+                        # Use colors from custom palette
+                        legend_elements = [
+                            Patch(facecolor=custom_palette.get(cat, 'gray'), 
+                                  label=str(cat))
+                            for cat in unique_cats
+                        ]
+                    else:
                         # Generate colors matching GeoPandas default
                         n_cats = len(unique_cats)
                         default_cmap = plt.get_cmap('tab20' if n_cats <= 20 else 'tab20b')
@@ -456,41 +484,12 @@ def spatial_cell(
                             Patch(facecolor=default_cmap(i / n_cats), label=str(cat))
                             for i, cat in enumerate(unique_cats)
                         ]
-                        if legend_elements:
-                            current_ax.legend(handles=legend_elements, 
-                                            bbox_to_anchor=(1.05, 1), 
-                                            loc='upper left',
-                                            frameon=True)
-                else:
-                    # Plot each category with custom color
-                    for cat in temp_gdf[plot_column].unique():
-                        if pd.notna(cat):
-                            mask_cat = temp_gdf[plot_column] == cat
-                            if mask_cat.any():
-                                # Use custom color if available, otherwise use gray
-                                cat_color = custom_palette.get(cat, 'gray')
-                                temp_gdf[mask_cat].plot(
-                                    ax=current_ax,
-                                    color=cat_color,
-                                    edgecolor=edges_color,
-                                    linewidth=edges_width,
-                                    alpha=alpha,
-                                    **{k: v for k, v in kwargs.items() if k != 'column'}
-                                )
-                    # Add legend manually if requested, positioned outside
-                    if legend:
-                        from matplotlib.patches import Patch
-                        legend_elements = [
-                            Patch(facecolor=custom_palette.get(cat, 'gray'), 
-                                  label=str(cat))
-                            for cat in sorted(temp_gdf[plot_column].unique())
-                            if pd.notna(cat)
-                        ]
-                        if legend_elements:
-                            current_ax.legend(handles=legend_elements, 
-                                            bbox_to_anchor=(1.05, 1), 
-                                            loc='upper left',
-                                            frameon=True)
+                    
+                    if legend_elements:
+                        current_ax.legend(handles=legend_elements, 
+                                        bbox_to_anchor=(1.05, 1), 
+                                        loc='upper left',
+                                        frameon=True)
             else:
                 # Continuous values
                 plot_kwargs['cmap'] = cmap
