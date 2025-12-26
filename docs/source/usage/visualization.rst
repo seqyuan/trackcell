@@ -181,6 +181,7 @@ Crop to a specific spatial region of interest:
 .. code-block:: python
 
    import numpy as np
+   import trackcell as tcl
    
    # Define region of interest
    x_min, x_max = 1000, 5000
@@ -193,6 +194,10 @@ Crop to a specific spatial region of interest:
    
    # Create subset
    adata_subset = adata[mask].copy()
+   
+   # IMPORTANT: Synchronize geometries after subsetting
+   # This is required when data was loaded with read_hd_cellseg()
+   tcl.io.sync_geometries_after_subset(adata_subset, sample="Cse1")
    
    # Plot subset
    tcl.pl.spatial_cell(adata_subset, color="classification")

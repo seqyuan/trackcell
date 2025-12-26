@@ -35,6 +35,39 @@ adata = tcl.io.read_hd_cellseg(
 # - Cell geometries in .obs["geometry"] (WKT strings for serialization)
 ```
 
+#### Subsetting Data and Synchronizing Geometries
+
+**Important**: When you subset data loaded with `read_hd_cellseg()`, you must call `sync_geometries_after_subset()` to synchronize the geometries:
+
+```python
+import trackcell as tcl
+import numpy as np
+
+# Read data
+adata = tcl.io.read_hd_cellseg(
+    datapath="SpaceRanger4.0/Cse1/outs/segmented_outputs",
+    sample="Cse1"
+)
+
+# Subset by spatial region
+x_min, x_max = 16000, 18000
+y_min, y_max = 14000, 18000
+
+spatial_coords = adata.obsm['spatial']
+mask = ((spatial_coords[:, 0] >= x_min) & (spatial_coords[:, 0] <= x_max) &
+        (spatial_coords[:, 1] >= y_min) & (spatial_coords[:, 1] <= y_max))
+
+adata_subset = adata[mask].copy()
+
+# IMPORTANT: Synchronize geometries after subsetting
+tcl.io.sync_geometries_after_subset(adata_subset, sample="Cse1")
+
+# Now you can safely plot the subset
+tcl.pl.spatial_cell(adata_subset, color="classification")
+```
+
+**Why this is necessary**: When you subset an AnnData object, `adata.obs` and `adata.obsm` are automatically subset, but `adata.uns["spatial"][sample]["geometries"]` (GeoDataFrame) is not. Without synchronization, plotting may fail with errors like `ValueError: aspect must be finite and positive`.
+
 #### Reading Bin-Level Data (2um/8um/16um)
 
 ```python

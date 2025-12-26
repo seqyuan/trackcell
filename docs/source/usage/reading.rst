@@ -108,3 +108,82 @@ Usage
    # Access the bin size information
    print(f"Bin size: {adata.uns['spatial']['Cse1']['binsize']} um")
 
+Subsetting Data and Synchronizing Geometries
+---------------------------------------------
+
+When you subset an AnnData object loaded with ``read_hd_cellseg()``, the cell geometries 
+stored in ``adata.uns["spatial"][sample]["geometries"]`` are **not automatically updated**. 
+This can cause errors when plotting subsetted data.
+
+**Important**: Always call ``sync_geometries_after_subset()`` after subsetting data loaded 
+with ``read_hd_cellseg()`` to ensure geometries are synchronized.
+
+Usage
+~~~~~
+
+.. code-block:: python
+
+   import trackcell as tcl
+   import numpy as np
+   
+   # Read data
+   adata = tcl.io.read_hd_cellseg(
+       datapath="SpaceRanger4.0/Cse1/outs/segmented_outputs",
+       sample="Cse1"
+   )
+   
+   # Method 1: Subset by spatial region
+   x_min, x_max = 16000, 18000
+   y_min, y_max = 14000, 18000
+   
+   spatial_coords = adata.obsm['spatial']
+   mask = ((spatial_coords[:, 0] >= x_min) & (spatial_coords[:, 0] <= x_max) &
+           (spatial_coords[:, 1] >= y_min) & (spatial_coords[:, 1] <= y_max))
+   
+   adata_subset = adata[mask].copy()
+   
+   # IMPORTANT: Synchronize geometries after subsetting
+   tcl.io.sync_geometries_after_subset(adata_subset, sample="Cse1")
+   
+   # Now you can safely plot the subset
+   tcl.pl.spatial_cell(adata_subset, color="classification")
+   
+   # Method 2: Subset by cell metadata
+   adata_subset2 = adata[adata.obs['classification'] == 'Cluster-1'].copy()
+   
+   # IMPORTANT: Synchronize geometries after subsetting
+   tcl.io.sync_geometries_after_subset(adata_subset2, sample="Cse1")
+   
+   # Now you can safely plot the subset
+   tcl.pl.spatial_cell(adata_subset2, color="classification")
+
+What Gets Synchronized
+~~~~~~~~~~~~~~~~~~~~~~
+
+The ``sync_geometries_after_subset()`` function:
+
+* Filters ``adata.uns["spatial"][sample]["geometries"]`` (GeoDataFrame) to only include 
+  cells present in the subsetted ``adata.obs_names``
+* Ensures the geometries match the subsetted data
+
+**Note**: ``adata.obs["geometry"]`` (WKT strings) is automatically subset when you subset 
+the AnnData object, so it doesn't need manual synchronization. However, the plotting function 
+prefers using the GeoDataFrame format for better performance.
+
+Why This Is Necessary
+~~~~~~~~~~~~~~~~~~~~~
+
+When you subset an AnnData object:
+
+* ``adata.obs`` and ``adata.obsm`` are automatically subset (they are indexed by cell IDs)
+* ``adata.uns["spatial"][sample]["geometries"]`` is **NOT** automatically subset (it's a 
+  separate GeoDataFrame object)
+
+If you try to plot without synchronizing, the plotting function may:
+
+* Fail with errors like ``ValueError: aspect must be finite and positive``
+* Attempt to access geometries for cells that no longer exist in the subset
+* Produce incorrect visualizations
+
+Always call ``sync_geometries_after_subset()`` after subsetting to avoid these issues.
+

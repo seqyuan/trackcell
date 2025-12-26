@@ -396,13 +396,82 @@ def spatial_cell(
             temp_geometries = gpd.GeoSeries(geom_list, index=valid_cells)
         else:
             # Use geometries from GeoDataFrame
-            temp_geometries = geometries.loc[cells_to_plot, "geometry"]
-            valid_cells = list(cells_to_plot)
+            # Filter to only include cells that exist in geometries index
+            cells_in_geometries = cells_to_plot[cells_to_plot.isin(geometries.index)]
+            if len(cells_in_geometries) == 0:
+                warnings.warn(
+                    "No cells found in geometries index. "
+                    "Geometries may not be synchronized after subset. "
+                    "Consider using tcl.io.sync_geometries_after_subset() after subsetting."
+                )
+                axes_list.append(current_ax)
+                continue
+            
+            # Get geometries for cells that exist in the geometries index
+            temp_geometries_raw = geometries.loc[cells_in_geometries, "geometry"]
+            
+            # Filter out invalid geometries (None, NaN, or invalid geometry objects)
+            valid_cells = []
+            for cell_id in cells_in_geometries:
+                if cell_id not in temp_geometries_raw.index:
+                    continue
+                    
+                geom = temp_geometries_raw.loc[cell_id]
+                
+                # Check if geometry is valid
+                if geom is None or pd.isna(geom):
+                    continue
+                
+                if not hasattr(geom, 'bounds'):
+                    continue
+                
+                # Check if geometry is valid shapely object
+                if hasattr(geom, 'is_valid') and not geom.is_valid:
+                    continue
+                
+                # Verify bounds are finite
+                try:
+                    bounds = geom.bounds
+                    if not all(np.isfinite(bounds)):
+                        continue
+                    # Check bounds are valid (max > min)
+                    if bounds[2] <= bounds[0] or bounds[3] <= bounds[1]:
+                        continue
+                except Exception:
+                    continue
+                
+                valid_cells.append(cell_id)
+            
+            if len(valid_cells) == 0:
+                warnings.warn(
+                    "No valid geometries found after filtering invalid geometries. "
+                    "This may be due to geometries not being synchronized after subset. "
+                    "Consider using tcl.io.sync_geometries_after_subset() after subsetting."
+                )
+                axes_list.append(current_ax)
+                continue
+            
+            temp_geometries = temp_geometries_raw.loc[valid_cells]
         
         if len(temp_geometries) == 0:
             warnings.warn("No valid geometries found for plotting.")
             axes_list.append(current_ax)
             continue
+        
+        # Additional validation: check if total_bounds would be valid
+        try:
+            test_gdf = gpd.GeoDataFrame(geometry=temp_geometries)
+            bounds = test_gdf.total_bounds
+            if not all(np.isfinite(bounds)) or bounds[2] <= bounds[0] or bounds[3] <= bounds[1]:
+                warnings.warn(
+                    f"Invalid geometry bounds detected. This may cause plotting errors. "
+                    f"Bounds: {bounds}. Consider using sync_geometries_after_subset() after subsetting."
+                )
+        except Exception as e:
+            warnings.warn(
+                f"Could not validate geometry bounds: {e}. "
+                f"This may cause plotting errors. Consider using sync_geometries_after_subset() after subsetting."
+            )
         
         # Create GeoDataFrame with color data
         # color_key has already been validated upfront, so we can safely proceed
