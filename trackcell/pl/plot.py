@@ -115,6 +115,8 @@ def spatial_cell(
         Can be:
         - A column name in `adata.obs` (metadata)
         - A gene name in `adata.var_names` (gene expression)
+        - None: Only display the H&E background image without cell polygons.
+          When None, axis ticks and labels are automatically shown.
     groups : list of str, optional
         Subset of groups to plot. If None, plots all groups.
         Requires either `color` to be a categorical column in `adata.obs` or `groupby` to be specified.
@@ -168,6 +170,7 @@ def spatial_cell(
         Label for the y-axis. Set to None to hide the label.
     show_ticks : bool, default False
         Whether to show axis ticks and tick labels. If False, ticks are hidden.
+        Note: When `color=None`, ticks are automatically shown regardless of this setting.
     **kwargs
         Additional arguments passed to GeoDataFrame.plot().
     
@@ -188,6 +191,8 @@ def spatial_cell(
     >>> tcl.pl.spatial_cell(adata, color="PDPN", cmap="viridis")
     >>> # Plot with groups filter
     >>> tcl.pl.spatial_cell(adata, color="classification", groups=["Cluster-1", "Cluster-2"])
+    >>> # Plot only H&E image (no cell polygons)
+    >>> tcl.pl.spatial_cell(adata, color=None)
     """
     if not HAS_GEOPANDAS:
         raise ImportError("geopandas and shapely are required for spatial_cell function")
@@ -377,7 +382,36 @@ def spatial_cell(
         # Process and draw background image (scanpy way)
         img, img_extent = _process_background_image(spatial_info, img_key, data_coords_range)
         if img is not None and img_extent is not None:
-            current_ax.imshow(img, extent=img_extent, origin='upper', alpha=alpha_img)
+            # If color is None, use full opacity for the image
+            img_alpha = 1.0 if color_key is None else alpha_img
+            current_ax.imshow(img, extent=img_extent, origin='upper', alpha=img_alpha)
+        
+        # If color is None, skip geometry plotting and only show HE image
+        if color_key is None:
+            # Set axis limits based on image extent or data coordinates
+            if img_extent is not None:
+                current_ax.set_xlim(img_extent[0], img_extent[1])
+                current_ax.set_ylim(img_extent[2], img_extent[3])
+            else:
+                # Fallback to data coordinates
+                current_ax.set_xlim(x_min, x_max)
+                current_ax.set_ylim(y_max, y_min)  # Inverted for y-axis
+            
+            # Set axis properties
+            current_ax.set_aspect('equal')
+            current_ax.invert_yaxis()  # Match image coordinates
+            
+            # Set axis labels
+            if xlabel is not None:
+                current_ax.set_xlabel(xlabel)
+            if ylabel is not None:
+                current_ax.set_ylabel(ylabel)
+            
+            # Always show ticks when color is None
+            current_ax.tick_params(axis='both', which='major', labelsize=10)
+            
+            axes_list.append(current_ax)
+            continue  # Skip to next color or finish
         
         # Create temporary GeoDataFrame for plotting
         # This combines geometry and color data in one structure
@@ -765,33 +799,9 @@ def spatial_cell(
                     else:
                         raise
         else:
-            # No coloring, just plot geometries
-            # Set aspect='equal' if bounds are invalid to avoid calculation errors
-            plot_kwargs_no_color = {
-                'ax': current_ax,
-                'color': 'lightblue',
-                'edgecolor': edges_color,
-                'linewidth': edges_width,
-                'alpha': alpha,
-                **kwargs
-            }
-            if use_equal_aspect:
-                plot_kwargs_no_color['aspect'] = 'equal'
-            
-            # Use try-except to catch aspect calculation errors and retry with aspect='equal'
-            try:
-                temp_gdf.plot(**plot_kwargs_no_color)
-            except ValueError as e:
-                if "aspect must be finite and positive" in str(e):
-                    # Retry with explicit aspect='equal'
-                    plot_kwargs_no_color['aspect'] = 'equal'
-                    warnings.warn(
-                        f"Aspect calculation failed. Using aspect='equal' instead. "
-                        f"Consider using tcl.io.sync_geometries_after_subset() after subsetting."
-                    )
-                    temp_gdf.plot(**plot_kwargs_no_color)
-                else:
-                    raise
+            # No coloring - only show HE image (background image), no cell polygons
+            # This is useful for viewing just the tissue image with coordinates
+            pass  # Skip geometry plotting, only background image will be shown
         
         # Set axis properties
         current_ax.set_aspect('equal')
@@ -814,7 +824,11 @@ def spatial_cell(
             current_ax.set_ylabel(ylabel)
         
         # Control ticks visibility
-        if not show_ticks:
+        # If color is None, always show ticks to display coordinates
+        if color_key is None:
+            # When color=None, show ticks and labels by default
+            current_ax.tick_params(axis='both', which='major', labelsize=10)
+        elif not show_ticks:
             current_ax.set_xticks([])
             current_ax.set_yticks([])
         
