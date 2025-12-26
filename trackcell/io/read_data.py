@@ -15,6 +15,7 @@ import imageio.v3 as iio
 from pathlib import Path
 from typing import Optional, Union
 import ast
+import warnings
 
 def read_hd_bin(
     datapath: Union[str, Path],
@@ -457,4 +458,112 @@ def convert_classification_to_color_dict(df, classification_col='classification'
             color_dict[name] = hex_color
     
     return color_dict
+
+
+def sync_geometries_after_subset(adata, sample: Optional[str] = None):
+    """
+    Synchronize geometries in adata.uns["spatial"][sample]["geometries"] 
+    after subsetting the AnnData object.
+    
+    When you subset an AnnData object (e.g., adata[mask] or adata[adata.obs['col'] == 'value']),
+    the adata.obs["geometry"] column is automatically subset, but the GeoDataFrame in
+    adata.uns["spatial"][sample]["geometries"] is not automatically updated. This function
+    ensures that the geometries GeoDataFrame matches the subsetted cells.
+    
+    Parameters
+    ----------
+    adata : sc.AnnData
+        AnnData object that has been subsetted.
+    sample : str, optional
+        Sample name. If None, will use the first available sample in adata.uns["spatial"].
+    
+    Returns
+    -------
+    sc.AnnData
+        The same AnnData object with synchronized geometries (modified in place).
+    
+    Examples
+    --------
+    >>> import trackcell.io as tcio
+    >>> adata = tcio.read_hd_cellseg("path/to/data", sample="sample1")
+    >>> # Subset the data
+    >>> adata_subset = adata[adata.obs['classification'] == 'Cluster-1'].copy()
+    >>> # Synchronize geometries
+    >>> tcio.sync_geometries_after_subset(adata_subset, sample="sample1")
+    >>> # Now adata_subset.uns["spatial"]["sample1"]["geometries"] only contains geometries for subsetted cells
+    """
+    if "spatial" not in adata.uns:
+        warnings.warn(
+            "No spatial information found in adata.uns['spatial']. "
+            "This function is intended for data loaded with read_hd_cellseg()."
+        )
+        return adata
+    
+    # Determine sample name
+    if sample is None:
+        available_samples = list(adata.uns["spatial"].keys())
+        if len(available_samples) == 0:
+            warnings.warn("No samples found in adata.uns['spatial'].")
+            return adata
+        sample = available_samples[0]
+        if len(available_samples) > 1:
+            warnings.warn(
+                f"Multiple samples found: {available_samples}. "
+                f"Using '{sample}'. Specify `sample` explicitly to use a different one."
+            )
+    
+    if sample not in adata.uns["spatial"]:
+        warnings.warn(f"Sample '{sample}' not found in adata.uns['spatial'].")
+        return adata
+    
+    spatial_info = adata.uns["spatial"][sample]
+    
+    # Check if geometries exist
+    if "geometries" not in spatial_info:
+        warnings.warn(
+            f"No geometries found in adata.uns['spatial']['{sample}']['geometries']. "
+            "This function is intended for data loaded with read_hd_cellseg()."
+        )
+        return adata
+    
+    geometries = spatial_info["geometries"]
+    
+    # Get the current cell IDs in the subsetted adata
+    current_cell_ids = set(adata.obs_names)
+    
+    # Filter geometries to only include cells in the subset
+    # Check if geometries is indexed by cell IDs
+    if isinstance(geometries, gpd.GeoDataFrame):
+        # Filter geometries based on current cell IDs
+        # The geometries GeoDataFrame should be indexed by cell IDs (matching adata.obs_names)
+        # This is how read_hd_cellseg stores them
+        try:
+            # Try to filter by index - this should work if geometries are indexed by cell IDs
+            geometries_subset = geometries.loc[geometries.index.isin(current_cell_ids)]
+        except (KeyError, IndexError) as e:
+            # If index-based filtering fails, geometries might not be properly indexed
+            # Try to match by intersecting indices
+            common_indices = geometries.index.intersection(current_cell_ids)
+            if len(common_indices) > 0:
+                geometries_subset = geometries.loc[common_indices]
+            else:
+                warnings.warn(
+                    f"Could not filter geometries by index. "
+                    f"Geometries may not be properly indexed by cell IDs. "
+                    f"Error: {e}"
+                )
+                return adata
+        
+        # Update the geometries in place
+        spatial_info["geometries"] = geometries_subset
+        
+        # Note: adata.obs["geometry"] is automatically subset when adata is subset,
+        # so we don't need to manually update it here
+    else:
+        warnings.warn(
+            f"Unexpected geometry format in adata.uns['spatial']['{sample}']['geometries']. "
+            "Expected GeoDataFrame."
+        )
+    
+    return adata
 
