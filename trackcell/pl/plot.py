@@ -702,3 +702,183 @@ def spatial_cell(
         return axes_list[0]
     else:
         return axes_list
+
+
+def he(
+    adata,
+    library_id: Optional[str] = None,
+    img_key: Optional[str] = None,
+    xlim: Optional[tuple] = None,
+    ylim: Optional[tuple] = None,
+    edges_color: str = 'red',
+    edges_width: float = 1.0,
+    figsize: Optional[tuple] = None,
+    ax: Optional[plt.Axes] = None,
+    xlabel: Optional[str] = "spatial 1",
+    ylabel: Optional[str] = "spatial 2",
+    show_ticks: bool = True,
+    alpha_img: float = 1.0,
+    show: bool = True,
+    **kwargs
+):
+    """
+    Plot H&E (Hematoxylin and Eosin) tissue image with spatial coordinates.
+    
+    This function displays only the background H&E image without cell overlays.
+    If xlim and/or ylim are specified, a rectangle will be drawn to highlight
+    the selected region.
+    
+    Parameters
+    ----------
+    adata : sc.AnnData
+        Annotated data object with spatial information.
+    library_id : str, optional
+        Sample/library ID. If None, will use the first available sample.
+    img_key : str, optional
+        Key for the image to use. Options: 'hires', 'lowres', or None (defaults to 'hires').
+    xlim : tuple, optional
+        Tuple of (x_min, x_max) to highlight a region. If specified, a rectangle
+        will be drawn on the image.
+    ylim : tuple, optional
+        Tuple of (y_min, y_max) to highlight a region. If specified, a rectangle
+        will be drawn on the image.
+    edges_color : str, default 'red'
+        Color of the rectangle edges when xlim/ylim are specified.
+    edges_width : float, default 1.0
+        Width of the rectangle edges when xlim/ylim are specified.
+    figsize : tuple, optional
+        Figure size (width, height) in inches. If None, defaults to (10, 10).
+    ax : matplotlib.axes.Axes, optional
+        Axes object to plot on. If None, a new figure will be created.
+    xlabel : str, default "spatial 1"
+        Label for the x-axis.
+    ylabel : str, default "spatial 2"
+        Label for the y-axis.
+    show_ticks : bool, default True
+        Whether to show axis ticks and labels.
+    alpha_img : float, default 1.0
+        Transparency of the image (0.0 to 1.0).
+    show : bool, default True
+        Whether to display the plot.
+    **kwargs
+        Additional keyword arguments passed to matplotlib's imshow.
+    
+    Returns
+    -------
+    matplotlib.axes.Axes
+        The axes object with the plot.
+    
+    Examples
+    --------
+    >>> import trackcell as tcl
+    >>> # Plot H&E image only
+    >>> tcl.pl.he(adata)
+    >>> 
+    >>> # Plot H&E image with highlighted region
+    >>> tcl.pl.he(
+    ...     adata,
+    ...     xlim=(54500, 56000),
+    ...     ylim=(15000, 16000),
+    ...     edges_color='red',
+    ...     edges_width=1
+    ... )
+    """
+    # Validate input
+    if "spatial" not in adata.obsm:
+        raise ValueError("`adata.obsm['spatial']` is required but missing.")
+    
+    # Get library_id
+    if library_id is None:
+        available_library_ids = list(adata.uns.get("spatial", {}).keys())
+        if len(available_library_ids) == 0:
+            raise ValueError("No library_id found in `adata.uns['spatial']`.")
+        library_id = available_library_ids[0]
+        if len(available_library_ids) > 1:
+            warnings.warn(
+                f"Multiple library_ids found: {available_library_ids}. "
+                f"Using '{library_id}'. Specify `library_id` explicitly to use a different one."
+            )
+    
+    if library_id not in adata.uns.get("spatial", {}):
+        raise ValueError(
+            f"`library_id` '{library_id}' not found in `adata.uns['spatial']`. "
+            f"Available library_ids: {list(adata.uns.get('spatial', {}).keys())}"
+        )
+    
+    spatial_info = adata.uns["spatial"][library_id]
+    
+    # Get background image
+    img, img_extent = _process_background_image(spatial_info, img_key, data_coords_range=None)
+    
+    if img is None or img_extent is None:
+        raise ValueError(
+            f"Could not load background image. "
+            f"Make sure the image is available in `adata.uns['spatial']['{library_id}']['images']`. "
+            f"Available image keys: {list(spatial_info.get('images', {}).keys())}"
+        )
+    
+    # Get spatial coordinates range from obsm['spatial']
+    spatial_coords = adata.obsm["spatial"]
+    if len(spatial_coords) == 0:
+        raise ValueError("`adata.obsm['spatial']` is empty.")
+    
+    # Calculate data coordinate range
+    x_min_data, y_min_data = spatial_coords.min(axis=0)
+    x_max_data, y_max_data = spatial_coords.max(axis=0)
+    
+    # Create figure if needed
+    if ax is None:
+        if figsize is None:
+            figsize = (10, 10)
+        fig, ax = plt.subplots(figsize=figsize)
+    else:
+        fig = ax.figure
+    
+    # Display the image
+    # img_extent format: [left, right, bottom, top]
+    ax.imshow(img, extent=img_extent, origin='upper', alpha=alpha_img, **kwargs)
+    
+    # Set axis limits based on image extent
+    # img_extent is [left, right, bottom, top] in data coordinates
+    ax.set_xlim(img_extent[0], img_extent[1])  # left to right
+    ax.set_ylim(img_extent[2], img_extent[3])  # bottom to top (will be inverted)
+    
+    # Draw rectangle if xlim and/or ylim are specified
+    if xlim is not None or ylim is not None:
+        # Get the full data range for default values
+        if xlim is None:
+            xlim = (x_min_data, x_max_data)
+        if ylim is None:
+            ylim = (y_min_data, y_max_data)
+        
+        x_min_box, x_max_box = xlim
+        y_min_box, y_max_box = ylim
+        
+        # Create rectangle
+        from matplotlib.patches import Rectangle
+        rect = Rectangle(
+            (x_min_box, y_min_box),
+            x_max_box - x_min_box,
+            y_max_box - y_min_box,
+            linewidth=edges_width,
+            edgecolor=edges_color,
+            facecolor='none'
+        )
+        ax.add_patch(rect)
+    
+    # Set axis labels
+    ax.set_xlabel(xlabel)
+    ax.set_ylabel(ylabel)
+    
+    # Show/hide ticks
+    if not show_ticks:
+        ax.set_xticks([])
+        ax.set_yticks([])
+    
+    # Invert y-axis to match spatial coordinates (origin at top)
+    ax.invert_yaxis()
+    
+    if show:
+        plt.show()
+    
+    return ax

@@ -185,10 +185,13 @@ sc.pl.spatial(adata, color='Cluster-2_dist', size=2,
 
 ## update
 ```shell
-git tag v0.2.0
-git push origin v0.2.0
+git tag v0.3.8
+git push origin v0.3.8
 
 # In GitHub, go to “Releases” → “Draft a new release”.
 ```
+
+
+
 
 
