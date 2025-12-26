@@ -515,6 +515,83 @@ def spatial_cell(
             )
             plot_column = color_key
         
+        # Validate and fix total_bounds after creating temp_gdf
+        # This is critical for subset data where geometries may not be properly synchronized
+        max_retries = 2
+        retry_count = 0
+        while retry_count <= max_retries:
+            try:
+                # Validate total_bounds
+                bounds = temp_gdf.total_bounds
+                if not all(np.isfinite(bounds)) or bounds[2] <= bounds[0] or bounds[3] <= bounds[1]:
+                    # Invalid bounds detected - filter out problematic geometries
+                    if retry_count == 0:
+                        warnings.warn(
+                            f"Invalid geometry bounds detected (bounds: {bounds}). "
+                            f"Filtering out problematic geometries. "
+                            f"Consider using tcl.io.sync_geometries_after_subset() after subsetting."
+                        )
+                    
+                    # Filter geometries with valid bounds
+                    valid_mask = pd.Series(True, index=temp_gdf.index)
+                    for idx in temp_gdf.index:
+                        try:
+                            geom = temp_gdf.loc[idx, 'geometry']
+                            if geom is None or pd.isna(geom):
+                                valid_mask.loc[idx] = False
+                                continue
+                            geom_bounds = geom.bounds
+                            if not all(np.isfinite(geom_bounds)) or geom_bounds[2] <= geom_bounds[0] or geom_bounds[3] <= geom_bounds[1]:
+                                valid_mask.loc[idx] = False
+                        except Exception:
+                            valid_mask.loc[idx] = False
+                    
+                    temp_gdf = temp_gdf[valid_mask]
+                    
+                    if len(temp_gdf) == 0:
+                        warnings.warn("No valid geometries remaining after filtering. Skipping plot.")
+                        axes_list.append(current_ax)
+                        break  # Exit the retry loop and continue to next color
+                    
+                    # Update valid_cells to match filtered temp_gdf
+                    valid_cells = temp_gdf.index.tolist()
+                    
+                    # Re-validate bounds
+                    bounds = temp_gdf.total_bounds
+                    if not all(np.isfinite(bounds)) or bounds[2] <= bounds[0] or bounds[3] <= bounds[1]:
+                        # Still invalid after filtering - will use aspect='equal' as fallback
+                        if retry_count == 0:
+                            warnings.warn(
+                                f"Still invalid bounds after filtering (bounds: {bounds}). "
+                                f"Will use aspect='equal' to avoid errors."
+                            )
+                        retry_count += 1
+                        continue
+                    else:
+                        # Bounds are now valid
+                        break
+                else:
+                    # Bounds are valid
+                    break
+            except Exception as e:
+                if retry_count == 0:
+                    warnings.warn(
+                        f"Error validating geometry bounds: {e}. "
+                        f"Will use aspect='equal' to avoid errors."
+                    )
+                retry_count += 1
+                continue
+        
+        # If we still have invalid bounds after retries, we'll set aspect='equal' later
+        use_equal_aspect = False
+        if retry_count > max_retries:
+            try:
+                bounds = temp_gdf.total_bounds
+                if not all(np.isfinite(bounds)) or bounds[2] <= bounds[0] or bounds[3] <= bounds[1]:
+                    use_equal_aspect = True
+            except Exception:
+                use_equal_aspect = True
+        
         # Determine if continuous or categorical immediately after creating temp_gdf
         # This allows all subsequent logic to use is_categorical directly
         is_categorical = False
@@ -610,8 +687,25 @@ def spatial_cell(
                     plot_kwargs['cmap'] = custom_cmap
                 # else: use default GeoPandas categorical plotting with column
                 
+                # Set aspect='equal' if bounds are invalid to avoid calculation errors
+                if use_equal_aspect:
+                    plot_kwargs['aspect'] = 'equal'
+                
                 # Plot using GeoDataFrame.plot() - uses column + categorical + cmap
-                temp_gdf.plot(**plot_kwargs)
+                # Use try-except to catch aspect calculation errors and retry with aspect='equal'
+                try:
+                    temp_gdf.plot(**plot_kwargs)
+                except ValueError as e:
+                    if "aspect must be finite and positive" in str(e):
+                        # Retry with explicit aspect='equal'
+                        plot_kwargs['aspect'] = 'equal'
+                        warnings.warn(
+                            f"Aspect calculation failed. Using aspect='equal' instead. "
+                            f"Consider using tcl.io.sync_geometries_after_subset() after subsetting."
+                        )
+                        temp_gdf.plot(**plot_kwargs)
+                    else:
+                        raise
                 
                 # Create legend manually from categories
                 if legend:
@@ -650,14 +744,54 @@ def spatial_cell(
                 if vmax is not None:
                     plot_kwargs['vmax'] = vmax
                 
+                # Set aspect='equal' if bounds are invalid to avoid calculation errors
+                if use_equal_aspect:
+                    plot_kwargs['aspect'] = 'equal'
+                
                 # Plot using GeoDataFrame.plot()
                 # GeoPandas will automatically create colorbar if legend=True
-                temp_gdf.plot(**plot_kwargs)
+                # Use try-except to catch aspect calculation errors and retry with aspect='equal'
+                try:
+                    temp_gdf.plot(**plot_kwargs)
+                except ValueError as e:
+                    if "aspect must be finite and positive" in str(e):
+                        # Retry with explicit aspect='equal'
+                        plot_kwargs['aspect'] = 'equal'
+                        warnings.warn(
+                            f"Aspect calculation failed. Using aspect='equal' instead. "
+                            f"Consider using tcl.io.sync_geometries_after_subset() after subsetting."
+                        )
+                        temp_gdf.plot(**plot_kwargs)
+                    else:
+                        raise
         else:
             # No coloring, just plot geometries
-            temp_gdf.plot(ax=current_ax, color='lightblue',
-                         edgecolor=edges_color, linewidth=edges_width,
-                         alpha=alpha, **kwargs)
+            # Set aspect='equal' if bounds are invalid to avoid calculation errors
+            plot_kwargs_no_color = {
+                'ax': current_ax,
+                'color': 'lightblue',
+                'edgecolor': edges_color,
+                'linewidth': edges_width,
+                'alpha': alpha,
+                **kwargs
+            }
+            if use_equal_aspect:
+                plot_kwargs_no_color['aspect'] = 'equal'
+            
+            # Use try-except to catch aspect calculation errors and retry with aspect='equal'
+            try:
+                temp_gdf.plot(**plot_kwargs_no_color)
+            except ValueError as e:
+                if "aspect must be finite and positive" in str(e):
+                    # Retry with explicit aspect='equal'
+                    plot_kwargs_no_color['aspect'] = 'equal'
+                    warnings.warn(
+                        f"Aspect calculation failed. Using aspect='equal' instead. "
+                        f"Consider using tcl.io.sync_geometries_after_subset() after subsetting."
+                    )
+                    temp_gdf.plot(**plot_kwargs_no_color)
+                else:
+                    raise
         
         # Set axis properties
         current_ax.set_aspect('equal')
@@ -704,181 +838,77 @@ def spatial_cell(
         return axes_list
 
 
-def he(
-    adata,
-    library_id: Optional[str] = None,
-    img_key: Optional[str] = None,
+def mark_region(
+    ax: plt.Axes,
     xlim: Optional[tuple] = None,
     ylim: Optional[tuple] = None,
     edges_color: str = 'red',
-    edges_width: float = 1.0,
-    figsize: Optional[tuple] = None,
-    ax: Optional[plt.Axes] = None,
-    xlabel: Optional[str] = "spatial 1",
-    ylabel: Optional[str] = "spatial 2",
-    show_ticks: bool = True,
-    alpha_img: float = 1.0,
-    show: bool = True,
-    **kwargs
+    edges_width: float = 1.0
 ):
     """
-    Plot H&E (Hematoxylin and Eosin) tissue image with spatial coordinates.
+    Mark a rectangular region on a spatial plot by drawing a rectangle.
     
-    This function displays only the background H&E image without cell overlays.
-    If xlim and/or ylim are specified, a rectangle will be drawn to highlight
-    the selected region.
+    This function draws a rectangle on the given axes to highlight a specific
+    spatial region. It can be used with any spatial plot.
     
     Parameters
     ----------
-    adata : sc.AnnData
-        Annotated data object with spatial information.
-    library_id : str, optional
-        Sample/library ID. If None, will use the first available sample.
-    img_key : str, optional
-        Key for the image to use. Options: 'hires', 'lowres', or None (defaults to 'hires').
+    ax : matplotlib.axes.Axes
+        Axes object to draw the rectangle on.
     xlim : tuple, optional
-        Tuple of (x_min, x_max) to highlight a region. If specified, a rectangle
-        will be drawn on the image.
+        Tuple of (x_min, x_max) to define the x-range of the region.
+        If None, uses the current x-axis limits.
     ylim : tuple, optional
-        Tuple of (y_min, y_max) to highlight a region. If specified, a rectangle
-        will be drawn on the image.
+        Tuple of (y_min, y_max) to define the y-range of the region.
+        If None, uses the current y-axis limits.
     edges_color : str, default 'red'
-        Color of the rectangle edges when xlim/ylim are specified.
+        Color of the rectangle edges.
     edges_width : float, default 1.0
-        Width of the rectangle edges when xlim/ylim are specified.
-    figsize : tuple, optional
-        Figure size (width, height) in inches. If None, defaults to (10, 10).
-    ax : matplotlib.axes.Axes, optional
-        Axes object to plot on. If None, a new figure will be created.
-    xlabel : str, default "spatial 1"
-        Label for the x-axis.
-    ylabel : str, default "spatial 2"
-        Label for the y-axis.
-    show_ticks : bool, default True
-        Whether to show axis ticks and labels.
-    alpha_img : float, default 1.0
-        Transparency of the image (0.0 to 1.0).
-    show : bool, default True
-        Whether to display the plot.
-    **kwargs
-        Additional keyword arguments passed to matplotlib's imshow.
+        Width of the rectangle edges.
     
     Returns
     -------
-    matplotlib.axes.Axes
-        The axes object with the plot.
+    matplotlib.patches.Rectangle
+        The rectangle patch object that was added to the axes.
     
     Examples
     --------
     >>> import trackcell as tcl
-    >>> # Plot H&E image only
-    >>> tcl.pl.he(adata)
+    >>> import matplotlib.pyplot as plt
     >>> 
-    >>> # Plot H&E image with highlighted region
-    >>> tcl.pl.he(
-    ...     adata,
-    ...     xlim=(54500, 56000),
-    ...     ylim=(15000, 16000),
-    ...     edges_color='red',
-    ...     edges_width=1
-    ... )
+    >>> # Plot with spatial_cell and mark a region
+    >>> fig, ax = plt.subplots(figsize=(10, 10))
+    >>> tcl.pl.spatial_cell(adata, color="CellType", ax=ax)
+    >>> tcl.pl.mark_region(ax, xlim=(54500, 56000), ylim=(15000, 16000))
+    >>> 
+    >>> # Mark a region on any plot
+    >>> fig, ax = plt.subplots(figsize=(10, 10))
+    >>> # ... create your plot on ax ...
+    >>> tcl.pl.mark_region(ax, xlim=(54500, 56000), ylim=(15000, 16000), 
+    ...                    edges_color='blue', edges_width=2.0)
     """
-    # Validate input
-    if "spatial" not in adata.obsm:
-        raise ValueError("`adata.obsm['spatial']` is required but missing.")
+    from matplotlib.patches import Rectangle
     
-    # Get library_id
-    if library_id is None:
-        available_library_ids = list(adata.uns.get("spatial", {}).keys())
-        if len(available_library_ids) == 0:
-            raise ValueError("No library_id found in `adata.uns['spatial']`.")
-        library_id = available_library_ids[0]
-        if len(available_library_ids) > 1:
-            warnings.warn(
-                f"Multiple library_ids found: {available_library_ids}. "
-                f"Using '{library_id}'. Specify `library_id` explicitly to use a different one."
-            )
+    # Get current axis limits if xlim/ylim are not provided
+    if xlim is None:
+        xlim = ax.get_xlim()
+    if ylim is None:
+        ylim = ax.get_ylim()
     
-    if library_id not in adata.uns.get("spatial", {}):
-        raise ValueError(
-            f"`library_id` '{library_id}' not found in `adata.uns['spatial']`. "
-            f"Available library_ids: {list(adata.uns.get('spatial', {}).keys())}"
-        )
+    x_min, x_max = xlim
+    y_min, y_max = ylim
     
-    spatial_info = adata.uns["spatial"][library_id]
+    # Create rectangle
+    rect = Rectangle(
+        (x_min, y_min),
+        x_max - x_min,
+        y_max - y_min,
+        linewidth=edges_width,
+        edgecolor=edges_color,
+        facecolor='none'
+    )
     
-    # Get background image
-    img, img_extent = _process_background_image(spatial_info, img_key, data_coords_range=None)
+    # Add rectangle to axes
+    ax.add_patch(rect)
     
-    if img is None or img_extent is None:
-        raise ValueError(
-            f"Could not load background image. "
-            f"Make sure the image is available in `adata.uns['spatial']['{library_id}']['images']`. "
-            f"Available image keys: {list(spatial_info.get('images', {}).keys())}"
-        )
-    
-    # Get spatial coordinates range from obsm['spatial']
-    spatial_coords = adata.obsm["spatial"]
-    if len(spatial_coords) == 0:
-        raise ValueError("`adata.obsm['spatial']` is empty.")
-    
-    # Calculate data coordinate range
-    x_min_data, y_min_data = spatial_coords.min(axis=0)
-    x_max_data, y_max_data = spatial_coords.max(axis=0)
-    
-    # Create figure if needed
-    if ax is None:
-        if figsize is None:
-            figsize = (10, 10)
-        fig, ax = plt.subplots(figsize=figsize)
-    else:
-        fig = ax.figure
-    
-    # Display the image
-    # img_extent format: [left, right, bottom, top]
-    ax.imshow(img, extent=img_extent, origin='upper', alpha=alpha_img, **kwargs)
-    
-    # Set axis limits based on image extent
-    # img_extent is [left, right, bottom, top] in data coordinates
-    ax.set_xlim(img_extent[0], img_extent[1])  # left to right
-    ax.set_ylim(img_extent[2], img_extent[3])  # bottom to top (will be inverted)
-    
-    # Draw rectangle if xlim and/or ylim are specified
-    if xlim is not None or ylim is not None:
-        # Get the full data range for default values
-        if xlim is None:
-            xlim = (x_min_data, x_max_data)
-        if ylim is None:
-            ylim = (y_min_data, y_max_data)
-        
-        x_min_box, x_max_box = xlim
-        y_min_box, y_max_box = ylim
-        
-        # Create rectangle
-        from matplotlib.patches import Rectangle
-        rect = Rectangle(
-            (x_min_box, y_min_box),
-            x_max_box - x_min_box,
-            y_max_box - y_min_box,
-            linewidth=edges_width,
-            edgecolor=edges_color,
-            facecolor='none'
-        )
-        ax.add_patch(rect)
-    
-    # Set axis labels
-    ax.set_xlabel(xlabel)
-    ax.set_ylabel(ylabel)
-    
-    # Show/hide ticks
-    if not show_ticks:
-        ax.set_xticks([])
-        ax.set_yticks([])
-    
-    # Invert y-axis to match spatial coordinates (origin at top)
-    ax.invert_yaxis()
-    
-    if show:
-        plt.show()
-    
-    return ax
+    return rect
