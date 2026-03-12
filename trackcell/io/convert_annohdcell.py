@@ -16,6 +16,8 @@ from scipy.sparse import csr_matrix, issparse
 from typing import Optional, Union
 from pathlib import Path
 import warnings
+from multiprocessing import Pool, cpu_count
+from functools import partial
 
 
 def bins_to_cell_polygon(bin_coords: np.ndarray, bin_size_um: float = 2.0,
@@ -65,6 +67,26 @@ def bins_to_cell_polygon(bin_coords: np.ndarray, bin_size_um: float = 2.0,
         polygon = polygon.buffer(buffer_pixels)
 
     return polygon
+
+
+def _create_polygon_for_cell(args):
+    """
+    Helper function for parallel polygon creation.
+
+    Parameters
+    ----------
+    args : tuple
+        (cell_id, bin_indices, spatial_coords, bin_size_um, microns_per_pixel)
+
+    Returns
+    -------
+    tuple
+        (cell_id, polygon)
+    """
+    cell_id, bin_indices, spatial_coords, bin_size_um, microns_per_pixel = args
+    bin_coords = spatial_coords[bin_indices]
+    polygon = bins_to_cell_polygon(bin_coords, bin_size_um, microns_per_pixel)
+    return cell_id, polygon
 
 
 def convert_annohdcell_to_trackcell(
@@ -320,7 +342,8 @@ def add_geometries_to_annohdcell_output(
     sample: Optional[str] = None,
     labels_key: str = "labels_joint",
     bin_size_um: float = 2.0,
-    buffer_polygons: bool = True
+    buffer_polygons: bool = True,
+    n_jobs: int = -1
 ) -> sc.AnnData:
     """
     Add polygon geometries to annohdcell's final cell h5ad using bin-level data.
@@ -345,6 +368,9 @@ def add_geometries_to_annohdcell_output(
         Size of each bin in micrometers
     buffer_polygons : bool, default True
         Whether to buffer polygons slightly to account for bin size
+    n_jobs : int, default -1
+        Number of parallel workers for polygon creation.
+        -1 uses all available CPU cores, 1 disables parallelization.
 
     Returns
     -------
@@ -425,41 +451,60 @@ def add_geometries_to_annohdcell_output(
 
     # Create polygon geometries for each cell
     print("Creating polygon geometries from bin coordinates...")
-    geometries = []
-    geometry_wkt = []
-    cell_ids_with_geom = []
+
+    # Build a mapping from cell_label to bin indices for vectorized processing
+    print("Building cell-to-bin mapping...")
+    cell_to_bins = {}
+    for bin_idx, label in enumerate(bin_labels):
+        if label not in cell_to_bins:
+            cell_to_bins[label] = []
+        cell_to_bins[label].append(bin_idx)
+
+    # Convert lists to numpy arrays for faster indexing
+    for label in cell_to_bins:
+        cell_to_bins[label] = np.array(cell_to_bins[label], dtype=np.int32)
+
+    # Prepare arguments for parallel processing
+    args_list = []
+    cell_label_to_obs_idx = {}  # Map cell label to obs index
 
     for idx, label in enumerate(cell_labels):
-        # Get bins for this cell
-        bin_mask = bin_labels == label
-        bin_coords = spatial_bin[bin_mask]
-
-        if len(bin_coords) == 0:
+        cell_label_to_obs_idx[label] = idx
+        if label not in cell_to_bins:
             warnings.warn(f"Cell {label} has no bins assigned, skipping geometry creation")
             continue
 
-        # Create polygon
-        try:
-            if buffer_polygons and microns_per_pixel is not None:
-                polygon = bins_to_cell_polygon(bin_coords, bin_size_um, microns_per_pixel)
-            else:
-                polygon = bins_to_cell_polygon(bin_coords, bin_size_um, None)
+        bin_indices = cell_to_bins[label]
+        mp = microns_per_pixel if buffer_polygons else None
+        args_list.append((label, bin_indices, spatial_bin, bin_size_um, mp))
 
-            geometries.append(polygon)
-            geometry_wkt.append(polygon.wkt)
-            cell_ids_with_geom.append(adata_cell.obs_names[idx])
+    print(f"Processing {len(args_list)} cells with bins...")
 
-        except Exception as e:
-            warnings.warn(f"Failed to create polygon for cell {label}: {e}")
-            # Create a point as fallback
-            if len(bin_coords) > 0:
-                centroid = bin_coords.mean(axis=0)
-                point = Polygon([(centroid[0], centroid[1])] * 3)  # Degenerate polygon
-                geometries.append(point)
-                geometry_wkt.append(point.wkt)
-                cell_ids_with_geom.append(adata_cell.obs_names[idx])
+    # Process in parallel or serial depending on n_jobs
+    if n_jobs == 1:
+        # Serial processing
+        results = []
+        for args in args_list:
+            results.append(_create_polygon_for_cell(args))
+    else:
+        # Parallel processing
+        actual_jobs = min(n_jobs if n_jobs > 0 else cpu_count(), len(args_list))
+        print(f"Using {actual_jobs} parallel workers")
+        with Pool(processes=actual_jobs) as pool:
+            results = pool.map(_create_polygon_for_cell, args_list)
 
-    print(f"Created {len(geometries)} polygon geometries")
+    print(f"Created {len(results)} polygon geometries")
+
+    # Unpack results - directly store Shapely objects, no WKT conversion
+    geometries = []
+    cell_ids_with_geom = []
+    geometry_wkt = []
+
+    for cell_label, polygon in results:
+        obs_idx = cell_label_to_obs_idx[cell_label]
+        cell_ids_with_geom.append(adata_cell.obs_names[obs_idx])
+        geometries.append(polygon)
+        geometry_wkt.append(polygon.wkt)  # Only convert to WKT for .obs storage
 
     # Add WKT strings to .obs
     # Initialize with None for all cells
@@ -468,7 +513,7 @@ def add_geometries_to_annohdcell_output(
     for cell_id, wkt_str in zip(cell_ids_with_geom, geometry_wkt):
         adata_cell.obs.loc[cell_id, "geometry"] = wkt_str
 
-    # Create GeoDataFrame for .uns
+    # Create GeoDataFrame directly from Shapely objects (no WKT round-trip)
     gdf = gpd.GeoDataFrame(
         geometry=geometries,
         index=cell_ids_with_geom
