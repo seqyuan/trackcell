@@ -550,7 +550,15 @@ def add_geometries_to_annohdcell_output(
     if output_h5ad_path is not None:
         output_h5ad_path = Path(output_h5ad_path)
         print(f"Saving to {output_h5ad_path}")
+        # Convert GeoDataFrame to regular DataFrame with WKT strings for h5ad serialization
+        gdf_backup = adata_cell.uns["spatial"][sample]["geometries"]
+        adata_cell.uns["spatial"][sample]["geometries"] = pd.DataFrame(
+            {"geometry": gdf_backup.geometry.apply(lambda g: g.wkt)},
+            index=gdf_backup.index
+        )
         adata_cell.write_h5ad(output_h5ad_path)
+        # Restore GeoDataFrame in memory
+        adata_cell.uns["spatial"][sample]["geometries"] = gdf_backup
 
     print("Geometry addition complete!")
     print(f"Output: {adata_cell.n_obs} cells × {adata_cell.n_vars} genes with geometries")
