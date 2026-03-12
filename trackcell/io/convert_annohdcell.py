@@ -564,3 +564,65 @@ def add_geometries_to_annohdcell_output(
     print(f"Output: {adata_cell.n_obs} cells × {adata_cell.n_vars} genes with geometries")
 
     return adata_cell
+
+
+def restore_geometries(adata: sc.AnnData, sample: Optional[str] = None) -> sc.AnnData:
+    """
+    Restore GeoDataFrame from WKT strings after reading h5ad file.
+
+    When h5ad files are saved with geometries, the GeoDataFrame is converted to
+    a regular DataFrame with WKT strings for serialization. This function converts
+    them back to a GeoDataFrame for spatial visualization.
+
+    Parameters
+    ----------
+    adata : sc.AnnData
+        AnnData object read from h5ad file
+    sample : str, optional
+        Sample name in adata.uns["spatial"]. If None, processes all samples.
+
+    Returns
+    -------
+    sc.AnnData
+        AnnData object with GeoDataFrame restored in uns["spatial"][sample]["geometries"]
+
+    Examples
+    --------
+    >>> import scanpy as sc
+    >>> import trackcell as tcl
+    >>> adata = sc.read_h5ad("cell_with_geom.h5ad")
+    >>> adata = tcl.io.restore_geometries(adata)
+    >>> # Now adata.uns["spatial"][sample]["geometries"] is a GeoDataFrame
+    """
+    if "spatial" not in adata.uns:
+        warnings.warn("No spatial data found in adata.uns")
+        return adata
+
+    samples = [sample] if sample is not None else list(adata.uns["spatial"].keys())
+
+    for s in samples:
+        if s not in adata.uns["spatial"]:
+            warnings.warn(f"Sample '{s}' not found in adata.uns['spatial']")
+            continue
+
+        if "geometries" not in adata.uns["spatial"][s]:
+            continue
+
+        geom_data = adata.uns["spatial"][s]["geometries"]
+
+        # Check if it's already a GeoDataFrame
+        if isinstance(geom_data, gpd.GeoDataFrame):
+            continue
+
+        # Convert DataFrame with WKT strings to GeoDataFrame
+        if isinstance(geom_data, pd.DataFrame) and "geometry" in geom_data.columns:
+            geometries = geom_data["geometry"].apply(wkt.loads)
+            gdf = gpd.GeoDataFrame(
+                geometry=geometries,
+                index=geom_data.index
+            )
+            adata.uns["spatial"][s]["geometries"] = gdf
+            print(f"Restored {len(gdf)} geometries for sample '{s}'")
+
+    return adata
+

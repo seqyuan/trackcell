@@ -269,3 +269,46 @@ import trackcell.tl as tctl
 - [annohdcell documentation](https://github.com/seqyuan/annohdcell)
 - [Example script - Method 1](../examples/convert_annohdcell_example.py)
 - [Example script - Method 2](../examples/add_geometries_to_annohdcell_example.py)
+
+---
+
+## Reading H5AD Files with Geometries
+
+When you save an h5ad file with geometries using the methods above, the GeoDataFrame is converted to WKT strings for serialization. After reading the h5ad file back, you need to restore the GeoDataFrame for spatial visualization.
+
+### Usage
+
+```python
+import scanpy as sc
+import trackcell.io as tcio
+
+# Read h5ad file
+adata = sc.read_h5ad("b2c_cell_with_geom.h5ad")
+
+# Restore GeoDataFrame from WKT strings
+adata = tcio.restore_geometries(adata)
+
+# Now you can visualize
+import trackcell.pl as tcpl
+tcpl.spatial_cell(adata, sample="sample1")
+```
+
+### What This Does
+
+- Converts WKT strings in `uns["spatial"][sample]["geometries"]` back to a GeoDataFrame
+- Processes all samples by default, or specify `sample="sample1"` for a specific sample
+- Required for spatial visualization after reading h5ad files
+
+### Example
+
+```python
+# After reading
+adata = sc.read_h5ad("cell_with_geom.h5ad")
+print(type(adata.uns["spatial"]["sample1"]["geometries"]))
+# Output: <class 'pandas.core.frame.DataFrame'>
+
+# After restoring
+adata = tcio.restore_geometries(adata, sample="sample1")
+print(type(adata.uns["spatial"]["sample1"]["geometries"]))
+# Output: <class 'geopandas.geodataframe.GeoDataFrame'>
+```
