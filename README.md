@@ -151,6 +151,53 @@ sq.pl.spatial_scatter(
 )
 ```
 
+### Converting annohdcell Output to TrackCell Format
+
+TrackCell provides two methods to convert annohdcell's bin2cell output into trackcell-compatible format with polygon geometries for spatial visualization.
+
+#### Method 1: Convert from 2μm Bin H5AD Only
+
+Create a new cell-level h5ad from annohdcell's 2μm bin h5ad with cell labels:
+
+```python
+import trackcell as tcl
+
+# Convert annohdcell 2μm bin h5ad to trackcell format
+adata = tcl.io.convert_annohdcell_to_trackcell(
+    bin_h5ad_path="b2c_2um.h5ad",
+    output_h5ad_path="trackcell_format.h5ad",
+    sample="sample1"
+)
+
+# Now visualize with trackcell
+tcl.pl.spatial_cell(adata, sample="sample1")
+```
+
+#### Method 2: Add Geometries to Existing Cell H5AD
+
+Add polygon geometries to annohdcell's final cell h5ad output (preserves exact count aggregation):
+
+```python
+import trackcell as tcl
+
+# Add geometries to annohdcell's final cell h5ad
+adata = tcl.io.add_geometries_to_annohdcell_output(
+    bin_h5ad_path="b2c_2um.h5ad",      # 2μm bin h5ad with cell labels
+    cell_h5ad_path="b2c_cell.h5ad",    # Final cell h5ad from annohdcell
+    output_h5ad_path="b2c_cell_with_geom.h5ad",
+    sample="sample1"
+)
+
+# Now visualize with trackcell
+tcl.pl.spatial_cell(adata, sample="sample1")
+```
+
+**Key differences:**
+- **Method 1**: Quick conversion, simple count summation
+- **Method 2**: Preserves annohdcell's exact count aggregation and all metadata
+
+For detailed documentation, see [docs/convert_annohdcell.md](docs/convert_annohdcell.md)
+
 ### Computing Distances to a Label (10x HD)
 
 ```python
@@ -171,7 +218,7 @@ dist_df = tcl.tl.hd_labeldist(adata, groupby="group_col", label="Neuron", inplac
 tcl.pl.spatial_cell(adata, color='Cluster-2_dist', cmap='Reds', figsize=(10, 10))
 
 # Or using traditional point-based visualization
-sc.pl.spatial(adata, color='Cluster-2_dist', size=2, 
+sc.pl.spatial(adata, color='Cluster-2_dist', size=2,
               legend_fontsize=12, spot_size=10, frameon=True
              )
 ```
