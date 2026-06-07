@@ -63,3 +63,25 @@ ensuring compatibility with both SpaceRanger output and bin2cell-processed data.
 * **bin2cell processed data**: When ``hires_scale`` is close to 1.0, correctly identifies as full-res coordinates
 * **Edge cases**: When between 0.9-0.99, uses size comparison to determine
 
+
+Multi-Gene Color Blending
+==========================
+
+TrackCell can compute blended colors for multi-gene co-expression visualization.
+See the full documentation in :doc:`visualization`.
+
+.. code-block:: python
+
+   import trackcell as tcl
+
+   # Blend mode: single composite image
+   tcl.tl.multigene_blend(adata, genes=['EPCAM', 'PECAM1', 'VWF'], mode='blend')
+   tcl.pl.spatial_cell(adata, color='multigene_blend')
+
+   # Facet mode: subplots per gene
+   tcl.tl.multigene_blend(
+       adata,
+       genes=['EPCAM', 'PECAM1', 'VWF', 'ACTA2'],
+       mode='facet', ncols=2,
+   )
+

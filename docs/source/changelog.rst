@@ -1,6 +1,30 @@
 Changelog
 =========
 
+Version 0.3.18
+--------------
+
+* **Added ``read_xenium_cellseg`` function**:
+  * Reads 10x Xenium Analyzer output (cell_feature_matrix.h5, cells.parquet, cell_boundaries.parquet)
+  * Automatically transposes CSC (genes × cells) to CSR (cells × genes)
+  * Converts long-table boundary parquet to Shapely polygons + compact vertex arrays in a single pass
+  * Reads optional ``nucleus_boundaries.parquet``, ``experiment.xenium``, and ``gene_panel.json``
+  * Stores GeoDataFrame geometries (compatible with ``spatial_cell()``) and WKT strings for serialization
+  * Squidpy-compatible ``uns['spatial']`` structure
+
+* **Dual-color visualization in ``spatial_cell``**:
+  * Added ``edge_color`` parameter to color cell boundaries by a categorical column
+  * Added ``edge_palette`` parameter for custom edge color mapping
+  * Fill (``color``) + Edge (``edge_color``) two-pass rendering for rich spatial views
+  * Automatic dual legend: colorbar for fill, categorical legend for edges
+
+* **Multi-gene visualization**:
+  * ``tl.multigene_blend()`` with two modes:
+    * ``mode='blend'``: Weighted RGB blending, cell2location-style composite
+    * ``mode='facet'``: Faceted subplots with single-hue colormaps per gene
+  * Raw hex color auto-detection in ``spatial_cell`` for blend mode output
+  * Supports up to 7 genes with customizable colors, percentile clipping, and gamma
+
 Version 0.2.8
 -------------
 

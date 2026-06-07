@@ -1,6 +1,7 @@
 # TrackCell
 
-A Python package for processing and vis single-cell and spatial transcriptomics data.
+A Python package for processing and visualizing single-cell and spatial transcriptomics data.
+Supports 10x Visium HD (SpaceRanger) and 10x Xenium Analyzer outputs.
 
 ## Installation
 
@@ -68,6 +69,51 @@ tcl.pl.spatial_cell(adata_subset, color="classification")
 
 **Why this is necessary**: When you subset an AnnData object, `adata.obs` and `adata.obsm` are automatically subset, but `adata.uns["spatial"][sample]["geometries"]` (GeoDataFrame) is not. Without synchronization, plotting may fail with errors like `ValueError: aspect must be finite and positive`.
 
+#### Reading Xenium Output
+
+```python
+import trackcell as tcl
+
+# Read Xenium Analyzer cell segmentation output
+adata = tcl.io.read_xenium_cellseg(
+    datapath="/path/to/xenium/output",
+    sample="sample1"
+)
+
+# The resulting AnnData object contains:
+# - Expression matrix in .X (CSR, cells × genes)
+# - Cell metadata in .obs (centroids, area, counts, segmentation_method, etc.)
+# - Gene metadata in .var (gene_ids, feature_types)
+# - Spatial coordinates in .obsm["spatial"]
+# - Cell polygons in .uns["spatial"][sample]["geometries"] (GeoDataFrame)
+# - Cell boundary arrays in .uns["cell_boundaries"] (compact vertex arrays)
+# - Nucleus boundary arrays in .uns["nucleus_boundaries"] (if available)
+# - WKT geometry strings in .obs["geometry"] (for serialization)
+# - Experiment metadata in .uns["experiment"]
+```
+
+The function reads Xenium Analyzer output files:
+| File | Format | Content |
+|------|--------|---------|
+| `cell_feature_matrix.h5` | HDF5 (10x) | Expression matrix (genes × cells CSC) |
+| `cells.parquet` | Parquet | Cell metadata (centroids, area, counts) |
+| `cell_boundaries.parquet` | Parquet long-table | Cell boundary vertices |
+| `nucleus_boundaries.parquet` | Parquet long-table | Nucleus boundary vertices (optional) |
+| `experiment.xenium` | JSON | Experiment metadata |
+| `gene_panel.json` | JSON | Gene panel information |
+
+**Key differences from Visium HD**:
+- Cell boundaries are stored in **long-table parquet** format (one row per vertex), automatically converted to Shapely polygons
+- Expression matrix is in **CSC (genes × cells)** format, automatically transposed to CSR (cells × genes)
+- Cell IDs already include the `-1` suffix (no stripping needed)
+
+After loading, the AnnData object is fully compatible with `tcl.pl.spatial_cell()`:
+
+```python
+# Visualize Xenium data with cell polygons
+tcl.pl.spatial_cell(adata, color="EPCAM", cmap="Reds", edges_width=0.3)
+```
+
 #### Reading Bin-Level Data (2um/8um/16um)
 
 ```python
@@ -123,6 +169,40 @@ tcl.pl.spatial_cell(
     color="Cluster-2_dist",  # Distance to Cluster-2
     cmap="Reds",
     figsize=(10, 10)
+)
+```
+
+##### Dual-Color Visualization (Fill + Edge)
+
+Use `edge_color` to color cell boundaries by a categorical column (e.g., cell type),
+while `color` controls the fill (gene expression or continuous value):
+
+```python
+# Fill = gene expression, Edge = cell type
+tcl.pl.spatial_cell(
+    adata,
+    color='EPCAM',              # Fill: gene expression (continuous)
+    cmap='Reds',
+    edge_color='cell_type',     # Edge: cell type (categorical)
+    edge_palette={
+        'T cell': '#e41a1c',
+        'B cell': '#377eb8',
+        'Myeloid': '#4daf4a',
+    },
+    edges_width=1.2,
+    alpha=0.7,
+)
+```
+
+```python
+# Fill = continuous obs, Edge = categorical obs
+tcl.pl.spatial_cell(
+    adata,
+    color='total_counts',       # Fill: UMIs per cell
+    cmap='YlOrRd',
+    edge_color='cell_type',     # Edge: cell type
+    edges_width=1.5,
+    alpha=0.7,
 )
 ```
 
@@ -221,6 +301,52 @@ tcl.pl.spatial_cell(adata, color='Cluster-2_dist', cmap='Reds', figsize=(10, 10)
 sc.pl.spatial(adata, color='Cluster-2_dist', size=2,
               legend_fontsize=12, spot_size=10, frameon=True
              )
+```
+
+### Multi-Gene Visualization (cell2location-style)
+
+Visualize co-expression of multiple genes in two modes:
+
+#### Mode 1: Blended Composite (`mode='blend'`)
+
+Maps each gene to a base color, blends by expression level → single hex color per cell.
+Use with `spatial_cell` for a composite view:
+
+```python
+# Compute blended colors
+adata = tcl.tl.multigene_blend(
+    adata,
+    genes=['EPCAM', 'PECAM1', 'VWF'],
+    mode='blend',
+)
+
+# Visualize with cell polygons
+tcl.pl.spatial_cell(adata, color='multigene_blend')
+```
+
+```python
+# Custom colors + gamma correction
+tcl.tl.multigene_blend(
+    adata,
+    genes=['EPCAM', 'PECAM1', 'VWF', 'ACTA2', 'PTPRC'],
+    colors=['#e41a1c', '#377eb8', '#4daf4a', '#ff7f00', '#984ea3'],
+    vmax_percentile=98, gamma=0.8,
+)
+```
+
+#### Mode 2: Faceted Subplots (`mode='facet'`)
+
+Each gene gets its own panel with a single-hue colormap (white → gene color),
+matching the cell2location paper style:
+
+```python
+tcl.tl.multigene_blend(
+    adata,
+    genes=['EPCAM', 'PECAM1', 'VWF', 'ACTA2'],
+    mode='facet',
+    ncols=2,           # 2 columns of subplots
+    edges_width=0.3,
+)
 ```
 
 ## Development

@@ -3,8 +3,64 @@ Reading SpaceRanger Output
 
 This section covers how to read spatial transcriptomics data from SpaceRanger output.
 
-Reading Cell Segmentation Data
--------------------------------
+Reading Xenium Output
+---------------------
+
+TrackCell can read 10x Xenium Analyzer cell segmentation output.
+
+Required Directory Structure
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The function expects the Xenium output directory to have the following structure:
+
+::
+
+   output-XETG00070__0085811__yuanfa__20260529__052421/
+   ├── cell_feature_matrix.h5      # Expression matrix (10x HDF5, CSC format)
+   ├── cells.parquet               # Cell metadata (centroids, area, counts)
+   ├── cell_boundaries.parquet     # Cell boundary vertices (long-table)
+   ├── nucleus_boundaries.parquet  # Nucleus boundary vertices (optional)
+   ├── experiment.xenium           # Experiment metadata (JSON)
+   └── gene_panel.json             # Gene panel information (JSON)
+
+**Key format differences from Visium HD**:
+
+* **Cell boundaries**: Stored as long-table parquet (one row per vertex) instead of GeoJSON.
+  Automatically converted to Shapely polygons.
+* **Expression matrix**: CSC (genes × cells) format, automatically transposed to CSR (cells × genes).
+* **Cell IDs**: Include the ``-1`` suffix natively (no stripping needed).
+
+Usage
+~~~~~
+
+.. code-block:: python
+
+   import trackcell as tcl
+
+   # Read Xenium Analyzer output
+   adata = tcl.io.read_xenium_cellseg(
+       datapath="/path/to/xenium/output",
+       sample="sample1"
+   )
+
+The resulting AnnData object contains:
+
+* Expression matrix in ``.X`` (CSR, cells × genes)
+* Cell metadata in ``.obs`` (centroids, area, counts, segmentation_method, etc.)
+* Gene metadata in ``.var`` (gene_ids, feature_types)
+* Spatial coordinates in ``.obsm["spatial"]``
+* Cell polygons in ``.uns["spatial"][sample]["geometries"]`` (GeoDataFrame)
+* Cell boundary arrays in ``.uns["cell_boundaries"]`` (compact vertex arrays)
+* Nucleus boundary arrays in ``.uns["nucleus_boundaries"]`` (if available)
+* WKT geometry strings in ``.obs["geometry"]`` (for serialization)
+* Experiment metadata in ``.uns["experiment"]``
+
+After loading, the AnnData is fully compatible with ``tcl.pl.spatial_cell()`` for
+cell polygon visualization.
+
+
+Reading Cell Segmentation Data (Visium HD)
+-------------------------------------------
 
 TrackCell can read 10X HD SpaceRanger cell segmentation output.
 

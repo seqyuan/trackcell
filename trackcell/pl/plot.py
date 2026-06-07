@@ -72,6 +72,142 @@ def _process_background_image(spatial_info, img_key, data_coords_range=None):
     return img, img_extent
 
 
+def _draw_categorical_edges(
+    ax: plt.Axes,
+    temp_gdf: gpd.GeoDataFrame,
+    adata,
+    valid_cells: list,
+    edge_color_col: str,
+    edge_palette: Optional[Union[dict, list, np.ndarray]] = None,
+    linewidth: float = 0.5,
+    alpha: float = 0.8,
+    legend: bool = True,
+):
+    """Draw categorical cell boundaries on top of filled polygons."""
+    from matplotlib.patches import Patch
+    
+    if len(valid_cells) == 0:
+        return
+    
+    # Get edge category data
+    edge_vals = adata.obs.loc[valid_cells, edge_color_col]
+    temp_gdf['_edge_cat'] = edge_vals.values
+    
+    # Determine categories and colors
+    if pd.api.types.is_categorical_dtype(edge_vals):
+        edge_categories = edge_vals.cat.categories.tolist()
+    else:
+        edge_categories = sorted(edge_vals.dropna().unique())
+    
+    n_cats = len(edge_categories)
+    if n_cats == 0:
+        return
+    
+    # Build edge color map
+    if edge_palette is not None:
+        if isinstance(edge_palette, dict):
+            edge_colors = [edge_palette.get(cat, 'gray') for cat in edge_categories]
+        elif isinstance(edge_palette, (list, np.ndarray)):
+            pa = np.asarray(edge_palette)
+            edge_colors = [pa[i % len(pa)] for i in range(n_cats)]
+        else:
+            raise ValueError(f"Unsupported edge_palette type: {type(edge_palette)}")
+    else:
+        default_cmap = plt.get_cmap('tab10' if n_cats <= 10 else 'tab20')
+        edge_colors = [default_cmap(i / n_cats) for i in range(n_cats)]
+    
+    # Draw edges per category
+    for cat, cat_color in zip(edge_categories, edge_colors):
+        mask = adata.obs.loc[valid_cells, edge_color_col] == cat
+        cat_cells = [cid for cid, m in zip(valid_cells, mask) if m]
+        if not cat_cells:
+            continue
+        cat_gdf = temp_gdf.loc[temp_gdf.index.isin(cat_cells)]
+        if len(cat_gdf) == 0:
+            continue
+        try:
+            cat_gdf.boundary.plot(
+                ax=ax, color=cat_color, linewidth=linewidth, alpha=alpha
+            )
+        except Exception:
+            pass
+    
+    # Edge legend
+    if legend and n_cats <= 30:
+        legend_elements = [
+            Patch(facecolor='none', edgecolor=ec, linewidth=linewidth * 2,
+                  label=str(cat))
+            for cat, ec in zip(edge_categories, edge_colors)
+        ]
+        # Place edge legend at bottom of plot
+        ax.legend(
+            handles=legend_elements,
+            title=edge_color_col,
+            bbox_to_anchor=(0.5, -0.12),
+            loc='upper center',
+            ncol=min(n_cats, 8),
+            frameon=True,
+            fontsize='small',
+        )
+    
+    # Clean up temp column
+    if '_edge_cat' in temp_gdf.columns:
+        del temp_gdf['_edge_cat']
+
+
+def _is_hex_color_series(series: pd.Series) -> bool:
+    """Detect if a Series contains raw hex color strings (e.g., from multigene_blend)."""
+    non_null = series.dropna()
+    if len(non_null) == 0:
+        return False
+    sample = non_null.iloc[:100] if len(non_null) > 100 else non_null
+    try:
+        return all(
+            isinstance(v, str) and v.startswith('#') and len(v) == 7
+            for v in sample
+        )
+    except Exception:
+        return False
+
+
+def _plot_raw_hex_colors(
+    ax: plt.Axes,
+    temp_gdf: gpd.GeoDataFrame,
+    plot_column: str,
+    edgecolor: str = 'none',
+    linewidth: float = 0,
+    alpha: float = 1.0,
+    use_equal_aspect: bool = False,
+):
+    """Plot polygons with per-cell raw hex colors (from multigene_blend)."""
+    grouped = temp_gdf.groupby(plot_column, sort=False)
+    n_groups = len(grouped)
+    
+    for hex_color, group in grouped:
+        if not isinstance(hex_color, str) or not hex_color.startswith('#'):
+            continue
+        plot_kw = {
+            'ax': ax,
+            'color': hex_color,
+            'edgecolor': edgecolor,
+            'linewidth': linewidth,
+            'alpha': alpha,
+        }
+        if use_equal_aspect:
+            plot_kw['aspect'] = 'equal'
+        try:
+            group.plot(**plot_kw)
+        except ValueError as e:
+            if 'aspect must be finite and positive' in str(e) and not use_equal_aspect:
+                plot_kw['aspect'] = 'equal'
+                try:
+                    group.plot(**plot_kw)
+                except Exception:
+                    pass
+            else:
+                pass
+
+
 def spatial_cell(
     adata,
     color: Optional[Union[str, List[str]]] = None,
@@ -88,6 +224,8 @@ def spatial_cell(
     basis: str = "spatial",
     edges_width: float = 0.5,
     edges_color: str = "black",
+    edge_color: Optional[str] = None,
+    edge_palette: Optional[Union[dict, list, np.ndarray]] = None,
     alpha: float = 0.8,
     alpha_img: float = 0.5,
     show: bool = True,
@@ -153,7 +291,14 @@ def spatial_cell(
     edges_width : float, default 0.5
         Width of cell polygon edges.
     edges_color : str, default "black"
-        Color of cell polygon edges.
+        Color of cell polygon edges (when `edge_color` is not specified).
+    edge_color : str, optional
+        Column name in ``adata.obs`` for categorical coloring of cell edges.
+        When specified, cell edges are colored by category (e.g., cell type),
+        while ``color`` controls the fill (typically gene expression).
+        Overrides ``edges_color`` when set.
+    edge_palette : dict, list, or array, optional
+        Color palette for ``edge_color`` categories. Same format as ``palette``.
     alpha : float, default 0.8
         Transparency of cell polygons.
     alpha_img : float, default 0.5
@@ -637,6 +782,10 @@ def spatial_cell(
         if color_key is not None:
             # plot_column is guaranteed to be color_key at this point (already validated)
             is_categorical = not pd.api.types.is_numeric_dtype(temp_gdf[plot_column])
+            # Detect raw hex color mode (from multigene_blend etc.)
+            raw_color = _is_hex_color_series(temp_gdf[plot_column])
+        else:
+            raw_color = False
         
         # Process categorical data (palette, categories, etc.)
         if color_key is not None and is_categorical:
@@ -688,6 +837,12 @@ def spatial_cell(
                 # GeoPandas will automatically use cat.categories for color assignment
                 
         # Prepare plot arguments for GeoDataFrame.plot()
+        # ── Dual-color mode: edge_color as a column name for categorical edge coloring ──
+        dual_color = (edge_color is not None and edge_color in adata.obs.columns)
+        if dual_color and color_key is not None:
+            edges_draw = edges_color  # kept as fallback name
+            edges_color = 'none'      # fill pass draws no edges
+        
         plot_kwargs = {
             'ax': current_ax,
             'edgecolor': edges_color,
@@ -700,7 +855,20 @@ def spatial_cell(
             # plot_column is guaranteed to be color_key at this point (already validated)
             plot_kwargs['column'] = plot_column
             
-            if is_categorical:
+            if raw_color:
+                # ── Raw hex color mode (multi-gene blend) ──
+                # Group by unique hex colors and plot each group
+                _plot_raw_hex_colors(
+                    ax=current_ax,
+                    temp_gdf=temp_gdf,
+                    plot_column=plot_column,
+                    edgecolor=plot_kwargs.get('edgecolor', 'none'),
+                    linewidth=plot_kwargs.get('linewidth', 0),
+                    alpha=plot_kwargs.get('alpha', 1.0),
+                    use_equal_aspect=use_equal_aspect,
+                )
+                
+            elif is_categorical:
                 # Categorical values
                 plot_kwargs['legend'] = False  # Disable automatic legend, we'll add it manually
                 
@@ -802,6 +970,20 @@ def spatial_cell(
             # No coloring - only show HE image (background image), no cell polygons
             # This is useful for viewing just the tissue image with coordinates
             pass  # Skip geometry plotting, only background image will be shown
+        
+        # ── Dual-color edge pass: draw categorical cell boundaries on top of fill ──
+        if dual_color and color_key is not None:
+            _draw_categorical_edges(
+                ax=current_ax,
+                temp_gdf=temp_gdf,
+                adata=adata,
+                valid_cells=valid_cells,
+                edge_color_col=edge_color,
+                edge_palette=edge_palette,
+                linewidth=edges_width,
+                alpha=alpha,
+                legend=legend,
+            )
         
         # Set axis properties
         current_ax.set_aspect('equal')
