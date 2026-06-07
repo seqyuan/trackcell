@@ -6,6 +6,304 @@ import numpy as np
 import pandas as pd
 from scipy.spatial import cKDTree
 from scipy.spatial.distance import cdist
+from typing import Optional, Union, List
+import warnings
+
+
+# Perceptually distinct colors for up to 7 genes (ColorBrewer-inspired)
+DEFAULT_GENE_COLORS = [
+    '#e41a1c',  # Red
+    '#377eb8',  # Blue
+    '#4daf4a',  # Green
+    '#ff7f00',  # Orange
+    '#984ea3',  # Purple
+    '#a65628',  # Brown
+    '#f781bf',  # Pink
+]
+
+
+def _hex_to_rgb(hex_color: str) -> tuple:
+    """Convert hex color string to (R, G, B) tuple in [0, 1]."""
+    h = hex_color.lstrip('#')
+    return tuple(int(h[i:i+2], 16) / 255.0 for i in (0, 2, 4))
+
+
+def _rgb_to_hex(r: float, g: float, b: float) -> str:
+    """Convert (R, G, B) in [0, 1] to hex string."""
+    def clamp(v):
+        return max(0, min(255, int(round(v * 255))))
+    return f'#{clamp(r):02x}{clamp(g):02x}{clamp(b):02x}'
+
+
+def _multigene_facet(
+    adata,
+    genes: List[str],
+    colors: List[str],
+    layer: Optional[str] = None,
+    vmin_percentile: float = 1.0,
+    vmax_percentile: float = 99.0,
+    ncols: int = 3,
+    figsize: Optional[tuple] = None,
+    edges_width: float = 0.3,
+    edges_color: str = '#cccccc30',
+    alpha: float = 0.8,
+    show: bool = True,
+    ax=None,
+    library_id: Optional[str] = None,
+):
+    """Faceted multi-gene subplots, one gene per panel with single-hue colormap."""
+    import matplotlib.pyplot as plt
+    from matplotlib.colors import LinearSegmentedColormap
+    
+    n_genes = len(genes)
+    nrows = int(np.ceil(n_genes / ncols))
+    
+    if figsize is None:
+        figsize = (5 * ncols, 5 * nrows)
+    
+    if ax is None:
+        fig, axes = plt.subplots(nrows, ncols, figsize=figsize, squeeze=False)
+    else:
+        axes = np.atleast_2d(np.asarray(ax))
+        fig = axes.flat[0].figure
+    
+    axes_flat = axes.flatten()
+    
+    # Temporarily suppress auto-show in spatial_cell
+    for i, (gene, color) in enumerate(zip(genes, colors)):
+        ax_i = axes_flat[i]
+        # Single-hue colormap: white → gene color
+        gene_cmap = LinearSegmentedColormap.from_list(
+            f'_{gene}', ['#fafafa', color]
+        )
+        
+        # Call spatial_cell with gene expression
+        from trackcell.pl.plot import spatial_cell
+        spatial_cell(
+            adata,
+            color=gene,
+            cmap=gene_cmap,
+            ax=ax_i,
+            show=False,
+            legend=True,
+            edges_width=edges_width,
+            edges_color=edges_color,
+            alpha=alpha,
+            library_id=library_id,
+        )
+        ax_i.set_title(gene, fontsize=12, fontweight='bold')
+    
+    # Hide unused axes
+    for j in range(n_genes, len(axes_flat)):
+        axes_flat[j].set_visible(False)
+    
+    fig.tight_layout(rect=[0, 0, 1, 1])
+    
+    if show:
+        plt.show()
+    
+    return axes
+
+
+def multigene_blend(
+    adata,
+    genes: List[str],
+    mode: str = 'blend',
+    colors: Optional[List[str]] = None,
+    layer: Optional[str] = None,
+    vmin_percentile: float = 1.0,
+    vmax_percentile: float = 99.0,
+    gamma: float = 1.0,
+    background: str = '#e0e0e0',
+    key_added: str = 'multigene_blend',
+    # Facet-specific
+    ncols: int = 3,
+    figsize: Optional[tuple] = None,
+    edges_width: float = 0.3,
+    edges_color: str = '#cccccc30',
+    alpha_facet: float = 0.8,
+    show: bool = True,
+    ax=None,
+    library_id: Optional[str] = None,
+    inplace: bool = True,
+):
+    """
+    Multi-gene co-expression visualization with two modes.
+    
+    **Mode 'blend'** (default): Computes blended hex colors by weighted RGB averaging
+    of per-gene base colors. The result is a hex color per cell stored in
+    ``adata.obs[key_added]``, usable with ``spatial_cell(color=key_added)``.
+    
+    **Mode 'facet'**: Draws faceted subplots, one gene per panel, each using
+    a single-hue colormap (white → gene color). Returns matplotlib axes.
+    
+    Parameters
+    ----------
+    adata : AnnData
+        Annotated data with gene expression.
+    genes : list of str
+        Gene names. Up to 7 recommended for blend mode.
+    mode : str
+        'blend' (default) or 'facet'.
+    colors : list of str, optional
+        Base colors for each gene (hex). Default: perceptually distinct palette.
+    layer : str, optional
+        Use adata.layers[layer] instead of adata.X.
+    vmin_percentile : float
+        Lower percentile for clipping (blend & facet, default 1).
+    vmax_percentile : float
+        Upper percentile for clipping (blend & facet, default 99).
+    gamma : float
+        Gamma correction for blend mode (>1 darkens, <1 brightens).
+    background : str
+        Background hex color for blend mode (zero-expression cells).
+    key_added : str
+        obs column name for blend mode output.
+    inplace : bool
+        If True (blend), stores in adata.obs. If False, returns Series.
+    
+    **Facet-specific parameters:**
+    ncols : int
+        Number of columns in facet grid (default 3).
+    figsize : tuple, optional
+        Figure size. Auto-computed from ncols if None.
+    edges_width : float
+        Cell edge width for facet plots (default 0.3).
+    edges_color : str
+        Cell edge color for facet plots (default '#cccccc30').
+    alpha : float
+        Cell transparency for facet plots (default 0.8).
+    show : bool
+        Whether to call plt.show() (default True).
+    ax : matplotlib.Axes or array, optional
+        Pre-existing axes to plot on.
+    library_id : str, optional
+        Library id passed to spatial_cell.
+    
+    Returns
+    -------
+    blend mode: pd.Series or None
+    facet mode: np.ndarray of matplotlib.Axes
+    
+    Examples
+    --------
+    >>> import trackcell as tcl
+    >>>
+    >>> # Mode 1: Blend → single composite image
+    >>> tcl.tl.multigene_blend(adata, genes=['EPCAM', 'PECAM1', 'VWF'])
+    >>> tcl.pl.spatial_cell(adata, color='multigene_blend')
+    >>>
+    >>> # Mode 2: Facet → subplots per gene
+    >>> tcl.tl.multigene_blend(
+    ...     adata, genes=['EPCAM', 'PECAM1', 'VWF'],
+    ...     mode='facet', ncols=3,
+    ... )
+    """
+    n_genes = len(genes)
+    if n_genes < 2:
+        raise ValueError(f'Need at least 2 genes, got {n_genes}')
+    
+    # Validate genes
+    missing = [g for g in genes if g not in adata.var_names]
+    if missing:
+        raise ValueError(f'Genes not found in adata.var_names: {missing}')
+    
+    # Default colors
+    if colors is None:
+        colors = DEFAULT_GENE_COLORS[:n_genes]
+    elif len(colors) != n_genes:
+        raise ValueError(
+            f'colors length ({len(colors)}) must match genes length ({n_genes})'
+        )
+    
+    if mode == 'facet':
+        return _multigene_facet(
+            adata=adata, genes=genes, colors=colors,
+            layer=layer, vmin_percentile=vmin_percentile,
+            vmax_percentile=vmax_percentile,
+            ncols=ncols, figsize=figsize,
+            edges_width=edges_width, edges_color=edges_color,
+            alpha=alpha_facet, show=show, ax=ax, library_id=library_id,
+        )
+    
+    if mode != 'blend':
+        raise ValueError(
+            f"Unknown mode '{mode}'. Valid modes: 'blend', 'facet'."
+        )
+    
+    # ── Blend mode ──
+    if n_genes > 7:
+        warnings.warn(
+            f'{n_genes} genes may produce muddy blends. '
+            f'Consider using <= 7 genes or mode="facet".'
+        )
+    
+    # ── Extract expression matrix ──
+    X = adata[:, genes].X if layer is None else adata[:, genes].layers[layer]
+    if hasattr(X, 'toarray'):
+        X = X.toarray()
+    else:
+        X = np.asarray(X, dtype=float)
+    
+    n_cells = X.shape[0]
+    
+    # ── Convert base colors to RGB ──
+    base_rgb = np.array([_hex_to_rgb(c) for c in colors])  # (n_genes, 3)
+    
+    # ── Per-gene normalization (percentile clipping) ──
+    X_norm = np.zeros_like(X)
+    for j in range(n_genes):
+        col = X[:, j]
+        vmin = np.percentile(col, vmin_percentile)
+        vmax = np.percentile(col, vmax_percentile)
+        if vmax > vmin:
+            col_clipped = np.clip(col, vmin, vmax)
+            X_norm[:, j] = (col_clipped - vmin) / (vmax - vmin)
+        else:
+            X_norm[:, j] = 0.0
+    
+    # ── Weighted RGB blending ──
+    # weight_i = norm_expr_i / (sum(norm_expr) + eps)
+    # RGB = Σ(weight_i * base_rgb_i)
+    total = X_norm.sum(axis=1, keepdims=True)  # (n_cells, 1)
+    weights = np.divide(X_norm, total, where=total > 0)  # (n_cells, n_genes)
+    rgb = weights @ base_rgb  # (n_cells, 3)
+    
+    # ── Gamma correction ──
+    if gamma != 1.0:
+        rgb = np.power(rgb, gamma)
+    
+    # ── Convert to hex ──
+    bg_rgb = np.array(_hex_to_rgb(background))
+    hex_colors = []
+    for i in range(n_cells):
+        if total[i, 0] > 0:
+            hex_colors.append(_rgb_to_hex(rgb[i, 0], rgb[i, 1], rgb[i, 2]))
+        else:
+            hex_colors.append(background)
+    
+    result = pd.Series(hex_colors, index=adata.obs_names, name=key_added)
+    
+    # ── Store metadata ──
+    adata.uns[f'{key_added}_params'] = {
+        'genes': genes,
+        'colors': colors,
+        'vmin_percentile': vmin_percentile,
+        'vmax_percentile': vmax_percentile,
+        'gamma': gamma,
+        'background': background,
+        'n_unique_colors': result.nunique(),
+    }
+    
+    if inplace:
+        adata.obs[key_added] = result
+        print(
+            f'[multigene_blend] {n_genes} genes → '
+            f'{result.nunique():,} unique colors in adata.obs["{key_added}"]'
+        )
+        return None
+    
+    return result
 
 
 def hd_labeldist(adata, groupby: str, label: str, inplace: bool = True, method: str = "kdtree"):

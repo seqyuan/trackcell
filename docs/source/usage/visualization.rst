@@ -103,6 +103,146 @@ When using a list or array, colors are assigned to categories in alphabetical or
 **Note**: If the palette has fewer colors than categories, colors will be cycled.
 A warning will be issued if this occurs.
 
+
+Dual-Color Visualization (Fill + Edge)
+------------------------------------------
+
+Use ``edge_color`` to color cell boundaries by a categorical column (e.g., cell type),
+while ``color`` controls the fill (gene expression or continuous value).
+This creates a two-layer visualization where:
+
+* **Fill color** maps a continuous variable (gene expression, UMI counts, etc.)
+* **Edge color** maps a categorical variable (cell type, cluster, etc.)
+
+Fill = Gene Expression, Edge = Cell Type
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. code-block:: python
+
+   import trackcell as tcl
+
+   # Fill: gene expression (continuous), Edge: cell type (categorical)
+   tcl.pl.spatial_cell(
+       adata,
+       color='EPCAM',              # Fill: gene expression
+       cmap='Reds',
+       edge_color='cell_type',     # Edge: cell type
+       edge_palette={
+           'T cell': '#e41a1c',
+           'B cell': '#377eb8',
+           'Myeloid': '#4daf4a',
+       },
+       edges_width=1.2,
+       alpha=0.7,
+   )
+
+Fill = Continuous obs, Edge = Categorical obs
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. code-block:: python
+
+   # Fill: continuous observation, Edge: categorical observation
+   tcl.pl.spatial_cell(
+       adata,
+       color='total_counts',       # Fill: UMIs per cell
+       cmap='YlOrRd',
+       edge_color='cell_type',     # Edge: cell type
+       edges_width=1.5,
+       alpha=0.7,
+   )
+
+Using edge_palette
+~~~~~~~~~~~~~~~~~~~
+
+The ``edge_palette`` parameter accepts the same formats as ``palette``:
+
+* **Dictionary**: Map categories to specific colors
+* **List/Array**: Assign colors to categories in sorted order
+
+If ``edge_palette`` is not specified, a default colormap (``tab10`` or ``tab20``) is used.
+
+Both legends are automatically generated:
+
+* **Fill**: colorbar (continuous) or legend (categorical), positioned on the right
+* **Edge**: categorical legend, positioned below the plot
+
+
+Multi-Gene Visualization (cell2location-style)
+-----------------------------------------------
+
+TrackCell provides ``tl.multigene_blend()`` for co-expression visualization
+in two modes, controlled by the ``mode`` parameter.
+
+Mode 1: Blended Composite (``mode='blend'``)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Maps each gene to a base color, blends by expression level using weighted
+RGB averaging. The result is a hex color per cell, stored in ``adata.obs``:
+
+.. code-block:: python
+
+   import trackcell as tcl
+
+   # Compute blended colors
+   tcl.tl.multigene_blend(
+       adata,
+       genes=['EPCAM', 'PECAM1', 'VWF'],
+       mode='blend',
+   )
+
+   # Visualize as composite
+   tcl.pl.spatial_cell(adata, color='multigene_blend')
+
+Custom colors and gamma correction:
+
+.. code-block:: python
+
+   tcl.tl.multigene_blend(
+       adata,
+       genes=['EPCAM', 'PECAM1', 'VWF', 'ACTA2', 'PTPRC'],
+       colors=['#e41a1c', '#377eb8', '#4daf4a', '#ff7f00', '#984ea3'],
+       vmax_percentile=98,
+       gamma=0.8,
+   )
+
+**How blending works**: Each gene gets a base RGB color. Per-cell expression
+is normalized (percentile-clipped to [0, 1]), then blended as:
+
+|color| = Σ (normalized_expr_i × RGB_i) / Σ normalized_expr_i
+
+Zero-expression cells get the ``background`` color (default ``#e0e0e0``).
+
+Mode 2: Faceted Subplots (``mode='facet'``)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Each gene gets its own panel with a single-hue colormap (white → gene color).
+This matches the cell2location paper style:
+
+.. code-block:: python
+
+   tcl.tl.multigene_blend(
+       adata,
+       genes=['EPCAM', 'PECAM1', 'VWF', 'ACTA2'],
+       mode='facet',
+       ncols=2,           # 2 columns of subplots
+       edges_width=0.3,
+   )
+
+Facet-specific parameters:
+
+* ``ncols``: Number of columns (default 3)
+* ``figsize``: Figure size (auto-computed if None)
+* ``edges_width``: Cell boundary width (default 0.3)
+* ``edges_color``: Cell boundary color (default ``'#cccccc30'``)
+
+Compatibility with sc.pl.spatial
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+For ``sc.pl.spatial`` (point-based): use ``mode='facet'`` or manually create
+individual gene subplots. The blend mode hex colors work best with trackcell's
+``spatial_cell`` polygon rendering.
+
+
 Performance Optimization for Large Datasets
 --------------------------------------------
 

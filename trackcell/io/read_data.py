@@ -16,6 +16,10 @@ from pathlib import Path
 from typing import Optional, Union
 import ast
 import warnings
+import time
+import gc
+import h5py
+from scipy import sparse as sp_sparse
 
 def read_hd_bin(
     datapath: Union[str, Path],
@@ -423,6 +427,300 @@ def read_hd_cellseg(
     
     return adata 
 
+
+def read_xenium_cellseg(
+    datapath: Union[str, Path],
+    sample: Optional[str] = None,
+    cells_file: str = "cells.parquet",
+    boundaries_file: str = "cell_boundaries.parquet",
+    nucleus_boundaries_file: str = "nucleus_boundaries.parquet",
+    matrix_file: str = "cell_feature_matrix.h5",
+    experiment_file: str = "experiment.xenium",
+    panel_file: str = "gene_panel.json",
+) -> sc.AnnData:
+    """
+    Read 10x Xenium cell segmentation output and create an AnnData object.
+    
+    Reads Xenium Analyzer output files (parquet boundaries, HDF5 expression matrix)
+    and builds a squidpy-compatible AnnData with GeoDataFrame cell polygons.
+    
+    Parameters
+    ----------
+    datapath : str or Path
+        Path to the Xenium output directory containing:
+        - cell_feature_matrix.h5
+        - cells.parquet
+        - cell_boundaries.parquet
+        - experiment.xenium
+    sample : str, optional
+        Sample name. If None, infers from directory name.
+    cells_file : str
+        Name of the cell metadata parquet file.
+    boundaries_file : str
+        Name of the cell boundary parquet file (long-table format).
+    nucleus_boundaries_file : str
+        Name of the nucleus boundary parquet file.
+    matrix_file : str
+        Name of the HDF5 expression matrix file.
+    experiment_file : str
+        Name of the experiment metadata JSON file.
+    panel_file : str
+        Name of the gene panel JSON file.
+    
+    Returns
+    -------
+    sc.AnnData
+        AnnData object with:
+        - Expression matrix in .X (CSR, cells × genes)
+        - Cell metadata in .obs (centroids, area, counts, etc.)
+        - Gene metadata in .var (gene_ids, feature_types)
+        - Spatial coordinates in .obsm['spatial']
+        - Cell polygons in .uns['spatial'][sample]['geometries'] (GeoDataFrame)
+        - Cell boundary arrays in .uns['cell_boundaries'] (compact vertex arrays)
+        - Nucleus boundary arrays in .uns['nucleus_boundaries'] (if available)
+        - WKT geometry strings in .obs['geometry'] (for serialization)
+        - Experiment metadata in .uns['experiment']
+    
+    Examples
+    --------
+    >>> import trackcell.io as tcio
+    >>> adata = tcio.read_xenium_cellseg("/path/to/xenium/output")
+    >>> print(adata)
+    AnnData object with n_obs × n_vars = 819023 × 10029
+    """
+    datapath = Path(datapath).resolve()
+    
+    if sample is None:
+        sample = datapath.name
+    
+    t_total = time.time()
+    
+    # ── 1. Read expression matrix ──
+    t0 = time.time()
+    h5_path = datapath / matrix_file
+    if not h5_path.exists():
+        raise FileNotFoundError(f"Expression matrix not found: {h5_path}")
+    
+    with h5py.File(h5_path, 'r') as f:
+        m = f['matrix']
+        shape = tuple(m['shape'][:])
+        data = m['data'][:]
+        indices = m['indices'][:]
+        indptr = m['indptr'][:]
+        barcodes = np.array([b.decode('utf-8') if isinstance(b, bytes) else str(b)
+                            for b in m['barcodes'][:]])
+        feat_names = np.array([n.decode('utf-8') if isinstance(n, bytes) else str(n)
+                              for n in m['features']['name'][:]])
+        feat_ids = np.array([i.decode('utf-8') if isinstance(i, bytes) else str(i)
+                            for i in m['features']['id'][:]])
+        feat_types = np.array([t.decode('utf-8') if isinstance(t, bytes) else str(t)
+                              for t in m['features']['feature_type'][:]])
+    
+    # 10x HDF5 stores CSC (genes × cells); transpose to (cells × genes) CSR
+    n_genes, n_cells = int(shape[0]), int(shape[1])
+    mat_csc = sp_sparse.csc_matrix((data, indices, indptr), shape=(n_genes, n_cells))
+    mat = mat_csc.tocsr().T
+    del data, indices, indptr, mat_csc
+    gc.collect()
+    print(f'[Xenium] Expression matrix: {mat.shape[0]:,} cells × {mat.shape[1]:,} genes '
+          f'({mat.nnz/1e6:.1f}M non-zero) [{time.time()-t0:.1f}s]')
+    
+    # ── 2. Read cell metadata ──
+    t0 = time.time()
+    cells_path = datapath / cells_file
+    if not cells_path.exists():
+        raise FileNotFoundError(f"Cell metadata not found: {cells_path}")
+    cells_df = pd.read_parquet(cells_path)
+    cells_df = cells_df.set_index('cell_id')
+    print(f'[Xenium] Cell metadata: {len(cells_df):,} cells [{time.time()-t0:.1f}s]')
+    
+    # ── 3. Align expression barcodes with cell metadata ──
+    t0 = time.time()
+    # Xenium cell_ids already include suffix; use as-is
+    obs_index = pd.Index(barcodes, name='cell_id')
+    
+    common_cells = obs_index.intersection(cells_df.index)
+    if len(common_cells) != n_cells:
+        print(f'  Warning: {len(common_cells):,}/{n_cells:,} cells matched between '
+              f'expression and metadata')
+    
+    # Build row index map for subsetting the matrix
+    row_mask = obs_index.isin(common_cells)
+    row_indices = np.where(row_mask)[0]
+    mat = mat[row_indices, :]
+    
+    # Reorder metadata to match expression order
+    cells_df = cells_df.loc[common_cells]
+    print(f'[Xenium] Aligned: {len(common_cells):,} cells [{time.time()-t0:.1f}s]')
+    
+    # ── 4. Build AnnData ──
+    t0 = time.time()
+    obs = pd.DataFrame(index=common_cells)
+    obs_cols = ['x_centroid', 'y_centroid', 'cell_area', 'nucleus_area',
+                'transcript_counts', 'total_counts', 'nucleus_count',
+                'control_probe_counts', 'genomic_control_counts',
+                'control_codeword_counts', 'unassigned_codeword_counts',
+                'segmentation_method']
+    for col in obs_cols:
+        if col in cells_df.columns:
+            obs[col] = cells_df[col].values
+    
+    var = pd.DataFrame(
+        {'gene_ids': feat_ids, 'feature_types': feat_types},
+        index=feat_names
+    )
+    var.index.name = 'gene_symbol'
+    
+    adata = sc.AnnData(X=mat, obs=obs, var=var)
+    adata.obs.index.name = 'cell_id'
+    
+    if not sp_sparse.isspmatrix_csr(adata.X):
+        adata.X = adata.X.tocsr()
+    print(f'[Xenium] AnnData built: {adata.shape} [{time.time()-t0:.1f}s]')
+    
+    # ── 5. Spatial coordinates ──
+    t0 = time.time()
+    adata.obsm['spatial'] = adata.obs[['x_centroid', 'y_centroid']].values.astype(np.float32)
+    print(f'[Xenium] Spatial coords [{time.time()-t0:.1f}s]')
+    
+    # ── 6. Cell boundaries → GeoDataFrame polygons + compact arrays ──
+    t0 = time.time()
+    bd_path = datapath / boundaries_file
+    if bd_path.exists():
+        bd_df = pd.read_parquet(bd_path)
+        print(f'  Loaded {len(bd_df):,} boundary vertices [{time.time()-t0:.1f}s]')
+        
+        t1 = time.time()
+        cell_set = set(common_cells)
+        cell_idx_map = {cid: i for i, cid in enumerate(common_cells)}
+        
+        # Single pass: build both compact arrays and polygons
+        n_vertices_list, all_vx, all_vy = [], [], []
+        cell_to_bd_idx = np.full(len(common_cells), -1, dtype=np.int32)
+        polygons = {}
+        cum_vertices = 0
+        
+        for cell_id, group in bd_df.groupby('cell_id', sort=False):
+            if cell_id not in cell_set:
+                continue
+            vx = group['vertex_x'].values
+            vy = group['vertex_y'].values
+            idx = cell_idx_map[cell_id]
+            
+            # Compact arrays
+            cell_to_bd_idx[idx] = cum_vertices
+            nv = len(vx)
+            n_vertices_list.append(nv)
+            cum_vertices += nv
+            all_vx.append(vx)
+            all_vy.append(vy)
+            
+            # Polygon
+            if nv >= 3:
+                poly = geometry.Polygon(np.column_stack([vx, vy]))
+                if poly.is_valid and not poly.is_empty:
+                    polygons[cell_id] = poly
+        
+        if all_vx:
+            adata.uns['cell_boundaries'] = {
+                'vertex_x': np.concatenate(all_vx).astype(np.float32),
+                'vertex_y': np.concatenate(all_vy).astype(np.float32),
+                'n_vertices': np.array(n_vertices_list, dtype=np.int32),
+                'cell_idx': cell_to_bd_idx,
+            }
+        del bd_df
+        gc.collect()
+        print(f'  Boundaries: {len(polygons):,}/{len(common_cells):,} cells '
+              f'({len(polygons)/len(common_cells)*100:.1f}%) '
+              f'[{time.time()-t1:.1f}s]')
+    else:
+        print(f'  No cell boundary file: {bd_path}')
+        polygons = {}
+    
+    # ── 7. Nucleus boundaries (optional) ──
+    nuc_path = datapath / nucleus_boundaries_file
+    if nuc_path.exists():
+        t0 = time.time()
+        nuc_df = pd.read_parquet(nuc_path)
+        nuc_grouped = nuc_df.groupby('cell_id', sort=False)
+        
+        nuc_nv_list, nuc_vx, nuc_vy = [], [], []
+        nuc_to_idx = np.full(len(common_cells), -1, dtype=np.int32)
+        cum_nuc = 0
+        
+        for cell_id, group in nuc_grouped:
+            if cell_id in cell_set:
+                vx = group['vertex_x'].values
+                vy = group['vertex_y'].values
+                idx = cell_idx_map[cell_id]
+                nuc_to_idx[idx] = cum_nuc
+                nuc_nv_list.append(len(vx))
+                cum_nuc += len(vx)
+                nuc_vx.append(vx)
+                nuc_vy.append(vy)
+        
+        if nuc_vx:
+            adata.uns['nucleus_boundaries'] = {
+                'vertex_x': np.concatenate(nuc_vx).astype(np.float32),
+                'vertex_y': np.concatenate(nuc_vy).astype(np.float32),
+                'n_vertices': np.array(nuc_nv_list, dtype=np.int32),
+                'cell_idx': nuc_to_idx,
+            }
+        del nuc_df
+        gc.collect()
+        print(f'[Xenium] Nucleus boundaries [{time.time()-t0:.1f}s]')
+    
+    # ── 8. Experiment metadata ──
+    exp_path = datapath / experiment_file
+    if exp_path.exists():
+        with open(exp_path) as f:
+            adata.uns['experiment'] = json.load(f)
+    
+    # ── 9. Gene panel metadata ──
+    panel_path = datapath / panel_file
+    if panel_path.exists():
+        with open(panel_path) as f:
+            adata.uns['gene_panel'] = json.load(f)
+    
+    # ── 10. Setup spatial metadata (squidpy-compatible) ──
+    adata.uns['spatial'] = {
+        sample: {
+            'metadata': {
+                'sample_id': sample,
+                'pixel_size': adata.uns.get('experiment', {}).get('pixel_size', 0.2125),
+            },
+            'scalefactors': {
+                'spot_diameter_fullres': 1.0,
+                'tissue_hires_scalef': 1.0,
+                'tissue_lowres_scalef': 1.0,
+            },
+        }
+    }
+    
+    # ── 11. Store geometries (GeoDataFrame + WKT strings) ──
+    if polygons:
+        # Build GeoDataFrame indexed by cell_id
+        gdf = gpd.GeoDataFrame(
+            {'geometry': pd.Series(polygons)},
+            geometry='geometry'
+        )
+        gdf.index.name = 'cell_id'
+        adata.uns['spatial'][sample]['geometries'] = gdf
+        
+        # Store WKT strings in obs for serialization
+        adata.obs['geometry'] = pd.Series(
+            {cid: wkt.dumps(poly) for cid, poly in polygons.items()},
+            name='geometry'
+        )
+        
+        n_geo = len(polygons)
+        print(f'[Xenium] Geometries: {n_geo:,}/{len(common_cells):,} cells '
+              f'({n_geo/len(common_cells)*100:.1f}%)')
+    
+    elapsed = time.time() - t_total
+    print(f'[Xenium] Total: read_xenium_cellseg done [{elapsed:.1f}s]')
+    
+    return adata
 
 
 def convert_classification_to_color_dict(df, classification_col='classification'):
