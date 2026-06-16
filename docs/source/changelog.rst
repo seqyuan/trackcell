@@ -1,6 +1,25 @@
 Changelog
 =========
 
+Version 0.3.19
+--------------
+
+* **Added dedicated HD squarebin plotting**:
+  * Added ``tcl.pl.spatial_squarebin()`` for squarebin/bin-level HD visualization
+  * Added ``tcl.pl.spatial_bin()`` alias for a shorter, intuitive API
+  * Supports plotting obs columns, genes, categorical values, and continuous values
+  * Supports ``crop_coord`` for coordinate-based regional zooming
+
+* **Improved no-color spatial rendering for HD plots**:
+  * When ``color=None``, squarebin plots now display the H&E image and spatial coordinate extent
+  * Added axis/tick control for coordinate-aware inspection, matching the expected HD browsing workflow
+  * Designed to complement ``tcl.pl.spatial_cell()`` for users working with non-cellseg squarebin data
+
+* **Documentation and examples updated**:
+  * Added dedicated squarebin usage examples to README and Sphinx docs
+  * Added example script for squarebin visualization workflows
+  * Reduced Sphinx autodoc build noise via mocked heavy imports for more stable online docs builds
+
 Version 0.3.18
 --------------
 

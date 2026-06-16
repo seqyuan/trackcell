@@ -9,7 +9,7 @@
 project = 'trackcell'
 copyright = '2025, Zan Yuan'
 author = 'Zan Yuan'
-release = '0.3.18'
+release = '0.3.19'
 
 # -- General configuration ---------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#general-configuration
