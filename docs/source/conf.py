@@ -9,7 +9,7 @@
 project = 'trackcell'
 copyright = '2025, Zan Yuan'
 author = 'Zan Yuan'
-release = '0.3.6'
+release = '0.3.18'
 
 # -- General configuration ---------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#general-configuration
@@ -123,6 +123,12 @@ napoleon_include_private_with_doc = False
 # Autodoc settings
 autodoc_member_order = 'bysource'
 autosummary_generate = True
+autodoc_mock_imports = [
+    'scanpy',
+    'numba',
+    'anndata',
+    'h5py',
+]
 
 # Intersphinx mapping
 intersphinx_mapping = {
