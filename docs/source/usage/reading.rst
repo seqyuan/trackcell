@@ -164,6 +164,22 @@ Usage
    # Access the bin size information
    print(f"Bin size: {adata.uns['spatial']['Cse1']['binsize']} um")
 
+   # Show H&E image only with coordinate range
+   tcl.pl.spatial_squarebin(adata, color=None)
+
+   # Equivalent alias
+   tcl.pl.spatial_bin(adata, color=None)
+
+   # Plot a gene on square bins
+   tcl.pl.spatial_squarebin(
+       adata,
+       color="EPCAM",
+       cmap="Reds",
+       alpha=0.8,
+       alpha_img=0.4,
+   )
+
+
 Subsetting Data and Synchronizing Geometries
 ---------------------------------------------
 

@@ -4,6 +4,6 @@ PL (Plotting) module for TrackCell package.
 This module provides functions for plotting and visualizing single-cell and spatial transcriptomics data.
 """
 
-from .plot import spatial_cell, mark_region
+from .plot import spatial_cell, spatial_squarebin, spatial_bin, mark_region
 
-__all__ = ["spatial_cell", "mark_region"] 
+__all__ = ["spatial_cell", "spatial_squarebin", "spatial_bin", "mark_region"] 
