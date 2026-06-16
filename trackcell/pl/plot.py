@@ -8,7 +8,10 @@ including cell polygon visualization.
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
-from matplotlib.colors import Normalize, ListedColormap
+from matplotlib.colors import Normalize, ListedColormap, to_rgba
+from matplotlib.patches import Rectangle
+from matplotlib.collections import PatchCollection
+from matplotlib.cm import ScalarMappable
 from typing import Optional, Union, List, Dict
 import warnings
 
@@ -207,6 +210,284 @@ def _plot_raw_hex_colors(
             else:
                 pass
 
+
+
+
+def _resolve_library_id(adata, library_id: Optional[str] = None) -> str:
+    """Resolve spatial library id similar to scanpy/scalpy style helpers."""
+    if "spatial" not in adata.uns:
+        raise ValueError("`adata.uns['spatial']` is required but missing.")
+
+    if library_id is None:
+        available_library_ids = list(adata.uns["spatial"].keys())
+        if len(available_library_ids) == 0:
+            raise ValueError("No library_id found in `adata.uns['spatial']`.")
+        library_id = available_library_ids[0]
+        if len(available_library_ids) > 1:
+            warnings.warn(
+                f"Multiple library_ids found: {available_library_ids}. "
+                f"Using '{library_id}'. Specify `library_id` explicitly to use a different one."
+            )
+
+    if library_id not in adata.uns["spatial"]:
+        raise ValueError(
+            f"`library_id` '{library_id}' not found in `adata.uns['spatial']`. "
+            f"Available library_ids: {list(adata.uns['spatial'].keys())}"
+        )
+    return library_id
+
+
+def _normalize_color_argument(color):
+    if color is None:
+        return [None]
+    if isinstance(color, str):
+        return [color]
+    return list(color)
+
+
+def _validate_color_keys(adata, colors_to_plot):
+    for color_key in colors_to_plot:
+        if color_key is None:
+            continue
+        if color_key not in adata.obs.columns and color_key not in adata.var_names:
+            if hasattr(adata, 'layers') and color_key in adata.layers:
+                raise ValueError(
+                    f"`color` key '{color_key}' found in `adata.layers`, but layer-based plotting "
+                    f"is not yet supported. Please use gene names from `adata.var_names` "
+                    f"or metadata from `adata.obs.columns`."
+                )
+            raise ValueError(
+                f"`color` key '{color_key}' not found in `adata.obs.columns` or `adata.var_names`. "
+                f"Available obs keys: {list(adata.obs.columns[:10])}... "
+                f"Available var names (genes): {list(adata.var_names[:10])}..."
+            )
+
+
+def _create_axes(colors_to_plot, figsize=None, ax=None):
+    if ax is None:
+        if figsize is None:
+            figsize = (5 * len(colors_to_plot), 5) if len(colors_to_plot) > 1 else (10, 10)
+        if len(colors_to_plot) > 1:
+            fig, axes = plt.subplots(1, len(colors_to_plot), figsize=figsize, sharex=True, sharey=True)
+            if len(colors_to_plot) == 1:
+                axes = [axes]
+            else:
+                axes = list(np.ravel(axes))
+        else:
+            fig, single_ax = plt.subplots(1, 1, figsize=figsize)
+            axes = [single_ax]
+    else:
+        fig = ax.figure
+        axes = [ax]
+        if len(colors_to_plot) > 1:
+            warnings.warn("Multiple colors specified but single ax provided. Only first color will be plotted.")
+            colors_to_plot = [colors_to_plot[0]]
+    return fig, axes, colors_to_plot
+
+
+def _filter_obs_mask(adata, color_key=None, groups=None, groupby=None):
+    if groups is None:
+        return np.ones(adata.n_obs, dtype=bool)
+
+    filter_column = None
+    if groupby is not None:
+        if groupby not in adata.obs.columns:
+            raise ValueError(f"`groupby` column '{groupby}' not found in `adata.obs.columns`.")
+        filter_column = groupby
+    elif color_key is not None and color_key in adata.obs.columns:
+        filter_column = color_key
+    else:
+        raise ValueError(
+            "`groups` requires either `groupby` to be specified or `color` to be a column in `adata.obs`."
+        )
+
+    return adata.obs[filter_column].isin(groups).to_numpy()
+
+
+def _extract_color_values(adata, color_key, mask):
+    if color_key is None:
+        return None
+    if color_key in adata.obs.columns:
+        return adata.obs.loc[mask, color_key]
+    gene_idx = adata.var_names.get_loc(color_key)
+    values = adata.X[mask, gene_idx]
+    if hasattr(values, 'toarray'):
+        values = values.toarray().ravel()
+    else:
+        values = np.asarray(values).ravel()
+    return pd.Series(values, index=adata.obs_names[mask], name=color_key)
+
+
+def _compute_data_extent_from_coords(coords, pad_fraction=0.05, extra_pad=0.0):
+    if coords is None or len(coords) == 0:
+        x_min = y_min = 0.0
+        x_max = y_max = 1.0
+    else:
+        x_min = float(np.nanmin(coords[:, 0]))
+        y_min = float(np.nanmin(coords[:, 1]))
+        x_max = float(np.nanmax(coords[:, 0]))
+        y_max = float(np.nanmax(coords[:, 1]))
+
+    x_range = x_max - x_min
+    y_range = y_max - y_min
+    x_padding = (x_range * pad_fraction if x_range > 0 else 1.0) + extra_pad
+    y_padding = (y_range * pad_fraction if y_range > 0 else 1.0) + extra_pad
+    return (x_min, y_min, x_max, y_max), (x_padding, y_padding)
+
+
+def _apply_spatial_axis_formatting(ax, x_min, y_min, x_max, y_max, x_padding, y_padding, xlabel, ylabel, show_ticks, force_show_ticks=False):
+    ax.set_aspect('equal')
+    ax.invert_yaxis()
+    ax.set_xlim(x_min - x_padding, x_max + x_padding)
+    ax.set_ylim(y_max + y_padding, y_min - y_padding)
+    if xlabel is not None:
+        ax.set_xlabel(xlabel)
+    if ylabel is not None:
+        ax.set_ylabel(ylabel)
+    if force_show_ticks:
+        ax.tick_params(axis='both', which='major', labelsize=10)
+    elif not show_ticks:
+        ax.set_xticks([])
+        ax.set_yticks([])
+
+
+def _infer_square_size(adata, library_id, coords, binsize=None):
+    spatial_info = adata.uns.get('spatial', {}).get(library_id, {})
+    if binsize is None:
+        binsize = spatial_info.get('binsize')
+
+    scalefactors = spatial_info.get('scalefactors', {})
+    microns_per_pixel = scalefactors.get('microns_per_pixel')
+    if binsize is not None and microns_per_pixel not in (None, 0):
+        try:
+            size = float(binsize) / float(microns_per_pixel)
+            if np.isfinite(size) and size > 0:
+                return size
+        except Exception:
+            pass
+
+    if coords is not None and len(coords) > 1:
+        diffs = []
+        for axis in (0, 1):
+            uniq = np.unique(np.asarray(coords[:, axis], dtype=float))
+            if len(uniq) > 1:
+                d = np.diff(np.sort(uniq))
+                d = d[np.isfinite(d) & (d > 0)]
+                if len(d) > 0:
+                    diffs.append(np.median(d))
+        if diffs:
+            size = float(np.min(diffs))
+            if np.isfinite(size) and size > 0:
+                return size
+
+    return 1.0
+
+
+def _draw_background_only(ax, spatial_info, img_key, x_min, y_min, x_max, y_max, xlabel, ylabel):
+    img, img_extent = _process_background_image(spatial_info, img_key)
+    if img is not None and img_extent is not None:
+        ax.imshow(img, extent=img_extent, origin='upper', alpha=1.0)
+        ax.set_xlim(img_extent[0], img_extent[1])
+        ax.set_ylim(img_extent[2], img_extent[3])
+    else:
+        ax.set_xlim(x_min, x_max)
+        ax.set_ylim(y_max, y_min)
+    ax.set_aspect('equal')
+    ax.invert_yaxis()
+    if xlabel is not None:
+        ax.set_xlabel(xlabel)
+    if ylabel is not None:
+        ax.set_ylabel(ylabel)
+    ax.tick_params(axis='both', which='major', labelsize=10)
+
+
+def _plot_squarebin_values(ax, coords, values, square_size, cmap, palette, vmin, vmax, alpha, legend, edges_width, edges_color, na_color, rasterized=False):
+    if len(coords) == 0:
+        return None
+
+    half = square_size / 2.0
+    patches = [Rectangle((x - half, y - half), square_size, square_size) for x, y in coords]
+
+    edgecolor = 'none' if edges_width == 0 else edges_color
+
+    if values is None:
+        pc = PatchCollection(patches, facecolor='none', edgecolor=edgecolor, linewidth=edges_width, alpha=alpha, rasterized=rasterized)
+        ax.add_collection(pc)
+        return None
+
+    if isinstance(values, pd.Series):
+        values_arr = values.to_numpy()
+    else:
+        values_arr = np.asarray(values)
+
+    is_categorical = (
+        pd.api.types.is_categorical_dtype(values)
+        or pd.api.types.is_object_dtype(values)
+        or pd.api.types.is_bool_dtype(values)
+    )
+
+    if is_categorical:
+        values_ser = pd.Series(values_arr, index=np.arange(len(values_arr)))
+        categories = pd.Index(pd.unique(values_ser.dropna()))
+        if len(categories) == 0:
+            facecolors = [to_rgba(na_color, alpha=alpha)] * len(values_ser)
+            pc = PatchCollection(patches, facecolor=facecolors, edgecolor=edgecolor, linewidth=edges_width, rasterized=rasterized)
+            ax.add_collection(pc)
+            return None
+
+        if palette is not None:
+            if isinstance(palette, dict):
+                cat_to_color = {cat: palette.get(cat, na_color) for cat in categories}
+            else:
+                pal = list(palette)
+                cat_to_color = {cat: pal[i % len(pal)] for i, cat in enumerate(categories)}
+        else:
+            default_cmap = plt.get_cmap('tab20' if len(categories) <= 20 else 'tab20b')
+            cat_to_color = {cat: default_cmap(i / max(len(categories), 1)) for i, cat in enumerate(categories)}
+
+        facecolors = []
+        for v in values_ser:
+            if pd.isna(v):
+                facecolors.append(to_rgba(na_color, alpha=alpha))
+            else:
+                facecolors.append(to_rgba(cat_to_color.get(v, na_color), alpha=alpha))
+
+        pc = PatchCollection(patches, facecolor=facecolors, edgecolor=edgecolor, linewidth=edges_width, rasterized=rasterized)
+        ax.add_collection(pc)
+
+        if legend:
+            from matplotlib.patches import Patch
+            handles = [Patch(facecolor=cat_to_color[c], edgecolor='none', label=str(c)) for c in categories]
+            if handles:
+                ax.legend(handles=handles, bbox_to_anchor=(1.05, 1), loc='upper left', frameon=True)
+        return None
+
+    values_num = np.asarray(values_arr, dtype=float)
+    finite_mask = np.isfinite(values_num)
+    if not finite_mask.any():
+        facecolors = [to_rgba(na_color, alpha=alpha)] * len(values_num)
+        pc = PatchCollection(patches, facecolor=facecolors, edgecolor=edgecolor, linewidth=edges_width, rasterized=rasterized)
+        ax.add_collection(pc)
+        return None
+    data_vmin = float(np.nanmin(values_num[finite_mask])) if vmin is None else vmin
+    data_vmax = float(np.nanmax(values_num[finite_mask])) if vmax is None else vmax
+    if data_vmax == data_vmin:
+        data_vmax = data_vmin + 1e-12
+    norm = Normalize(vmin=data_vmin, vmax=data_vmax)
+    cmap_obj = plt.get_cmap(cmap)
+    facecolors = []
+    for v in values_num:
+        if np.isnan(v):
+            facecolors.append(to_rgba(na_color, alpha=alpha))
+        else:
+            facecolors.append(to_rgba(cmap_obj(norm(v)), alpha=alpha))
+    pc = PatchCollection(patches, facecolor=facecolors, edgecolor=edgecolor, linewidth=edges_width, rasterized=rasterized)
+    ax.add_collection(pc)
+    if legend:
+        sm = ScalarMappable(norm=norm, cmap=cmap_obj)
+        sm.set_array([])
+        plt.colorbar(sm, ax=ax, fraction=0.046, pad=0.04)
+    return None
 
 def spatial_cell(
     adata,
@@ -1033,6 +1314,172 @@ def spatial_cell(
     else:
         return axes_list
 
+
+
+
+def spatial_squarebin(
+    adata,
+    color: Optional[Union[str, List[str]]] = None,
+    groups: Optional[List[str]] = None,
+    groupby: Optional[str] = None,
+    library_id: Optional[str] = None,
+    binsize: Optional[float] = None,
+    figsize: Optional[tuple] = None,
+    cmap: str = "viridis",
+    palette: Optional[Union[dict, list, np.ndarray]] = None,
+    vmin: Optional[float] = None,
+    vmax: Optional[float] = None,
+    img_key: Optional[str] = None,
+    basis: str = "spatial",
+    edges_width: float = 0.0,
+    edges_color: str = "none",
+    alpha: float = 0.8,
+    alpha_img: float = 0.5,
+    show: bool = True,
+    ax: Optional[plt.Axes] = None,
+    legend: bool = True,
+    xlabel: Optional[str] = "spatial 1",
+    ylabel: Optional[str] = "spatial 2",
+    show_ticks: bool = False,
+    crop_coord: Optional[tuple] = None,
+    na_color: str = "#d3d3d3",
+    rasterized: bool = False,
+    **kwargs
+):
+    """
+    Plot Visium HD square-bin data as filled squares over an optional H&E image.
+
+    This function is designed for outputs loaded by :func:`trackcell.io.read_hd_bin`.
+    It mirrors the user-facing behavior of :func:`spatial_cell` where possible, but
+    renders regular square bins instead of cell polygons.
+
+    Parameters
+    ----------
+    adata
+        AnnData object with bin-level spatial coordinates in ``adata.obsm[basis]`` and
+        image metadata in ``adata.uns['spatial'][library_id]``.
+    color
+        Observation column, gene name, or list of either. If ``None``, only the H&E
+        image and coordinate range are displayed.
+    groups, groupby
+        Optional filtering of bins, following the same semantics as ``spatial_cell``.
+    library_id
+        Spatial library identifier. If ``None``, the first entry in
+        ``adata.uns['spatial']`` is used.
+    binsize
+        Bin size in micrometers. If ``None``, uses
+        ``adata.uns['spatial'][library_id]['binsize']`` when available.
+    figsize, cmap, palette, vmin, vmax, img_key, basis, alpha, alpha_img, show, ax, legend,
+    xlabel, ylabel, show_ticks
+        Behave similarly to ``spatial_cell``.
+    edges_width, edges_color
+        Styling for square boundaries. Defaults favor performance by disabling edges.
+    crop_coord
+        Optional ``(x_min, x_max, y_min, y_max)`` crop in spatial coordinates.
+    na_color
+        Color used for missing values.
+    rasterized
+        Whether to rasterize square patches for smaller vector outputs on large datasets.
+    **kwargs
+        Reserved for future extensions. Currently unused.
+    """
+    if basis not in adata.obsm:
+        raise ValueError(f"`adata.obsm['{basis}']` is required but missing.")
+
+    library_id = _resolve_library_id(adata, library_id)
+    spatial_info = adata.uns['spatial'][library_id]
+
+    colors_to_plot = _normalize_color_argument(color)
+    _validate_color_keys(adata, colors_to_plot)
+    fig, axes, colors_to_plot = _create_axes(colors_to_plot, figsize=figsize, ax=ax)
+
+    coords_all = np.asarray(adata.obsm[basis])
+    if coords_all.ndim != 2 or coords_all.shape[1] < 2:
+        raise ValueError(f"`adata.obsm['{basis}']` must be an n_obs × 2 array of spatial coordinates.")
+    coords_all = coords_all[:, :2]
+
+    axes_list = []
+
+    for idx, color_key in enumerate(colors_to_plot):
+        current_ax = axes[idx]
+        mask = _filter_obs_mask(adata, color_key=color_key, groups=groups, groupby=groupby)
+
+        if crop_coord is not None:
+            if len(crop_coord) != 4:
+                raise ValueError("`crop_coord` must be a 4-tuple: (x_min, x_max, y_min, y_max).")
+            x0, x1, y0, y1 = crop_coord
+            crop_mask = (
+                (coords_all[:, 0] >= x0) & (coords_all[:, 0] <= x1) &
+                (coords_all[:, 1] >= y0) & (coords_all[:, 1] <= y1)
+            )
+            mask = mask & crop_mask
+
+        coords = coords_all[mask]
+        square_size = _infer_square_size(adata, library_id, coords, binsize=binsize)
+        (x_min, y_min, x_max, y_max), (x_padding, y_padding) = _compute_data_extent_from_coords(coords, extra_pad=square_size / 2.0)
+
+        img, img_extent = _process_background_image(spatial_info, img_key)
+        if img is not None and img_extent is not None:
+            img_alpha_use = 1.0 if color_key is None else alpha_img
+            current_ax.imshow(img, extent=img_extent, origin='upper', alpha=img_alpha_use)
+
+        if color_key is None:
+            if img is not None and img_extent is not None:
+                current_ax.set_xlim(img_extent[0], img_extent[1])
+                current_ax.set_ylim(img_extent[2], img_extent[3])
+                current_ax.set_aspect('equal')
+                current_ax.invert_yaxis()
+                if xlabel is not None:
+                    current_ax.set_xlabel(xlabel)
+                if ylabel is not None:
+                    current_ax.set_ylabel(ylabel)
+                current_ax.tick_params(axis='both', which='major', labelsize=10)
+            else:
+                _apply_spatial_axis_formatting(
+                    current_ax, x_min, y_min, x_max, y_max, x_padding, y_padding,
+                    xlabel, ylabel, show_ticks=True, force_show_ticks=True
+                )
+            axes_list.append(current_ax)
+            continue
+
+        values = _extract_color_values(adata, color_key, mask)
+
+        _plot_squarebin_values(
+            current_ax,
+            coords=coords,
+            values=values,
+            square_size=square_size,
+            cmap=cmap,
+            palette=palette,
+            vmin=vmin,
+            vmax=vmax,
+            alpha=alpha,
+            legend=legend,
+            edges_width=edges_width,
+            edges_color=edges_color,
+            na_color=na_color,
+            rasterized=rasterized,
+        )
+
+        _apply_spatial_axis_formatting(
+            current_ax, x_min, y_min, x_max, y_max, x_padding, y_padding,
+            xlabel, ylabel, show_ticks=show_ticks, force_show_ticks=False
+        )
+        current_ax.set_title(color_key)
+        axes_list.append(current_ax)
+
+    if show:
+        if ax is None:
+            fig.tight_layout(rect=[0, 0, 0.95, 1])
+        else:
+            fig.tight_layout()
+        plt.show()
+
+    return axes_list[0] if len(axes_list) == 1 else axes_list
+
+
+# Short alias for consistency with bin-level workflows
+spatial_bin = spatial_squarebin
 
 def mark_region(
     ax: plt.Axes,

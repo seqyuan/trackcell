@@ -235,6 +235,35 @@ Facet-specific parameters:
 * ``edges_width``: Cell boundary width (default 0.3)
 * ``edges_color``: Cell boundary color (default ``'#cccccc30'``)
 
+Square-bin visualization
+------------------------
+
+For Visium HD square-bin outputs loaded with ``read_hd_bin()``, use
+``spatial_squarebin()``:
+
+.. code-block:: python
+
+   adata_bin = tcl.io.read_hd_bin(
+       datapath="SpaceRanger4.0/Cse1/binned_outputs/square_016um",
+       sample="Cse1",
+       binsize=16,
+   )
+
+   # Show H&E image only, with coordinate range
+   tcl.pl.spatial_squarebin(adata_bin, color=None)
+
+   # Equivalent alias
+   tcl.pl.spatial_bin(adata_bin, color=None)
+
+   # Plot gene expression on square bins
+   tcl.pl.spatial_squarebin(
+       adata_bin,
+       color="EPCAM",
+       cmap="Reds",
+       alpha=0.8,
+       alpha_img=0.4,
+   )
+
 Compatibility with sc.pl.spatial
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
