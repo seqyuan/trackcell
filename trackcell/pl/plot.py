@@ -826,9 +826,13 @@ def spatial_cell(
         # Process and draw background image (scanpy way)
         img, img_extent = _process_background_image(spatial_info, img_key, data_coords_range)
         if img is not None and img_extent is not None:
-            # If color is None, use full opacity for the image
-            img_alpha = 1.0 if color_key is None else alpha_img
-            current_ax.imshow(img, extent=img_extent, origin='upper', alpha=img_alpha)
+            if color_key is None:
+                if invert_y:
+                    current_ax.imshow(img, extent=img_extent, origin='upper', alpha=1.0)
+                else:
+                    current_ax.imshow(img[::-1], extent=img_extent, origin='upper', alpha=1.0)
+            else:
+                current_ax.imshow(img, extent=img_extent, origin='upper', alpha=alpha_img)
         
         # If color is None, skip geometry plotting and only show HE image
         if color_key is None:
@@ -849,8 +853,9 @@ def spatial_cell(
             
             # Set axis properties
             current_ax.set_aspect('equal')
-            if invert_y:
-                current_ax.invert_yaxis()  # Match image coordinates
+            # invert_yaxis() is intentionally NOT called here:
+            # set_ylim(h, 0) with origin='upper' already produces image convention;
+            # for Cartesian (invert_y=False) the image was pre-flipped via img[::-1].
             
             # Set axis labels
             if xlabel is not None:
@@ -1460,8 +1465,13 @@ def spatial_squarebin(
 
         img, img_extent = _process_background_image(spatial_info, img_key)
         if img is not None and img_extent is not None:
-            img_alpha_use = 1.0 if color_key is None else alpha_img
-            current_ax.imshow(img, extent=img_extent, origin='upper', alpha=img_alpha_use)
+            if color_key is None:
+                if invert_y:
+                    current_ax.imshow(img, extent=img_extent, origin='upper', alpha=1.0)
+                else:
+                    current_ax.imshow(img[::-1], extent=img_extent, origin='upper', alpha=1.0)
+            else:
+                current_ax.imshow(img, extent=img_extent, origin='upper', alpha=alpha_img)
 
         if color_key is None:
             if img is not None and img_extent is not None:
@@ -1469,7 +1479,6 @@ def spatial_squarebin(
                 current_ax.set_aspect('equal')
                 if invert_y:
                     current_ax.set_ylim(img_extent[2], img_extent[3])
-                    current_ax.invert_yaxis()
                 else:
                     current_ax.set_ylim(img_extent[3], img_extent[2])
                 if xlabel is not None:
@@ -1576,7 +1585,7 @@ def mark_region(
     >>> tcl.pl.mark_region(ax, xlim=(54500, 56000), ylim=(15000, 16000), 
     ...                    edges_color='blue', edges_width=2.0)
     """
-    from matplotlib.patches import Rectangle, Circle
+    from matplotlib.patches import Rectangle
     
     # Get current axis limits if xlim/ylim are not provided
     if xlim is None:

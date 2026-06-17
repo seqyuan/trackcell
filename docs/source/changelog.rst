@@ -1,6 +1,24 @@
 Changelog
 =========
 
+Version 0.3.21
+--------------
+
+* **Fixed ``invert_y`` not working when ``color=None``**:
+  * Root cause: ``set_ylim(h, 0)`` already produces image convention with ``origin='upper'``;
+    the subsequent ``invert_yaxis()`` call double-inverted the y-axis, making both
+    ``invert_y=True`` and ``invert_y=False`` visually identical.
+  * Fix: removed the redundant ``invert_yaxis()`` from both ``spatial_cell`` and
+    ``spatial_squarebin`` color-None code paths.
+  * For ``invert_y=False`` (Cartesian), the H&E image is now pre-flipped via ``img[::-1]``
+    before ``imshow()`` to keep it right-side-up.
+
+* **Cleaned up ``mark_region``**:
+  * Removed unused ``Circle`` import inside the function body.
+  * Added comprehensive documentation to the user guide with usage examples
+    for both ``spatial_cell`` and ``spatial_squarebin``.
+  * Documented coordinate convention behavior with ``invert_y``.
+
 Version 0.3.20
 --------------
 
