@@ -292,25 +292,24 @@ useful for annotating regions of interest (ROI) in figures.  It works with
 ``spatial_cell``, ``spatial_squarebin``, ``sc.pl.spatial``, and any
 matplotlib ``Axes``.
 
-.. important::
-
-   When using ``mark_region`` with ``spatial_cell`` or ``spatial_squarebin``,
-   always pass ``ax=ax`` and ``show=False`` to the plotting function so you
-   control when the figure is displayed:
-
-   .. code-block:: python
-
-      fig, ax = plt.subplots(figsize=(10, 10))
-      tcl.pl.spatial_cell(adata, color="CellType", ax=ax, show=False)
-      tcl.pl.mark_region(ax, xlim=(54500, 56000), ylim=(15000, 16000))
-      plt.show()
-
-Basic usage with ``spatial_cell``:
+By default, ``mark_region`` calls ``plt.show()`` automatically (``show=True``),
+so the simplest usage works out of the box:
 
 .. code-block:: python
 
    import trackcell as tcl
+
+   # spatial_cell returns ax even when show=True
+   ax = tcl.pl.spatial_cell(adata, color="CellType")
+   tcl.pl.mark_region(ax, xlim=(54500, 56000), ylim=(15000, 16000))
+
+For full control over display timing, use ``show=False`` and call
+``plt.show()`` manually:
+
+.. code-block:: python
+
    import matplotlib.pyplot as plt
+   import trackcell as tcl
 
    fig, ax = plt.subplots(figsize=(10, 10))
    tcl.pl.spatial_cell(adata, color="CellType", ax=ax, show=False)
@@ -319,7 +318,8 @@ Basic usage with ``spatial_cell``:
        xlim=(54500, 56000),
        ylim=(15000, 16000),
        edges_color='red',
-       edges_width=2.0
+       edges_width=2.0,
+       show=False           # defer display
    )
    plt.show()
 
@@ -335,7 +335,8 @@ With ``spatial_squarebin()`` (Visium HD):
        xlim=(3000, 5000),
        ylim=(2000, 4000),
        edges_color='cyan',
-       edges_width=2.0
+       edges_width=2.0,
+       show=False           # defer display
    )
    plt.show()
 
@@ -349,7 +350,8 @@ Filled regions for better visibility against H&E backgrounds:
        ylim=(15000, 16000),
        fill_color='red',      # semi-transparent fill
        fill_alpha=0.15,        # fill opacity
-       edges_width=3.0
+       edges_width=3.0,
+       show=False              # defer display
    )
 
 Marking multiple regions efficiently (suppress intermediate refreshes):
@@ -357,12 +359,14 @@ Marking multiple regions efficiently (suppress intermediate refreshes):
 .. code-block:: python
 
    tcl.pl.mark_region(ax, xlim=(40000, 42000), ylim=(5000, 7000),
-                      edges_color='cyan', fill_color='cyan', refresh=False)
+                      edges_color='cyan', fill_color='cyan',
+                      refresh=False, show=False)
    tcl.pl.mark_region(ax, xlim=(55000, 57000), ylim=(15000, 17000),
-                      edges_color='yellow', fill_color='yellow', refresh=False)
+                      edges_color='yellow', fill_color='yellow',
+                      refresh=False, show=False)
    tcl.pl.mark_region(ax, xlim=(60000, 62000), ylim=(10000, 12000),
-                      edges_color='magenta', fill_color='magenta')  # refresh=True
-   plt.show()
+                      edges_color='magenta', fill_color='magenta')
+   # plt.show() is called by the last mark_region (show=True by default)
 
 Key parameters:
 
@@ -378,6 +382,9 @@ Key parameters:
 * ``refresh``: Whether to call ``ax.figure.canvas.draw_idle()`` after adding
   the rectangle (default ``True``). Set to ``False`` when adding multiple
   regions before a single refresh.
+* ``show``: Whether to call ``plt.show()`` after adding the rectangle
+  (default ``True``). Set to ``False`` when chaining multiple ``mark_region``
+  calls or when you want to call ``plt.show()`` manually.
 
 .. note::
 

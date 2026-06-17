@@ -1546,6 +1546,7 @@ def mark_region(
     fill_alpha: float = 0.15,
     zorder: int = 100,
     refresh: bool = True,
+    show: bool = True,
 ):
     """
     Mark a rectangular region on a spatial plot by drawing a rectangle.
@@ -1581,6 +1582,10 @@ def mark_region(
         If True, calls ``ax.figure.canvas.draw_idle()`` to update the display
         after adding the rectangle. Set to False when adding multiple regions
         before a single refresh.
+    show : bool, default True
+        Whether to display the figure via ``plt.show()``. Set to ``False``
+        when you want to defer display (e.g., when adding multiple regions
+        or calling ``plt.show()`` manually).
 
     Returns
     -------
@@ -1590,15 +1595,13 @@ def mark_region(
     Examples
     --------
     >>> import trackcell as tcl
-    >>> import matplotlib.pyplot as plt
     >>>
-    >>> # Important: pass ax=ax and show=False to spatial_cell
-    >>> fig, ax = plt.subplots(figsize=(10, 10))
-    >>> tcl.pl.spatial_cell(adata, color="CellType", ax=ax, show=False)
+    >>> # Simplest usage: mark_region auto-shows by default
+    >>> # (spatial_cell returns ax even when show=True)
+    >>> ax = tcl.pl.spatial_cell(adata, color="CellType")
     >>> tcl.pl.mark_region(ax, xlim=(54500, 56000), ylim=(15000, 16000))
-    >>> plt.show()
     >>>
-    >>> # With fill for better visibility against H&E
+    >>> # For full control, use show=False in both functions
     >>> fig, ax = plt.subplots(figsize=(10, 10))
     >>> tcl.pl.spatial_cell(adata, color="CellType", ax=ax, show=False)
     >>> tcl.pl.mark_region(
@@ -1612,12 +1615,14 @@ def mark_region(
     >>> fig, ax = plt.subplots(figsize=(10, 10))
     >>> tcl.pl.spatial_cell(adata, color="CellType", ax=ax, show=False)
     >>> tcl.pl.mark_region(ax, xlim=(40000, 42000), ylim=(5000, 7000),
-    ...                    edges_color='cyan', fill_color='cyan', refresh=False)
+    ...                    edges_color='cyan', fill_color='cyan',
+    ...                    refresh=False, show=False)
     >>> tcl.pl.mark_region(ax, xlim=(55000, 57000), ylim=(15000, 17000),
-    ...                    edges_color='yellow', fill_color='yellow', refresh=False)
+    ...                    edges_color='yellow', fill_color='yellow',
+    ...                    refresh=False, show=False)
     >>> tcl.pl.mark_region(ax, xlim=(60000, 62000), ylim=(10000, 12000),
     ...                    edges_color='magenta', fill_color='magenta')
-    >>> plt.show()
+    >>> # plt.show() is called by the last mark_region (show=True)
     """
     from matplotlib.patches import Rectangle
 
@@ -1657,8 +1662,12 @@ def mark_region(
     # Add rectangle to axes
     ax.add_patch(rect)
 
-    # Refresh the display
+    # Refresh the display (for interactive backends)
     if refresh and ax.figure is not None:
         ax.figure.canvas.draw_idle()
+
+    # Auto-show the figure so the rectangle is visible
+    if show and ax.figure is not None:
+        plt.show()
 
     return rect

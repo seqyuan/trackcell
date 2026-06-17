@@ -1,6 +1,34 @@
 Changelog
 =========
 
+Version 0.3.23
+--------------
+
+* **Added ``show`` parameter to ``mark_region``**:
+
+  * ``show=True`` (default) now calls ``plt.show()`` automatically after adding
+    the rectangle, so ``mark_region`` works out of the box without requiring
+    ``show=False`` in the plotting function and a manual ``plt.show()``.
+
+  * Set ``show=False`` to defer display when chaining multiple ``mark_region``
+    calls or when calling ``plt.show()`` manually.
+
+  * **Motivation**: The previous workflow required ``show=False``,
+    ``ax=ax``, and ``plt.show()`` — a pattern many users overlooked, causing
+    the rectangle to appear invisible.  Now the simplest usage works:
+
+    .. code-block:: python
+
+       ax = tcl.pl.spatial_cell(adata, color="CellType")
+       tcl.pl.mark_region(ax, xlim=(54500, 56000), ylim=(15000, 16000))
+
+* **Updated documentation**:
+
+  * Simplified ``mark_region`` examples in the user guide to showcase the new
+    default-behavior workflow
+  * Documented the new ``show`` parameter in both the docstring and the
+    visualization guide
+
 Version 0.3.22
 --------------
 
