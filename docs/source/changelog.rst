@@ -1,4 +1,13 @@
 Changelog
+
+Version 0.3.25
+--------------
+
+* **Fix PyPI auto-publish**: update pyproject.toml version to match __init__.py
+  so poetry build produces correct package version.
+* **Fix workflow**: username → user for pypa/gh-action-pypi-publish >= v1.12.
+
+
 =========
 
 Version 0.3.24
