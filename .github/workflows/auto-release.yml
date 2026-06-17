@@ -97,6 +97,16 @@ jobs:
       - name: Build package
         run: poetry build
 
+      - name: Verify version consistency
+        run: |
+          PYPROJ_VERSION=$(grep 'version = "' pyproject.toml | head -1 | sed 's/.*"\(.*\)".*/\1/')
+          INIT_VERSION=$(grep '__version__' trackcell/__init__.py | sed 's/.*"\(.*\)".*/\1/')
+          if [ "$PYPROJ_VERSION" != "$INIT_VERSION" ]; then
+            echo "ERROR: pyproject.toml version ($PYPROJ_VERSION) != __init__.py version ($INIT_VERSION)"
+            exit 1
+          fi
+          echo "Versions consistent: $PYPROJ_VERSION"
+
       - name: Publish to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
