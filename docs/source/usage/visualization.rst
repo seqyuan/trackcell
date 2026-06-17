@@ -284,6 +284,70 @@ individual gene subplots. The blend mode hex colors work best with trackcell's
 ``spatial_cell`` polygon rendering.
 
 
+Marking Regions
+---------------
+
+The ``mark_region()`` function draws a rectangular highlight on any spatial plot,
+useful for annotating regions of interest (ROI) in figures.
+
+.. code-block:: python
+
+   import trackcell as tcl
+   import matplotlib.pyplot as plt
+
+   # Step 1: Create the spatial plot
+   fig, ax = plt.subplots(figsize=(10, 10))
+   tcl.pl.spatial_cell(adata, color="CellType", ax=ax)
+
+   # Step 2: Mark a region of interest
+   tcl.pl.mark_region(
+       ax,
+       xlim=(54500, 56000),
+       ylim=(15000, 16000),
+       edges_color='red',
+       edges_width=1.5
+   )
+
+With ``spatial_squarebin()`` (Visium HD):
+
+.. code-block:: python
+
+   fig, ax = plt.subplots(figsize=(10, 10))
+   tcl.pl.spatial_squarebin(adata, color="GeneA", ax=ax)
+
+   tcl.pl.mark_region(
+       ax,
+       xlim=(3000, 5000),
+       ylim=(2000, 4000),
+       edges_color='cyan',
+       edges_width=2.0
+   )
+
+Key parameters:
+
+* ``ax``: The matplotlib Axes to annotate (required).
+* ``xlim``: ``(x_min, x_max)`` tuple for the region. If ``None``, uses the current x-axis limits.
+* ``ylim``: ``(y_min, y_max)`` tuple for the region. If ``None``, uses the current y-axis limits.
+* ``edges_color``: Rectangle edge color (default ``'red'``).
+* ``edges_width``: Rectangle edge line width (default ``1.0``).
+
+.. note::
+
+   When using the default ``invert_y=True`` (image coordinates), ``ylim=(a, b)``
+   marks the region from ``y=a`` (higher on the H&E image) to ``y=b`` (lower).
+   The function reads the current axis limits with ``ax.get_ylim()``, so it
+   works correctly regardless of the ``invert_y`` setting.
+
+The function returns the ``matplotlib.patches.Rectangle`` object, which can be
+further customized or removed later:
+
+.. code-block:: python
+
+   rect = tcl.pl.mark_region(ax, xlim=(1000, 2000), ylim=(3000, 4000))
+   rect.set_linestyle('--')  # Make it dashed
+   rect.set_linewidth(3.0)
+
+
 Performance Optimization for Large Datasets
 --------------------------------------------
 
