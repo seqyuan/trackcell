@@ -166,6 +166,14 @@ Both legends are automatically generated:
 * **Fill**: colorbar (continuous) or legend (categorical), positioned on the right
 * **Edge**: categorical legend, positioned below the plot
 
+.. important::
+
+   **Boundary overlap behavior**: Adjacent cells share edges.  When ``edge_color``
+   uses a categorical column, overlapping edges are drawn by category order —
+   the **last-drawn** category determines the visible edge colour at shared
+   boundaries.  This is a cosmetic rendering artefact and does not affect the
+   underlying data.
+
 
 Multi-Gene Visualization (cell2location-style)
 -----------------------------------------------
@@ -403,107 +411,138 @@ further customized or removed later:
    rect.set_linewidth(3.0)
 
 
-Interactive ROI Selection (napari)
-----------------------------------
+Interactive ROI Selection (Jupyter / matplotlib)
+--------------------------------------------------
 
-TrackCell provides napari-based interactive region-of-interest selection
-via :func:`tcl.pl.select_regions`.  This lets you draw rectangles or
-freehand polygons directly on a napari viewer, then automatically extract
-all cells whose boundaries intersect each ROI.
+TrackCell provides notebook-native interactive region-of-interest selection via
+:func:`tcl.pl.select_regions`.  The backend uses **matplotlib widgets / ipympl**
+instead of napari, avoiding Qt event-loop crashes in Jupyter.
 
 .. important::
 
-   ``napari`` must be installed separately:
-   ``pip install 'trackcell[napari]'``
+   In Jupyter Notebook / JupyterLab, run this **before** calling the selector:
 
-Quick start — one-shot work flow
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   .. code-block:: python
+
+      %matplotlib widget
+
+   ``ipympl`` is installed with TrackCell.  If your environment lacks it, run
+   ``pip install ipympl``.
+
+Quick start
+^^^^^^^^^^^
 
 .. code-block:: python
 
    import trackcell as tcl
 
-   # Draw rectangles (press Enter to finish)
-   rois = tcl.pl.select_regions(
+   selector = tcl.pl.select_regions(
        adata,
-       color="CellType",          # colour cell centroids
-       shape_type="any",          # rectangle / polygon / free / any
-       copy=True,                 # return dict, don't modify adata
+       color="CellType",
+       key_added="ROI",
+       inplace=True,           # write adata.obs["ROI"] after each ROI
    )
-   print(rois.keys())            # dict_keys(['ROI_1', 'ROI_2', ...])
 
-   # Store in adata.obs (in-place)
-   tcl.pl.select_regions(
-       adata,
-       color="PDPN",
-       key_added="ROI_PDPN",
-       copy=False,                 # default
-   )
-   # adata.obs["ROI_PDPN"] now contains ROI labels
+   # Draw ROIs interactively.  While the figure has focus:
+   #   r = rectangle    e = ellipse    l = lasso
+   #
+   # After each ROI you'll be prompted for a name (press Enter for auto-name).
+   #
+   # Results are available immediately:
+   selector.rois
+   adata.obs["ROI"].value_counts(dropna=False)
 
-Advanced — two‑step work flow
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Keyboard shortcuts
+^^^^^^^^^^^^^^^^^^
 
-For more control (e.g. adding extra layers, annotating in detail),
-use :func:`tcl.pl.napari_view` together with
-:func:`tcl.pl.napari_extract`:
+While the figure has focus, press:
+
+* ``r`` — rectangle selector
+* ``e`` — ellipse / circle selector
+* ``l`` — lasso / freehand selector
+
+ROI naming
+^^^^^^^^^^
+
+After drawing each ROI you will see an ``input()`` prompt:
+
+.. code-block:: text
+
+   ROI name (press Enter for 'ROI_1'):
+
+* Type a custom name (e.g. ``tumor_region``) and press Enter.
+* Press Enter without typing to accept the auto-generated name (``ROI_1``,
+  ``ROI_2``, …).
+
+Returned object
+^^^^^^^^^^^^^^^
+
+:func:`tcl.pl.select_regions` returns a ``RegionSelector`` controller:
 
 .. code-block:: python
 
-   # Step 1 — open viewer
-   viewer = tcl.pl.napari_view(adata, color="CellType")
+   selector.rois        # dict: ROI name -> observation IDs
+   selector.polygons    # dict: ROI name -> ROI vertices
+   selector.save()      # write / rewrite adata.obs[key_added]
+   selector.clear()     # remove all ROIs and visual patches
+   selector.disconnect()
 
-   # …  interact with napari, add a Shapes layer named "ROI regions",
-   #    draw your regions of interest …
+With ``inplace=False``, use ``selector.to_adata()`` to get an ``AnnData`` copy:
 
-   # Step 2 — extract
-   tcl.pl.napari_extract(adata, viewer, shapes_layer="ROI regions",
-                         key_added="ROI")
-   viewer.close()
+.. code-block:: python
+
+   selector = tcl.pl.select_regions(adata, inplace=False)
+   adata_with_rois = selector.to_adata()
+   adata_with_rois.obs["ROI"].value_counts()
 
 Squarebin data
 ^^^^^^^^^^^^^^
 
-For squarebin data (e.g. Visium HD bin-level), set ``mode="squarebin"``
-or let it auto-detect:
+For squarebin data (e.g. Visium HD bin-level), set ``mode="squarebin"`` or let
+TrackCell auto-detect it.  Bin centroids from ``adata.obsm[basis]`` are tested
+against each ROI polygon.
 
 .. code-block:: python
 
-   import trackcell as tcl
-
-   # Squarebin — auto-detected when no cell geometries present
-   rois = tcl.pl.select_regions(
-       adata_bins,
-       color="gene_of_interest",
-       shape_type="polygon",
-       copy=True,
-   )
-   # adata_bins.obsm['spatial'] is used for bin centroids
-
-   # Explicit squarebin with custom basis key
-   tcl.pl.select_regions(
+   selector = tcl.pl.select_regions(
        adata_bins,
        mode="squarebin",
-       basis="spatial",          # default
+       basis="spatial",
+       color="gene_of_interest",
        key_added="ROI_bins",
+   )
+
+Cellbin data
+^^^^^^^^^^^^
+
+For cellbin data, cell geometries are used and cells are selected when their
+geometry intersects the ROI polygon.
+
+.. code-block:: python
+
+   selector = tcl.pl.select_regions(
+       adata_cell,
+       mode="cellbin",
+       color="CellType",
+       key_added="ROI_cell",
    )
 
 Key parameters for :func:`tcl.pl.select_regions`
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-* ``color`` — column in ``adata.obs`` (metadata) or gene in
-  ``adata.var_names`` to colour cell centroids.
+* ``color`` — column in ``adata.obs`` or gene in ``adata.var_names`` to colour
+  the spatial plot.
 * ``mode`` — ``"auto"`` (default), ``"cellbin"``, or ``"squarebin"``.
-* ``basis`` — key in ``adata.obsm`` for squarebin coordinates (default ``"spatial"``).
-* ``shape_type`` — ``"rectangle"``, ``"polygon"``, ``"free"`` (freehand),
-  or ``"any"`` (all four).
-* ``copy`` — ``False`` (default) stores results in
-  ``adata.obs[key_added]``; ``True`` returns a ``dict`` without
-  modifying ``adata``.
-* ``key_added`` — column name in ``adata.obs`` when ``copy=False``
-  (default ``"ROI"``).
-* ``point_size`` — size of centroid dots in napari (default ``5.0``).
-* ``cmap`` / ``palette`` — colormap/palette for ``color``.
+* ``basis`` — key in ``adata.obsm`` for squarebin coordinates (default
+  ``"spatial"``).
+* ``key_added`` — column name in ``adata.obs`` for ROI labels.
+* ``inplace`` — ``True`` (default) writes labels to ``adata.obs[key_added]``
+  after each selection; ``False`` stores results only on the ``RegionSelector``
+  — use ``selector.to_adata()`` to get a copy.
+* ``invert_y`` — default ``True`` to match image/spatial coordinates where y
+  increases from top to bottom.
+* Extra keyword arguments are forwarded to ``spatial_cell`` or
+  ``spatial_squarebin``.
 
 Performance Optimization for Large Datasets
 --------------------------------------------

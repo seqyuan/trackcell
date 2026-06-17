@@ -43,8 +43,8 @@
 - 遵循现有代码风格（类型注解、docstring）
 - 新功能需更新 `docs/source/usage/` 下的对应文档
 
-## napari 模块
+## 交互式 ROI 选择
 
-- `trackcell/pl/napari.py` 依赖 napari，通过 `__getattr__` 懒加载
-- napari 作为可选依赖：`pip install 'trackcell[napari]'`
-- 修改 napari 模块后需确认 `trackcell/pl/__init__.py` 中的 `__getattr__` 覆盖了新函数名
+- `tcl.pl.select_regions` 已弃用 napari/Qt，改用 `trackcell/pl/select.py` 中的 matplotlib widgets / ipympl 实现。
+- Notebook 使用前建议运行 `%matplotlib widget`。
+- 修改 ROI 选择逻辑后需同步更新 `docs/source/usage/visualization.rst`。

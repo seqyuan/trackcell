@@ -1,5 +1,26 @@
 Changelog
 
+Version 0.3.28
+--------------
+
+* **Replace napari ROI selection with Jupyter-native matplotlib selector**:
+
+  * ``tcl.pl.select_regions`` keeps the original function name but now uses
+    matplotlib widgets / ipympl instead of napari/Qt.
+  * Keyboard-toggle between all shape modes: ``r``=rectangle, ``e``=ellipse,
+    ``l``=lasso — no ``shape_type`` parameter needed.
+  * Interactive ROI naming via ``input()`` after each selection
+    (auto-generates ``ROI_1``, ``ROI_2``, … on empty input).
+  * ``inplace`` parameter replaces ``copy`` (scanpy convention):
+    ``inplace=True`` (default) writes to ``adata.obs``;
+    ``inplace=False`` → use ``selector.to_adata()``.
+  * Supports both cellbin geometry intersection and squarebin centroid selection.
+  * Returns a ``RegionSelector`` controller with ``rois``, ``polygons``,
+    ``save()``, ``clear()``, ``to_adata()``, and ``disconnect()``.
+  * Removes napari from public plotting API and package dependencies.
+
+
+
 Version 0.3.27
 --------------
 
