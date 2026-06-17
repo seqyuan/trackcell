@@ -1,6 +1,16 @@
 Changelog
 =========
 
+Version 0.3.24
+--------------
+
+* **Added napari-based interactive ROI selection**:
+
+  * New module ``trackcell.pl.napari`` with three public functions.
+  * Supports rectangle, polygon, freehand, and any shape.
+  * ``copy`` parameter for in-place vs. dict return.
+  * napari is an optional extra (``pip install 'trackcell[napari]'``).
+
 Version 0.3.23
 --------------
 

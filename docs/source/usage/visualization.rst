@@ -402,6 +402,80 @@ further customized or removed later:
    rect.set_linestyle('--')  # Make it dashed
    rect.set_linewidth(3.0)
 
+
+Interactive ROI Selection (napari)
+----------------------------------
+
+TrackCell provides napari-based interactive region-of-interest selection
+via :func:`tcl.pl.select_regions`.  This lets you draw rectangles or
+freehand polygons directly on a napari viewer, then automatically extract
+all cells whose boundaries intersect each ROI.
+
+.. important::
+
+   ``napari`` must be installed separately:
+   ``pip install 'trackcell[napari]'``
+
+Quick start — one-shot work flow
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+.. code-block:: python
+
+   import trackcell as tcl
+
+   # Draw rectangles (press Enter to finish)
+   rois = tcl.pl.select_regions(
+       adata,
+       color="CellType",          # colour cell centroids
+       shape_type="any",          # rectangle / polygon / free / any
+       copy=True,                 # return dict, don't modify adata
+   )
+   print(rois.keys())            # dict_keys(['ROI_1', 'ROI_2', ...])
+
+   # Store in adata.obs (in-place)
+   tcl.pl.select_regions(
+       adata,
+       color="PDPN",
+       key_added="ROI_PDPN",
+       copy=False,                 # default
+   )
+   # adata.obs["ROI_PDPN"] now contains ROI labels
+
+Advanced — two‑step work flow
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+For more control (e.g. adding extra layers, annotating in detail),
+use :func:`tcl.pl.napari_view` together with
+:func:`tcl.pl.napari_extract`:
+
+.. code-block:: python
+
+   # Step 1 — open viewer
+   viewer = tcl.pl.napari_view(adata, color="CellType")
+
+   # …  interact with napari, add a Shapes layer named "ROI regions",
+   #    draw your regions of interest …
+
+   # Step 2 — extract
+   tcl.pl.napari_extract(adata, viewer, shapes_layer="ROI regions",
+                         key_added="ROI")
+   viewer.close()
+
+Key parameters for :func:`tcl.pl.select_regions`
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+* ``color`` — column in ``adata.obs`` (metadata) or gene in
+  ``adata.var_names`` to colour cell centroids.
+* ``shape_type`` — ``"rectangle"``, ``"polygon"``, ``"free"`` (freehand),
+  or ``"any"`` (all four).
+* ``copy`` — ``False`` (default) stores results in
+  ``adata.obs[key_added]``; ``True`` returns a ``dict`` without
+  modifying ``adata``.
+* ``key_added`` — column name in ``adata.obs`` when ``copy=False``
+  (default ``"ROI"``).
+* ``point_size`` — size of centroid dots in napari (default ``5.0``).
+* ``cmap`` / ``palette`` — colormap/palette for ``color``.
+
 Performance Optimization for Large Datasets
 --------------------------------------------
 
