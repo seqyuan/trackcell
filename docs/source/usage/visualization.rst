@@ -288,32 +288,47 @@ Marking Regions
 ---------------
 
 The ``mark_region()`` function draws a rectangular highlight on any spatial plot,
-useful for annotating regions of interest (ROI) in figures.
+useful for annotating regions of interest (ROI) in figures.  It works with
+``spatial_cell``, ``spatial_squarebin``, ``sc.pl.spatial``, and any
+matplotlib ``Axes``.
+
+.. important::
+
+   When using ``mark_region`` with ``spatial_cell`` or ``spatial_squarebin``,
+   always pass ``ax=ax`` and ``show=False`` to the plotting function so you
+   control when the figure is displayed:
+
+   .. code-block:: python
+
+      fig, ax = plt.subplots(figsize=(10, 10))
+      tcl.pl.spatial_cell(adata, color="CellType", ax=ax, show=False)
+      tcl.pl.mark_region(ax, xlim=(54500, 56000), ylim=(15000, 16000))
+      plt.show()
+
+Basic usage with ``spatial_cell``:
 
 .. code-block:: python
 
    import trackcell as tcl
    import matplotlib.pyplot as plt
 
-   # Step 1: Create the spatial plot
    fig, ax = plt.subplots(figsize=(10, 10))
-   tcl.pl.spatial_cell(adata, color="CellType", ax=ax)
-
-   # Step 2: Mark a region of interest
+   tcl.pl.spatial_cell(adata, color="CellType", ax=ax, show=False)
    tcl.pl.mark_region(
        ax,
        xlim=(54500, 56000),
        ylim=(15000, 16000),
        edges_color='red',
-       edges_width=1.5
+       edges_width=2.0
    )
+   plt.show()
 
 With ``spatial_squarebin()`` (Visium HD):
 
 .. code-block:: python
 
    fig, ax = plt.subplots(figsize=(10, 10))
-   tcl.pl.spatial_squarebin(adata, color="GeneA", ax=ax)
+   tcl.pl.spatial_squarebin(adata, color="GeneA", ax=ax, show=False)
 
    tcl.pl.mark_region(
        ax,
@@ -322,21 +337,54 @@ With ``spatial_squarebin()`` (Visium HD):
        edges_color='cyan',
        edges_width=2.0
    )
+   plt.show()
+
+Filled regions for better visibility against H&E backgrounds:
+
+.. code-block:: python
+
+   tcl.pl.mark_region(
+       ax,
+       xlim=(54500, 56000),
+       ylim=(15000, 16000),
+       fill_color='red',      # semi-transparent fill
+       fill_alpha=0.15,        # fill opacity
+       edges_width=3.0
+   )
+
+Marking multiple regions efficiently (suppress intermediate refreshes):
+
+.. code-block:: python
+
+   tcl.pl.mark_region(ax, xlim=(40000, 42000), ylim=(5000, 7000),
+                      edges_color='cyan', fill_color='cyan', refresh=False)
+   tcl.pl.mark_region(ax, xlim=(55000, 57000), ylim=(15000, 17000),
+                      edges_color='yellow', fill_color='yellow', refresh=False)
+   tcl.pl.mark_region(ax, xlim=(60000, 62000), ylim=(10000, 12000),
+                      edges_color='magenta', fill_color='magenta')  # refresh=True
+   plt.show()
 
 Key parameters:
 
-* ``ax``: The matplotlib Axes to annotate (required).
+* ``ax``: The matplotlib ``Axes`` to annotate (required).
 * ``xlim``: ``(x_min, x_max)`` tuple for the region. If ``None``, uses the current x-axis limits.
 * ``ylim``: ``(y_min, y_max)`` tuple for the region. If ``None``, uses the current y-axis limits.
 * ``edges_color``: Rectangle edge color (default ``'red'``).
-* ``edges_width``: Rectangle edge line width (default ``1.0``).
+* ``edges_width``: Rectangle edge line width (default ``2.0``).
+* ``fill_color``: Optional fill color with ``fill_alpha`` opacity (default ``None``).
+* ``fill_alpha``: Fill opacity when ``fill_color`` is set (default ``0.15``).
+* ``zorder``: Z-order for rendering (default ``100``). Ensures the rectangle is
+  drawn on top of all other plot elements.
+* ``refresh``: Whether to call ``ax.figure.canvas.draw_idle()`` after adding
+  the rectangle (default ``True``). Set to ``False`` when adding multiple
+  regions before a single refresh.
 
 .. note::
 
-   When using the default ``invert_y=True`` (image coordinates), ``ylim=(a, b)``
-   marks the region from ``y=a`` (higher on the H&E image) to ``y=b`` (lower).
-   The function reads the current axis limits with ``ax.get_ylim()``, so it
-   works correctly regardless of the ``invert_y`` setting.
+   When the y-axis is inverted (``invert_y=True``, the default), ``ax.get_ylim()``
+   returns ``(bottom, top)`` with ``bottom > top``.  ``mark_region`` normalizes
+   these limits so the ``Rectangle`` always has positive dimensions, ensuring
+   robust rendering across all matplotlib backends.
 
 The function returns the ``matplotlib.patches.Rectangle`` object, which can be
 further customized or removed later:
@@ -346,7 +394,6 @@ further customized or removed later:
    rect = tcl.pl.mark_region(ax, xlim=(1000, 2000), ylim=(3000, 4000))
    rect.set_linestyle('--')  # Make it dashed
    rect.set_linewidth(3.0)
-
 
 Performance Optimization for Large Datasets
 --------------------------------------------
