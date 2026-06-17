@@ -461,11 +461,40 @@ use :func:`tcl.pl.napari_view` together with
                          key_added="ROI")
    viewer.close()
 
+Squarebin data
+^^^^^^^^^^^^^^
+
+For squarebin data (e.g. Visium HD bin-level), set ``mode="squarebin"``
+or let it auto-detect:
+
+.. code-block:: python
+
+   import trackcell as tcl
+
+   # Squarebin — auto-detected when no cell geometries present
+   rois = tcl.pl.select_regions(
+       adata_bins,
+       color="gene_of_interest",
+       shape_type="polygon",
+       copy=True,
+   )
+   # adata_bins.obsm['spatial'] is used for bin centroids
+
+   # Explicit squarebin with custom basis key
+   tcl.pl.select_regions(
+       adata_bins,
+       mode="squarebin",
+       basis="spatial",          # default
+       key_added="ROI_bins",
+   )
+
 Key parameters for :func:`tcl.pl.select_regions`
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 * ``color`` — column in ``adata.obs`` (metadata) or gene in
   ``adata.var_names`` to colour cell centroids.
+* ``mode`` — ``"auto"`` (default), ``"cellbin"``, or ``"squarebin"``.
+* ``basis`` — key in ``adata.obsm`` for squarebin coordinates (default ``"spatial"``).
 * ``shape_type`` — ``"rectangle"``, ``"polygon"``, ``"free"`` (freehand),
   or ``"any"`` (all four).
 * ``copy`` — ``False`` (default) stores results in

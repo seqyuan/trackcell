@@ -1,5 +1,17 @@
 Changelog
 
+Version 0.3.26
+--------------
+
+* **napari ROI selection now supports squarebin data**:
+
+  * New ``mode`` parameter (``"auto"`` / ``"cellbin"`` / ``"squarebin"``).
+  * New ``basis`` parameter for squarebin coordinate key in ``adata.obsm``.
+  * Auto-detection: cellbin if geometries found, squarebin otherwise.
+  * Squarebin extraction uses point-in-polygon (``Point.within``) on bin centroids.
+
+
+
 Version 0.3.25
 --------------
 

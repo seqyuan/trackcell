@@ -7,7 +7,7 @@ This package provides tools for:
 - TL: Utility and helper functions
 """
 
-__version__ = "0.3.25"
+__version__ = "0.3.26"
 __author__ = "Zan Yuan"
 __email__ = "yfinddream@gmail.com"
 
