@@ -1,5 +1,14 @@
 Changelog
 
+Version 0.3.27
+--------------
+
+* **Fix Jupyter kernel crash in select_regions**: auto-detect Jupyter
+  environment and enable Qt GUI integration (%gui qt) before calling
+  napari.run() to prevent Qt/IPython event loop conflict.
+
+
+
 Version 0.3.26
 --------------
 

@@ -23,6 +23,22 @@ from shapely.geometry import Polygon, Point
 from .plot import _resolve_library_id
 
 
+def _in_jupyter() -> bool:
+    """Return True if running inside a Jupyter notebook / IPython environment."""
+    try:
+        from IPython import get_ipython
+        shell = get_ipython()
+        if shell is None:
+            return False
+        # ZMQInteractiveShell = Jupyter notebook / lab
+        class_name = shell.__class__.__name__
+        return "ZMQ" in class_name or "Shell" in class_name
+    except ImportError:
+        return False
+
+
+
+
 # ---------------------------------------------------------------------------
 # Internal helpers
 # ---------------------------------------------------------------------------
@@ -513,6 +529,12 @@ def select_regions(
         If ``copy=True``: ``{"ROI_1": [cell_id, ...], "ROI_2": [...]}``.
         If ``copy=False``: ``None`` (annotations stored in ``adata.obs``).
 
+    Notes
+    -----
+    **Jupyter notebook / lab**:  Before calling this function, Qt event loop
+    integration is enabled automatically.  If the kernel still restarts, run
+    ``%gui qt`` in a separate cell first, then call ``select_regions``.
+
     Examples
     --------
     Cellbin data:
@@ -626,6 +648,25 @@ def select_regions(
         f"  Press ENTER to finish and extract {label.lower()}s.\n"
         f"{'='*60}\n"
     )
+
+    # --- Start the event loop ---
+    # In Jupyter notebooks, napari.run() conflicts with IPython's event loop
+    # unless %gui qt has been enabled.  Auto-enable it here.
+    if _in_jupyter():
+        try:
+            from IPython import get_ipython
+            shell = get_ipython()
+            if shell is not None:
+                shell.enable_gui("qt")
+        except Exception:
+            pass
+    # Also try %gui qt as a fallback - some IPython versions need this
+    if _in_jupyter():
+        try:
+            from IPython import get_ipython
+            get_ipython().run_line_magic("gui", "qt")
+        except Exception:
+            pass
 
     napari.run()
 
