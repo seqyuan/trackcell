@@ -9,7 +9,7 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 from matplotlib.colors import Normalize, ListedColormap, to_rgba
-from matplotlib.patches import Rectangle
+from matplotlib.patches import Rectangle, Circle
 from matplotlib.collections import PatchCollection
 from matplotlib.cm import ScalarMappable
 from typing import Optional, Union, List, Dict
@@ -411,12 +411,15 @@ def _draw_background_only(ax, spatial_info, img_key, x_min, y_min, x_max, y_max,
     ax.tick_params(axis='both', which='major', labelsize=10)
 
 
-def _plot_squarebin_values(ax, coords, values, square_size, cmap, palette, vmin, vmax, alpha, legend, edges_width, edges_color, na_color, rasterized=False):
+def _plot_squarebin_values(ax, coords, values, square_size, cmap, palette, vmin, vmax, alpha, legend, edges_width, edges_color, na_color, rasterized=False, shape='circle'):
     if len(coords) == 0:
         return None
 
     half = square_size / 2.0
-    patches = [Rectangle((x - half, y - half), square_size, square_size) for x, y in coords]
+    if shape == 'square':
+        patches = [Rectangle((x - half, y - half), square_size, square_size) for x, y in coords]
+    else:
+        patches = [Circle((x, y), radius=half) for x, y in coords]
 
     edgecolor = 'none' if edges_width == 0 else edges_color
 
@@ -1371,10 +1374,11 @@ def spatial_squarebin(
     na_color: str = "#d3d3d3",
     rasterized: bool = False,
     invert_y: bool = True,
+    shape: str = 'circle',
     **kwargs
 ):
     """
-    Plot Visium HD square-bin data as filled squares over an optional H&E image.
+    Plot Visium HD square-bin data as circles (default) or squares over an optional H&E image.
 
     This function is designed for outputs loaded by :func:`trackcell.io.read_hd_bin`.
     It mirrors the user-facing behavior of :func:`spatial_cell` where possible, but
@@ -1411,11 +1415,16 @@ def spatial_squarebin(
         Whether to invert the y-axis so spatial coordinates increase from top to bottom
         (image convention, matching the H&E background). Default ``True``.
         Set to ``False`` to use Cartesian convention (y increases from bottom to top).
+    shape
+        Shape of each bin marker. ``'circle'`` (default) or ``'square'``.
     **kwargs
         Reserved for future extensions. Currently unused.
     """
     if basis not in adata.obsm:
         raise ValueError(f"`adata.obsm['{basis}']` is required but missing.")
+
+    if shape not in ('circle', 'square'):
+        raise ValueError("`shape` must be 'circle' or 'square'.")
 
     library_id = _resolve_library_id(adata, library_id)
     spatial_info = adata.uns['spatial'][library_id]
@@ -1494,6 +1503,7 @@ def spatial_squarebin(
             edges_color=edges_color,
             na_color=na_color,
             rasterized=rasterized,
+            shape=shape,
         )
 
         _apply_spatial_axis_formatting(
@@ -1566,7 +1576,7 @@ def mark_region(
     >>> tcl.pl.mark_region(ax, xlim=(54500, 56000), ylim=(15000, 16000), 
     ...                    edges_color='blue', edges_width=2.0)
     """
-    from matplotlib.patches import Rectangle
+    from matplotlib.patches import Rectangle, Circle
     
     # Get current axis limits if xlim/ylim are not provided
     if xlim is None:
