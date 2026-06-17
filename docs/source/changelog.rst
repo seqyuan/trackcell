@@ -1,6 +1,24 @@
 Changelog
 =========
 
+Version 0.3.22
+--------------
+
+* **Rewrote ``mark_region`` for robustness**:
+  * Fixed invisible rectangle bug on inverted y-axis: normalized negative
+    width/height from ``get_ylim()`` returning ``(bottom, top)`` with ``bottom > top``
+  * Added ``zorder=100`` default to ensure the rectangle always renders on top of cells/bins
+  * Added ``fill_color`` and ``fill_alpha`` parameters for optional semi-transparent fill
+  * Added ``refresh=True`` parameter — calls ``canvas.draw_idle()`` after adding the patch
+    (set ``refresh=False`` for batch marking then manually refresh at end)
+  * Increased ``edges_width`` default from 1.0 to 2.0 for better visibility
+
+* **Updated documentation**:
+  * Added ``.. important::`` admonition about ``ax=ax, show=False`` pattern for ``mark_region``
+  * Added examples for ``spatial_cell``, ``spatial_squarebin``, filled regions, and multi-region batching
+  * Documented all new parameters: ``fill_color``, ``fill_alpha``, ``zorder``, ``refresh``
+  * Noted y-axis normalization behavior with ``invert_y``
+
 Version 0.3.21
 --------------
 

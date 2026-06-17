@@ -1541,14 +1541,20 @@ def mark_region(
     xlim: Optional[tuple] = None,
     ylim: Optional[tuple] = None,
     edges_color: str = 'red',
-    edges_width: float = 1.0
+    edges_width: float = 2.0,
+    fill_color: Optional[str] = None,
+    fill_alpha: float = 0.15,
+    zorder: int = 100,
+    refresh: bool = True,
 ):
     """
     Mark a rectangular region on a spatial plot by drawing a rectangle.
-    
+
     This function draws a rectangle on the given axes to highlight a specific
-    spatial region. It can be used with any spatial plot.
-    
+    spatial region. It works with any spatial plot (``spatial_cell``,
+    ``spatial_squarebin``, ``sc.pl.spatial``) regardless of the ``invert_y``
+    setting.
+
     Parameters
     ----------
     ax : matplotlib.axes.Axes
@@ -1561,52 +1567,98 @@ def mark_region(
         If None, uses the current y-axis limits.
     edges_color : str, default 'red'
         Color of the rectangle edges.
-    edges_width : float, default 1.0
+    edges_width : float, default 2.0
         Width of the rectangle edges.
-    
+    fill_color : str, optional
+        If provided, fills the rectangle with this color at ``fill_alpha``
+        opacity, making the region more visible against dense H&E backgrounds.
+    fill_alpha : float, default 0.15
+        Opacity of the fill when ``fill_color`` is set.
+    zorder : int, default 100
+        Z-order for rendering. High value ensures the rectangle is drawn on
+        top of all other plot elements.
+    refresh : bool, default True
+        If True, calls ``ax.figure.canvas.draw_idle()`` to update the display
+        after adding the rectangle. Set to False when adding multiple regions
+        before a single refresh.
+
     Returns
     -------
     matplotlib.patches.Rectangle
         The rectangle patch object that was added to the axes.
-    
+
     Examples
     --------
     >>> import trackcell as tcl
     >>> import matplotlib.pyplot as plt
-    >>> 
-    >>> # Plot with spatial_cell and mark a region
+    >>>
+    >>> # Important: pass ax=ax and show=False to spatial_cell
     >>> fig, ax = plt.subplots(figsize=(10, 10))
-    >>> tcl.pl.spatial_cell(adata, color="CellType", ax=ax)
+    >>> tcl.pl.spatial_cell(adata, color="CellType", ax=ax, show=False)
     >>> tcl.pl.mark_region(ax, xlim=(54500, 56000), ylim=(15000, 16000))
-    >>> 
-    >>> # Mark a region on any plot
+    >>> plt.show()
+    >>>
+    >>> # With fill for better visibility against H&E
     >>> fig, ax = plt.subplots(figsize=(10, 10))
-    >>> # ... create your plot on ax ...
-    >>> tcl.pl.mark_region(ax, xlim=(54500, 56000), ylim=(15000, 16000), 
-    ...                    edges_color='blue', edges_width=2.0)
+    >>> tcl.pl.spatial_cell(adata, color="CellType", ax=ax, show=False)
+    >>> tcl.pl.mark_region(
+    ...     ax, xlim=(54500, 56000), ylim=(15000, 16000),
+    ...     fill_color='red',
+    ...     edges_width=3.0
+    ... )
+    >>> plt.show()
+    >>>
+    >>> # Mark multiple regions efficiently
+    >>> fig, ax = plt.subplots(figsize=(10, 10))
+    >>> tcl.pl.spatial_cell(adata, color="CellType", ax=ax, show=False)
+    >>> tcl.pl.mark_region(ax, xlim=(40000, 42000), ylim=(5000, 7000),
+    ...                    edges_color='cyan', fill_color='cyan', refresh=False)
+    >>> tcl.pl.mark_region(ax, xlim=(55000, 57000), ylim=(15000, 17000),
+    ...                    edges_color='yellow', fill_color='yellow', refresh=False)
+    >>> tcl.pl.mark_region(ax, xlim=(60000, 62000), ylim=(10000, 12000),
+    ...                    edges_color='magenta', fill_color='magenta')
+    >>> plt.show()
     """
     from matplotlib.patches import Rectangle
-    
+
     # Get current axis limits if xlim/ylim are not provided
     if xlim is None:
         xlim = ax.get_xlim()
     if ylim is None:
         ylim = ax.get_ylim()
-    
+
     x_min, x_max = xlim
     y_min, y_max = ylim
-    
+
+    # Normalize: ensure positive width / height for robust rendering.
+    # When the y-axis is inverted (invert_y=True), ax.get_ylim() returns
+    # (bottom, top) with bottom > top, giving negative height.  Normalizing
+    # guarantees the Rectangle patch is always well-formed.
+    if x_min > x_max:
+        x_min, x_max = x_max, x_min
+    if y_min > y_max:
+        y_min, y_max = y_max, y_min
+
+    width = x_max - x_min
+    height = y_max - y_min
+
     # Create rectangle
     rect = Rectangle(
         (x_min, y_min),
-        x_max - x_min,
-        y_max - y_min,
+        width,
+        height,
         linewidth=edges_width,
         edgecolor=edges_color,
-        facecolor='none'
+        facecolor=fill_color if fill_color else 'none',
+        alpha=fill_alpha if fill_color else None,
+        zorder=zorder,
     )
-    
+
     # Add rectangle to axes
     ax.add_patch(rect)
-    
+
+    # Refresh the display
+    if refresh and ax.figure is not None:
+        ax.figure.canvas.draw_idle()
+
     return rect
