@@ -335,11 +335,14 @@ def _compute_data_extent_from_coords(coords, pad_fraction=0.05, extra_pad=0.0):
     return (x_min, y_min, x_max, y_max), (x_padding, y_padding)
 
 
-def _apply_spatial_axis_formatting(ax, x_min, y_min, x_max, y_max, x_padding, y_padding, xlabel, ylabel, show_ticks, force_show_ticks=False):
+def _apply_spatial_axis_formatting(ax, x_min, y_min, x_max, y_max, x_padding, y_padding, xlabel, ylabel, show_ticks, force_show_ticks=False, invert_y=True):
     ax.set_aspect('equal')
-    ax.invert_yaxis()
+    if invert_y:
+        ax.invert_yaxis()
+        ax.set_ylim(y_max + y_padding, y_min - y_padding)
+    else:
+        ax.set_ylim(y_min - y_padding, y_max + y_padding)
     ax.set_xlim(x_min - x_padding, x_max + x_padding)
-    ax.set_ylim(y_max + y_padding, y_min - y_padding)
     if xlabel is not None:
         ax.set_xlabel(xlabel)
     if ylabel is not None:
@@ -383,17 +386,24 @@ def _infer_square_size(adata, library_id, coords, binsize=None):
     return 1.0
 
 
-def _draw_background_only(ax, spatial_info, img_key, x_min, y_min, x_max, y_max, xlabel, ylabel):
+def _draw_background_only(ax, spatial_info, img_key, x_min, y_min, x_max, y_max, xlabel, ylabel, invert_y=True):
     img, img_extent = _process_background_image(spatial_info, img_key)
     if img is not None and img_extent is not None:
         ax.imshow(img, extent=img_extent, origin='upper', alpha=1.0)
         ax.set_xlim(img_extent[0], img_extent[1])
-        ax.set_ylim(img_extent[2], img_extent[3])
+        if invert_y:
+            ax.set_ylim(img_extent[2], img_extent[3])
+        else:
+            ax.set_ylim(img_extent[3], img_extent[2])
     else:
         ax.set_xlim(x_min, x_max)
-        ax.set_ylim(y_max, y_min)
+        if invert_y:
+            ax.set_ylim(y_max, y_min)
+        else:
+            ax.set_ylim(y_min, y_max)
     ax.set_aspect('equal')
-    ax.invert_yaxis()
+    if invert_y:
+        ax.invert_yaxis()
     if xlabel is not None:
         ax.set_xlabel(xlabel)
     if ylabel is not None:
@@ -515,6 +525,7 @@ def spatial_cell(
     xlabel: Optional[str] = "spatial 1",
     ylabel: Optional[str] = "spatial 2",
     show_ticks: bool = False,
+    invert_y: bool = True,
     **kwargs
 ):
     """
@@ -597,6 +608,10 @@ def spatial_cell(
     show_ticks : bool, default False
         Whether to show axis ticks and tick labels. If False, ticks are hidden.
         Note: When `color=None`, ticks are automatically shown regardless of this setting.
+    invert_y : bool, default True
+        Whether to invert the y-axis so spatial coordinates increase from top to bottom
+        (image convention, matching the H&E background). Set to ``False`` to use
+        Cartesian convention (y increases from bottom to top).
     **kwargs
         Additional arguments passed to GeoDataFrame.plot().
     
@@ -817,15 +832,22 @@ def spatial_cell(
             # Set axis limits based on image extent or data coordinates
             if img_extent is not None:
                 current_ax.set_xlim(img_extent[0], img_extent[1])
-                current_ax.set_ylim(img_extent[2], img_extent[3])
+                if invert_y:
+                    current_ax.set_ylim(img_extent[2], img_extent[3])
+                else:
+                    current_ax.set_ylim(img_extent[3], img_extent[2])
             else:
                 # Fallback to data coordinates
                 current_ax.set_xlim(x_min, x_max)
-                current_ax.set_ylim(y_max, y_min)  # Inverted for y-axis
+                if invert_y:
+                    current_ax.set_ylim(y_max, y_min)
+                else:
+                    current_ax.set_ylim(y_min, y_max)
             
             # Set axis properties
             current_ax.set_aspect('equal')
-            current_ax.invert_yaxis()  # Match image coordinates
+            if invert_y:
+                current_ax.invert_yaxis()  # Match image coordinates
             
             # Set axis labels
             if xlabel is not None:
@@ -1268,7 +1290,8 @@ def spatial_cell(
         
         # Set axis properties
         current_ax.set_aspect('equal')
-        current_ax.invert_yaxis()  # Match image coordinates
+        if invert_y:
+            current_ax.invert_yaxis()  # Match image coordinates
         
         # Set axis limits based on actual data range
         # Add small padding (5% of range) for better visualization
@@ -1278,7 +1301,10 @@ def spatial_cell(
         y_padding = y_range * 0.05 if y_range > 0 else 1
         
         current_ax.set_xlim(x_min - x_padding, x_max + x_padding)
-        current_ax.set_ylim(y_max + y_padding, y_min - y_padding)  # Inverted for y-axis
+        if invert_y:
+            current_ax.set_ylim(y_max + y_padding, y_min - y_padding)  # Inverted for y-axis
+        else:
+            current_ax.set_ylim(y_min - y_padding, y_max + y_padding)
         
         # Set axis labels
         if xlabel is not None:
@@ -1344,6 +1370,7 @@ def spatial_squarebin(
     crop_coord: Optional[tuple] = None,
     na_color: str = "#d3d3d3",
     rasterized: bool = False,
+    invert_y: bool = True,
     **kwargs
 ):
     """
@@ -1380,6 +1407,10 @@ def spatial_squarebin(
         Color used for missing values.
     rasterized
         Whether to rasterize square patches for smaller vector outputs on large datasets.
+    invert_y
+        Whether to invert the y-axis so spatial coordinates increase from top to bottom
+        (image convention, matching the H&E background). Default ``True``.
+        Set to ``False`` to use Cartesian convention (y increases from bottom to top).
     **kwargs
         Reserved for future extensions. Currently unused.
     """
@@ -1426,9 +1457,12 @@ def spatial_squarebin(
         if color_key is None:
             if img is not None and img_extent is not None:
                 current_ax.set_xlim(img_extent[0], img_extent[1])
-                current_ax.set_ylim(img_extent[2], img_extent[3])
                 current_ax.set_aspect('equal')
-                current_ax.invert_yaxis()
+                if invert_y:
+                    current_ax.set_ylim(img_extent[2], img_extent[3])
+                    current_ax.invert_yaxis()
+                else:
+                    current_ax.set_ylim(img_extent[3], img_extent[2])
                 if xlabel is not None:
                     current_ax.set_xlabel(xlabel)
                 if ylabel is not None:
@@ -1437,7 +1471,8 @@ def spatial_squarebin(
             else:
                 _apply_spatial_axis_formatting(
                     current_ax, x_min, y_min, x_max, y_max, x_padding, y_padding,
-                    xlabel, ylabel, show_ticks=True, force_show_ticks=True
+                    xlabel, ylabel, show_ticks=True, force_show_ticks=True,
+                    invert_y=invert_y
                 )
             axes_list.append(current_ax)
             continue
@@ -1463,7 +1498,8 @@ def spatial_squarebin(
 
         _apply_spatial_axis_formatting(
             current_ax, x_min, y_min, x_max, y_max, x_padding, y_padding,
-            xlabel, ylabel, show_ticks=show_ticks, force_show_ticks=False
+            xlabel, ylabel, show_ticks=show_ticks, force_show_ticks=False,
+            invert_y=invert_y
         )
         current_ax.set_title(color_key)
         axes_list.append(current_ax)
