@@ -1,6 +1,23 @@
 Changelog
 =========
 
+Version 0.3.20
+--------------
+
+* **Added ``shape`` parameter to ``spatial_squarebin``**:
+  * ``shape='circle'`` (default): renders bins as centered circles (radius = bin_size / 2)
+  * ``shape='square'``: renders bins as filled rectangles (original behavior)
+  * Invalid shape values raise ``ValueError``
+  * Also aliased in ``tcl.pl.spatial_bin()``
+
+* **Added ``invert_y`` parameter to ``spatial_cell`` and ``spatial_squarebin``**:
+  * ``invert_y=True`` (default): y-axis increases top-to-bottom (image coordinates, matches H&E)
+  * ``invert_y=False``: y-axis increases bottom-to-top (Cartesian convention)
+
+* **Documentation updates**:
+  * Documented ``edge_color`` boundary overlap behavior in ``spatial_cell``:
+    adjacent shared boundaries are drawn by category; the last-drawn category determines the visible color
+
 Version 0.3.19
 --------------
 

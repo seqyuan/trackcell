@@ -264,6 +264,18 @@ For Visium HD square-bin outputs loaded with ``read_hd_bin()``, use
        alpha_img=0.4,
    )
 
+Key ``spatial_squarebin()`` parameters:
+
+* ``color``: Key in ``adata.obs``, a gene name, ``None`` (HE-only), or a list of keys
+* ``library_id``: Spatial library key (auto-detected if ``None``)
+* ``binsize``: Bin size in micrometers (optional, auto-detected)
+* ``shape``: Marker shape — ``'circle'`` (default) or ``'square'``
+* ``invert_y``: If ``True`` (default), y increases top-to-bottom (image coordinates);
+  set ``False`` for Cartesian convention
+* ``crop_coord``: Optional ``(x_min, x_max, y_min, y_max)`` crop in spatial coordinates
+* ``na_color``: Color for missing values (default ``'#d3d3d3'``)
+* ``rasterized``: Whether to rasterize patches (default ``False``)
+
 Compatibility with sc.pl.spatial
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
