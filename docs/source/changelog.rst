@@ -1,5 +1,14 @@
 Changelog
 
+Version 0.3.30
+--------------
+
+* **Hotfix: fix ``_mode_buttons`` AttributeError** — ``_build_toolbar()`` is
+  now called before ``_connect_all_selectors()`` so that
+  ``_update_toolbar_highlight()`` has access to the toolbar button dict.
+
+
+
 Version 0.3.29
 --------------
 

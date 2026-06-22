@@ -194,10 +194,12 @@ class RegionSelector:
 
         # selectors (all created, only one active at a time)
         self._selectors: Dict[str, Any] = {}
-        self._connect_all_selectors()
 
-        # inline toolbar
+        # inline toolbar (must be built before _connect_all_selectors
+        # because _set_active calls _update_toolbar_highlight)
         self._build_toolbar()
+
+        self._connect_all_selectors()
 
     # ------------------------------------------------------------------
     #  selector wiring
