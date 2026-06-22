@@ -1,5 +1,25 @@
 Changelog
 
+Version 0.3.29
+--------------
+
+* **Fix notebook ROI selector UX — no more blocking ``input()``**:
+
+  * ``tcl.pl.select_regions`` no longer calls ``input()`` after each ROI.
+    ROIs are now **auto-named** (``ROI_1``, ``ROI_2``, …) with a configurable
+    ``roi_prefix`` parameter — the interactive workflow is never interrupted.
+  * **Inline toolbar** added at the bottom of the figure with clickable
+    buttons: ``■ Rect``, ``● Ellipse``, ``✎ Lasso``, ``✕ Clear``, ``↩ Undo``.
+    The active mode is highlighted in blue.
+  * **Selected cells are now highlighted** in real-time with coloured scatter
+    points (cycling through 10 distinct colours).
+  * New method ``selector.rename_roi(old, new)`` for post-hoc renaming.
+  * New method ``selector.undo()`` to remove the last ROI (boundary, highlight,
+    and data).
+  * Keyboard shortcuts ``r``/``e``/``l`` kept for power users.
+
+
+
 Version 0.3.28
 --------------
 

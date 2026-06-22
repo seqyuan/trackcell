@@ -443,14 +443,30 @@ Quick start
        inplace=True,           # write adata.obs["ROI"] after each ROI
    )
 
-   # Draw ROIs interactively.  While the figure has focus:
-   #   r = rectangle    e = ellipse    l = lasso
+   # Draw ROIs interactively.  Use the toolbar buttons at the bottom
+   # of the figure, or press r/e/l while the figure has focus.
    #
-   # After each ROI you'll be prompted for a name (press Enter for auto-name).
+   # ROIs are auto-named (ROI_1, ROI_2, ...).  Rename afterwards with:
+   #   selector.rename_roi("ROI_1", "tumor")
+   #
+   # Selected cells are highlighted with coloured scatter points.
    #
    # Results are available immediately:
    selector.rois
    adata.obs["ROI"].value_counts(dropna=False)
+
+Inline toolbar
+^^^^^^^^^^^^^^
+
+An inline toolbar at the **bottom of the figure** provides clickable buttons:
+
+* ``■ Rect`` — rectangle selector
+* ``● Ellipse`` — ellipse / circle selector
+* ``✎ Lasso`` — lasso / freehand selector
+* ``✕ Clear`` — remove all ROIs
+* ``↩ Undo`` — remove the last ROI
+
+The currently active mode is highlighted in blue.
 
 Keyboard shortcuts
 ^^^^^^^^^^^^^^^^^^
@@ -461,18 +477,26 @@ While the figure has focus, press:
 * ``e`` — ellipse / circle selector
 * ``l`` — lasso / freehand selector
 
-ROI naming
-^^^^^^^^^^
+ROI naming (no more blocking input)
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-After drawing each ROI you will see an ``input()`` prompt:
+Unlike the previous version, **there is no ``input()`` prompt**.  ROIs are
+auto-named as ``ROI_1``, ``ROI_2``, … immediately after you draw each shape.
+This keeps the interactive workflow uninterrupted.
 
-.. code-block:: text
+To rename an ROI after the fact:
 
-   ROI name (press Enter for 'ROI_1'):
+.. code-block:: python
 
-* Type a custom name (e.g. ``tumor_region``) and press Enter.
-* Press Enter without typing to accept the auto-generated name (``ROI_1``,
-  ``ROI_2``, …).
+   selector.rename_roi("ROI_1", "tumor_region")
+   selector.rename_roi("ROI_2", "stroma")
+
+The prefix is configurable via the ``roi_prefix`` parameter:
+
+.. code-block:: python
+
+   selector = tcl.pl.select_regions(adata, roi_prefix="zone")
+   # → auto-names: zone_1, zone_2, ...
 
 Returned object
 ^^^^^^^^^^^^^^^
@@ -481,10 +505,13 @@ Returned object
 
 .. code-block:: python
 
-   selector.rois        # dict: ROI name -> observation IDs
-   selector.polygons    # dict: ROI name -> ROI vertices
-   selector.save()      # write / rewrite adata.obs[key_added]
-   selector.clear()     # remove all ROIs and visual patches
+   selector.rois          # dict: ROI name -> observation IDs
+   selector.polygons      # dict: ROI name -> ROI vertices
+   selector.rename_roi()  # rename an ROI
+   selector.undo()        # remove the last ROI
+   selector.save()        # write / rewrite adata.obs[key_added]
+   selector.clear()       # remove all ROIs and visual patches
+   selector.to_adata()    # get an AnnData copy with ROI labels
    selector.disconnect()
 
 With ``inplace=False``, use ``selector.to_adata()`` to get an ``AnnData`` copy:
@@ -537,6 +564,9 @@ Key parameters for :func:`tcl.pl.select_regions`
   ``"spatial"``).
 * ``key_added`` — column name in ``adata.obs`` for ROI labels.
 * ``inplace`` — ``True`` (default) writes labels to ``adata.obs[key_added]``
+  after every selection; ``False`` → use ``selector.to_adata()``.
+* ``roi_prefix`` — prefix for auto-generated names (default ``"ROI"`` →
+  ``ROI_1``, ``ROI_2``, …).
   after each selection; ``False`` stores results only on the ``RegionSelector``
   — use ``selector.to_adata()`` to get a copy.
 * ``invert_y`` — default ``True`` to match image/spatial coordinates where y
