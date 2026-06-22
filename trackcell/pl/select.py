@@ -201,6 +201,9 @@ class RegionSelector:
 
         self._connect_all_selectors()
 
+        # Force canvas draw to initialize selector widgets
+        self.fig.canvas.draw()
+
     # ------------------------------------------------------------------
     #  selector wiring
     # ------------------------------------------------------------------
@@ -211,7 +214,7 @@ class RegionSelector:
         self._selectors["rectangle"] = RectangleSelector(
             self.ax,
             self._on_rectangle,
-            useblit=True,
+            useblit=False,          # ipympl compatibility (blit breaks selectors)
             button=[1],
             minspanx=1,
             minspany=1,
@@ -222,7 +225,7 @@ class RegionSelector:
         self._selectors["ellipse"] = EllipseSelector(
             self.ax,
             self._on_ellipse,
-            useblit=True,
+            useblit=False,          # ipympl compatibility
             button=[1],
             minspanx=1,
             minspany=1,
@@ -233,7 +236,7 @@ class RegionSelector:
         self._selectors["lasso"] = LassoSelector(
             self.ax,
             self._on_lasso,
-            useblit=True,
+            useblit=False,          # ipympl compatibility
             props={"color": self._EDGE_COLOR, "linewidth": self._LINEWIDTH},
         )
 

@@ -1,5 +1,18 @@
 Changelog
 
+Version 0.3.31
+--------------
+
+* **Fix selectors not responding in ipympl**:
+
+  * Changed all selectors from ``useblit=True`` to ``useblit=False``
+    (blitting breaks RectangleSelector/EllipseSelector/LassoSelector in the
+    ipympl backend).
+  * Added ``fig.canvas.draw()`` after selector creation to ensure widgets
+    initialize properly.
+
+
+
 Version 0.3.30
 --------------
 
