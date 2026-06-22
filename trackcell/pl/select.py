@@ -7,11 +7,13 @@ interactive backend such as ipympl (``%matplotlib widget``).
 
 Key features:
 
-* Keyboard-toggle between rectangle (``r``), ellipse (``e``), and lasso/freehand
-  (``l``) modes — all available without a ``shape_type`` parameter.
-* Interactive ROI naming via ``input()`` after each selection.
-* ``inplace=True`` (default) writes ROI labels directly to ``adata.obs[key_added]``;
-  ``inplace=False`` stores results only on the ``RegionSelector`` object.
+* **No blocking ``input()``** — ROIs are auto-named (``ROI_1``, ``ROI_2``, …)
+  with a configurable prefix, so the interactive workflow is never interrupted.
+* **Inline toolbar** — clickable **Rect** / **Ellipse** / **Lasso** buttons
+  plus **Clear** and **Undo** — no need to remember keyboard shortcuts.
+* **Keyboard shortcuts** still work (``r``/``e``/``l``) for power users.
+* **Selected cells are highlighted** in real-time with coloured scatter points.
+* **Post-hoc rename** via ``selector.rename_roi(old_name, new_name)``.
 """
 
 from __future__ import annotations
@@ -22,7 +24,12 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 from matplotlib.patches import Polygon as MplPolygon
-from matplotlib.widgets import RectangleSelector, EllipseSelector, LassoSelector
+from matplotlib.widgets import (
+    RectangleSelector,
+    EllipseSelector,
+    LassoSelector,
+    Button,
+)
 from shapely.geometry import Polygon, Point
 from shapely import wkt
 
@@ -31,6 +38,11 @@ from .plot import spatial_cell, spatial_squarebin, _resolve_library_id
 
 ModeType = Literal["auto", "cellbin", "squarebin"]
 SelectorMode = Literal["rectangle", "ellipse", "lasso"]
+
+
+# ---------------------------------------------------------------------------
+#  helpers
+# ---------------------------------------------------------------------------
 
 
 def _detect_mode(adata, library_id: str, mode: Optional[str], basis: str) -> str:
@@ -98,18 +110,39 @@ def _ellipse_to_polygon(center, width, height, angle=0.0, n=64):
     return np.column_stack([x, y])
 
 
+# ---------------------------------------------------------------------------
+#  colour palette for ROI highlights
+# ---------------------------------------------------------------------------
+
+_HIGHLIGHT_COLORS = [
+    "#e6194b",  # red
+    "#3b75af",  # blue
+    "#44aa44",  # green
+    "#ff8c00",  # orange
+    "#911eb4",  # purple
+    "#46f0f0",  # cyan
+    "#f032e6",  # magenta
+    "#d2f53c",  # lime
+    "#fabebe",  # pink
+    "#008080",  # teal
+]
+
+
+# =============================================================================
+#  RegionSelector
+# =============================================================================
+
+
 class RegionSelector:
     """
     Controller returned by :func:`select_regions`.
 
-    All shape modes (rectangle, ellipse, lasso) are active simultaneously and
-    toggled via keyboard shortcuts while the figure has focus.
+    All shape modes (rectangle, ellipse, lasso) are available via both the
+    **inline toolbar** (clickable buttons at the bottom of the figure) and
+    **keyboard shortcuts** (``r``/``e``/``l`` while the figure has focus).
 
-    Keyboard shortcuts
-    ------------------
-    * ``r`` — rectangle selector
-    * ``e`` — ellipse selector
-    * ``l`` — lasso / freehand selector
+    ROIs are auto-named (``ROI_1``, ``ROI_2``, …).  Use
+    :meth:`rename_roi` to change names after the fact.
 
     Attributes
     ----------
@@ -121,7 +154,7 @@ class RegionSelector:
         Matplotlib axes and figure.
     """
 
-    # --- visual defaults (no longer exposed to the user) -----
+    # --- visual defaults ---------------------------------------------------
     _EDGE_COLOR = "red"
     _FACE_COLOR = "none"
     _LINEWIDTH = 2.0
@@ -137,6 +170,7 @@ class RegionSelector:
         use_wkt: bool = False,
         key_added: str = "ROI",
         inplace: bool = True,
+        roi_prefix: str = "ROI",
     ):
         self.adata = adata
         self.ax = ax
@@ -148,6 +182,7 @@ class RegionSelector:
         self.use_wkt = use_wkt
         self.key_added = key_added
         self.inplace = inplace
+        self.roi_prefix = roi_prefix
 
         # state
         self._current_mode: SelectorMode = "rectangle"
@@ -155,10 +190,14 @@ class RegionSelector:
         self.polygons: Dict[str, np.ndarray] = {}
         self.patches: List[Any] = []
         self._roi_counter = 0
+        self._highlight_collections: List[Any] = []  # scatter highlight artists
 
         # selectors (all created, only one active at a time)
         self._selectors: Dict[str, Any] = {}
         self._connect_all_selectors()
+
+        # inline toolbar
+        self._build_toolbar()
 
     # ------------------------------------------------------------------
     #  selector wiring
@@ -208,18 +247,66 @@ class RegionSelector:
             sel.set_active(name == mode)
         self._current_mode = mode
         self._update_title()
+        self._update_toolbar_highlight()
 
     def _update_title(self) -> None:
         suffix = f" | inplace={self.inplace}" if not self.inplace else ""
         self.ax.set_title(
-            f"Mode: [{self._current_mode}]  (r=rect  e=ellipse  l=lasso)"
-            f"  —  {len(self.rois)} ROI(s){suffix}"
+            f"Mode: [{self._current_mode}]  |  {len(self.rois)} ROI(s){suffix}"
         )
 
     def _on_key(self, event) -> None:
         if event.key in ("r", "e", "l"):
             mode_map = {"r": "rectangle", "e": "ellipse", "l": "lasso"}
             self._set_active(mode_map[event.key])
+
+    # ------------------------------------------------------------------
+    #  inline toolbar
+    # ------------------------------------------------------------------
+
+    def _build_toolbar(self) -> None:
+        """Build clickable buttons at the bottom of the figure."""
+        self.fig.subplots_adjust(bottom=0.13)
+
+        y0, bw, bh = 0.02, 0.09, 0.055
+        spacing = 0.125
+
+        # --- Mode toggles ---
+        mode_defs = [
+            ("■ Rect", "rectangle"),
+            ("● Ellipse", "ellipse"),
+            ("✎ Lasso", "lasso"),
+        ]
+        self._mode_buttons: Dict[str, Any] = {}
+        for i, (label, mode_name) in enumerate(mode_defs):
+            ax_btn = self.fig.add_axes([0.06 + i * spacing, y0, bw, bh])
+            btn = Button(ax_btn, label)
+            # capture both mode_name and self by value via default args
+            btn.on_clicked(lambda e, m=mode_name, s=self: s._toolbar_set_mode(m))
+            self._mode_buttons[mode_name] = btn
+
+        # --- Clear ---
+        clear_ax = self.fig.add_axes([0.06 + 3 * spacing, y0, bw, bh])
+        self._clear_btn = Button(clear_ax, "✕ Clear", color="lightcoral", hovercolor="coral")
+        self._clear_btn.on_clicked(lambda e: self.clear())
+
+        # --- Undo ---
+        undo_ax = self.fig.add_axes([0.06 + 4 * spacing, y0, bw, bh])
+        self._undo_btn = Button(undo_ax, "↩ Undo")
+        self._undo_btn.on_clicked(lambda e: self.undo())
+
+        self._update_toolbar_highlight()
+
+    def _toolbar_set_mode(self, mode_name: str) -> None:
+        """Called when a mode button is clicked."""
+        self._set_active(mode_name)
+
+    def _update_toolbar_highlight(self) -> None:
+        """Highlight the currently active mode button."""
+        active_color = "#2563eb"  # blue
+        inactive_color = "#e0e0e0"
+        for mode_name, btn in self._mode_buttons.items():
+            btn.color = active_color if mode_name == self._current_mode else inactive_color
 
     # ------------------------------------------------------------------
     #  shape callbacks
@@ -256,13 +343,13 @@ class RegionSelector:
     # ------------------------------------------------------------------
 
     def _finish_roi(self, vertices: np.ndarray, shape: str) -> None:
-        """Shared pipeline: extract IDs, name the ROI, optionally save, draw patch."""
-
+        """Shared pipeline: extract IDs, auto-name, optionally save, draw patch + highlight."""
         # --- extract --------------------------------------------------------
         ids = self._extract_ids(vertices)
 
-        # --- name -----------------------------------------------------------
-        roi_name = self._prompt_roi_name()
+        # --- auto-name (no input() blocking) --------------------------------
+        self._roi_counter += 1
+        roi_name = f"{self.roi_prefix}_{self._roi_counter}"
 
         # --- store ----------------------------------------------------------
         self.rois[roi_name] = ids
@@ -271,7 +358,7 @@ class RegionSelector:
         if self.inplace:
             self._save_to_adata()
 
-        # --- draw -----------------------------------------------------------
+        # --- draw boundary patch --------------------------------------------
         patch = MplPolygon(
             vertices,
             closed=True,
@@ -284,23 +371,63 @@ class RegionSelector:
         )
         self.ax.add_patch(patch)
         self.patches.append(patch)
+
+        # --- highlight selected cells ---------------------------------------
+        color_idx = (self._roi_counter - 1) % len(_HIGHLIGHT_COLORS)
+        self._highlight_ids(ids, color=_HIGHLIGHT_COLORS[color_idx])
+
         self._update_title()
         self.fig.canvas.draw_idle()
 
         print(f"[{shape}] {roi_name}: selected {len(ids)} observations")
 
+    # ------------------------------------------------------------------
+    #  visual feedback: highlight selected cells
+    # ------------------------------------------------------------------
+
+    def _highlight_ids(self, ids: List, color: str = "#e6194b") -> None:
+        """Add a semi-transparent scatter highlight over selected cells/bins."""
+        # Use obsm coordinates: self.basis for squarebin, "spatial" for cellbin
+        coord_key = self.basis if self.mode == "squarebin" else "spatial"
+        if coord_key not in self.adata.obsm:
+            return  # no coordinates available for highlighting
+        coords = self.adata.obsm[coord_key]
+        idxs = [self.adata.obs_names.get_loc(cid) for cid in ids]
+        pts = coords[idxs]
+
+        if len(pts) == 0:
+            return
+
+        sc = self.ax.scatter(
+            pts[:, 0],
+            pts[:, 1],
+            s=12,
+            color=color,
+            alpha=0.5,
+            edgecolors="none",
+            zorder=999,
+            rasterized=True,
+        )
+        self._highlight_collections.append(sc)
+
+    def _clear_highlights(self) -> None:
+        """Remove all highlight scatter collections."""
+        for sc in self._highlight_collections:
+            try:
+                sc.remove()
+            except Exception:
+                pass
+        self._highlight_collections.clear()
+        self.fig.canvas.draw_idle()
+
+    # ------------------------------------------------------------------
+    #  naming (no input() — always auto-name)
+    # ------------------------------------------------------------------
+
     def _prompt_roi_name(self) -> str:
-        """Ask the user for a ROI name via ``input()``; auto-generate on empty."""
+        """Auto-generate ROI name — never calls ``input()`` in this version."""
         self._roi_counter += 1
-        default = f"ROI_{self._roi_counter}"
-        try:
-            name = input(f"ROI name (press Enter for '{default}'): ").strip()
-        except (EOFError, KeyboardInterrupt):
-            # fallback for non-interactive contexts
-            name = ""
-        if not name:
-            name = default
-        return name
+        return f"{self.roi_prefix}_{self._roi_counter}"
 
     def _save_to_adata(self) -> None:
         """Write current ROI labels to ``adata.obs`` (inplace mode)."""
@@ -358,11 +485,24 @@ class RegionSelector:
     # ------------------------------------------------------------------
 
     def add_roi(self, vertices: np.ndarray, name: Optional[str] = None) -> str:
-        """Manually add a ROI (programmatic use)."""
+        """Manually add a ROI (programmatic use).
+
+        Parameters
+        ----------
+        vertices : np.ndarray
+            N×2 array of polygon vertices.
+        name : str or None
+            ROI name.  Auto-generated (``<prefix>_N``) when ``None``.
+
+        Returns
+        -------
+        str
+            The assigned ROI name.
+        """
         ids = self._extract_ids(vertices)
         if name is None:
             self._roi_counter += 1
-            name = f"ROI_{self._roi_counter}"
+            name = f"{self.roi_prefix}_{self._roi_counter}"
         self.rois[name] = ids
         self.polygons[name] = np.asarray(vertices, dtype=float)
 
@@ -381,10 +521,67 @@ class RegionSelector:
         )
         self.ax.add_patch(patch)
         self.patches.append(patch)
+
+        # highlight
+        color_idx = len(self.rois) % len(_HIGHLIGHT_COLORS)
+        self._highlight_ids(ids, color=_HIGHLIGHT_COLORS[color_idx])
+
         self._update_title()
         self.fig.canvas.draw_idle()
         print(f"[manual] {name}: selected {len(ids)} observations")
         return name
+
+    def rename_roi(self, old_name: str, new_name: str) -> None:
+        """Rename a previously created ROI.
+
+        Parameters
+        ----------
+        old_name : str
+            Current ROI name.
+        new_name : str
+            New ROI name (must not already exist).
+        """
+        if old_name not in self.rois:
+            raise KeyError(
+                f"ROI '{old_name}' not found. "
+                f"Existing ROIs: {list(self.rois.keys())}"
+            )
+        if new_name in self.rois:
+            raise KeyError(f"ROI '{new_name}' already exists.")
+        self.rois[new_name] = self.rois.pop(old_name)
+        self.polygons[new_name] = self.polygons.pop(old_name)
+        if self.inplace:
+            self._save_to_adata()
+        self._update_title()
+        print(f"Renamed: '{old_name}' → '{new_name}'")
+
+    def undo(self) -> None:
+        """Remove the last added ROI (boundary, highlight, and data)."""
+        if not self.rois:
+            print("Nothing to undo.")
+            return
+        last_name = list(self.rois.keys())[-1]
+        del self.rois[last_name]
+        del self.polygons[last_name]
+        # remove boundary patch
+        if self.patches:
+            patch = self.patches.pop()
+            try:
+                patch.remove()
+            except Exception:
+                pass
+        # remove last highlight
+        if self._highlight_collections:
+            sc = self._highlight_collections.pop()
+            try:
+                sc.remove()
+            except Exception:
+                pass
+        if self.inplace:
+            self._save_to_adata()
+        self._update_title()
+        self.fig.canvas.draw_idle()
+        print(f"Undone: '{last_name}'")
 
     def save(self, key_added: Optional[str] = None) -> None:
         """Force-write current ROI labels to ``adata.obs`` (useful with ``inplace=False``)."""
@@ -409,24 +606,30 @@ class RegionSelector:
         return ad
 
     def clear(self) -> None:
-        """Remove all ROIs and visual patches."""
+        """Remove all ROIs, visual patches, and highlights."""
         self.rois.clear()
         self.polygons.clear()
         for patch in self.patches:
-            patch.remove()
+            try:
+                patch.remove()
+            except Exception:
+                pass
         self.patches.clear()
+        self._clear_highlights()
         self._roi_counter = 0
         if self.inplace and self.key_added in self.adata.obs.columns:
             self.adata.obs[self.key_added] = None
         self._update_title()
         self.fig.canvas.draw_idle()
+        print("Cleared all ROIs.")
 
     def disconnect(self) -> None:
-        """Disconnect all selectors and keyboard callback."""
+        """Disconnect all selectors, toolbar buttons, and keyboard callback."""
         for sel in self._selectors.values():
             sel.disconnect_events()
         if hasattr(self, "_key_cid"):
             self.fig.canvas.mpl_disconnect(self._key_cid)
+        print("Disconnected ROI selector.")
 
 
 # =============================================================================
@@ -443,6 +646,7 @@ def select_regions(
     basis: str = "spatial",
     key_added: str = "ROI",
     inplace: bool = True,
+    roi_prefix: str = "ROI",
     ax: Optional[plt.Axes] = None,
     show: bool = True,
     figsize: Optional[tuple] = None,
@@ -456,15 +660,25 @@ def select_regions(
        For the best notebook experience run ``%matplotlib widget`` before
        calling this function.
 
-    All shape modes are available simultaneously.  While the figure has focus
-    press:
+    **No more blocking ``input()``** — ROIs are auto-named with a configurable
+    prefix (default ``ROI_1``, ``ROI_2``, …).  Use
+    ``selector.rename_roi("ROI_1", "my_region")`` to rename afterwards.
+
+    An **inline toolbar** at the bottom of the figure provides clickable buttons:
+
+    * ``■ Rect`` — rectangle selector
+    * ``● Ellipse`` — ellipse / circle selector
+    * ``✎ Lasso`` — lasso / freehand selector
+    * ``✕ Clear`` — remove all ROIs
+    * ``↩ Undo`` — remove the last ROI
+
+    Keyboard shortcuts also work while the figure has focus:
 
     * ``r`` — rectangle
     * ``e`` — ellipse / circle
     * ``l`` — lasso / freehand
 
-    After each drawn ROI you will be prompted for a name (press Enter to accept
-    an auto-generated name such as ``ROI_1``).
+    Selected cells are highlighted with coloured scatter points in real-time.
 
     Parameters
     ----------
@@ -486,6 +700,8 @@ def select_regions(
         If ``True`` (default) ROI labels are written to ``adata.obs[key_added]``
         after every selection.  If ``False``, results are only stored on the
         returned ``RegionSelector`` — use ``selector.to_adata()`` to get a copy.
+    roi_prefix : str
+        Prefix for auto-generated ROI names (default ``'ROI'`` → ``ROI_1``, ``ROI_2``, …).
     ax : matplotlib.axes.Axes or None
         Pre-existing axes to draw on.
     show : bool
@@ -501,8 +717,9 @@ def select_regions(
     Returns
     -------
     RegionSelector
-        Controller with ``.rois``, ``.polygons``, ``.to_adata()``, ``.save()``,
-        ``.clear()``, and ``.disconnect()``.
+        Controller with ``.rois``, ``.polygons``, ``.rename_roi()``,
+        ``.undo()``, ``.save()``, ``.clear()``, ``.to_adata()``, and
+        ``.disconnect()``.
     """
 
     library_id = _resolve_library_id(adata, library_id)
@@ -553,12 +770,15 @@ def select_regions(
         use_wkt=use_wkt,
         key_added=key_added,
         inplace=inplace,
+        roi_prefix=roi_prefix,
     )
 
     print(
-        "Interactive ROI selector ready.  "
-        "Press r=rect  e=ellipse  l=lasso while the figure has focus.\n"
-        "Use `%matplotlib widget` in Jupyter for best results."
+        "Interactive ROI selector ready.\n"
+        "  Click toolbar buttons at the bottom:  ■ Rect  ● Ellipse  ✎ Lasso  ✕ Clear  ↩ Undo\n"
+        "  Or use keyboard:  r=rect  e=ellipse  l=lasso  (figure must have focus)\n"
+        "  ROIs are auto-named — use selector.rename_roi(old, new) to rename.\n"
+        "  Run '%matplotlib widget' in Jupyter for best results."
     )
     if show:
         plt.show()
