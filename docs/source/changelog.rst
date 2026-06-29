@@ -1,5 +1,22 @@
 Changelog
 
+Version 0.3.32
+--------------
+
+* **YardCluster spatial clustering** (``tcl.tl.spatial_cluster``):
+
+  * Lightweight CPU pipeline combining BANKSY-style neighborhood features,
+    dual-channel identity/context embeddings, and scanpy Leiden clustering.
+  * Function group: ``spatial_neighbors``, ``neighborhood_features``,
+    ``yard_embed``, ``yard_cluster``.
+  * Multi-sample support: ``integrate='separate'`` / ``'joint'`` (Harmony).
+  * Optional DE-guided cluster merging, sketch mode for large datasets, and
+    ``gradient_mode='cosphi'|'regression'``.
+  * New usage tutorial: ``docs/source/usage/spatial_clustering.rst``; Colon Cancer
+    demo notebook updated.
+
+
+
 Version 0.3.31
 --------------
 
