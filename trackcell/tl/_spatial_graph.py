@@ -264,6 +264,77 @@ def mix_embeddings(
     ).astype(np.float32)
 
 
+def compute_neighborhood_gradient_regression(
+    X: ArrayLike,
+    coords: np.ndarray,
+    weights: sps.csr_matrix,
+    k_gradient: Optional[int] = None,
+    chunk_size: int = 500,
+    ridge: float = 1e-6,
+) -> np.ndarray:
+    """
+    Local linear regression gradient magnitude: ||(beta_x, beta_y)|| per gene.
+
+    For each cell u, fit expr ~ beta0 + beta1*dx + beta2*dy across spatial neighbors
+    in local coordinates centered at u.
+    """
+    coords = np.asarray(coords, dtype=np.float64)
+    n_obs = coords.shape[0]
+    X_dense = _as_dense(X)
+    _, n_genes = X_dense.shape
+
+    if k_gradient is not None:
+        weights = truncate_weights_per_row(weights, k_gradient)
+
+    G = np.zeros((n_obs, n_genes), dtype=np.float64)
+    weights = weights.tocsr()
+    eye3 = np.eye(3) * ridge
+
+    for u in range(n_obs):
+        start, end = weights.indptr[u], weights.indptr[u + 1]
+        if start == end:
+            continue
+        nbr_cols = weights.indices[start:end]
+        if len(nbr_cols) < 3:
+            continue
+
+        dx = coords[nbr_cols, 0] - coords[u, 0]
+        dy = coords[nbr_cols, 1] - coords[u, 1]
+        A = np.column_stack([np.ones(len(nbr_cols)), dx, dy])
+        ata_inv = np.linalg.inv(A.T @ A + eye3)
+
+        for g_start in range(0, n_genes, chunk_size):
+            g_end = min(g_start + chunk_size, n_genes)
+            y = X_dense[nbr_cols, g_start:g_end]
+            beta = ata_inv @ A.T @ y
+            # beta shape (3, n_genes_chunk); rows 1,2 are spatial slopes
+            G[u, g_start:g_end] = np.linalg.norm(beta[1:3, :], axis=0)
+
+    return G
+
+
+def compute_neighborhood_gradient(
+    X: ArrayLike,
+    coords: np.ndarray,
+    weights: sps.csr_matrix,
+    mode: str = "cosphi",
+    k_gradient: Optional[int] = None,
+    chunk_size: int = 500,
+    ridge: float = 1e-6,
+) -> np.ndarray:
+    """Dispatch gradient computation by mode ('cosphi' or 'regression')."""
+    mode = mode.lower()
+    if mode == "cosphi":
+        return compute_neighborhood_gradient_cosphi(
+            X, coords, weights, k_gradient=k_gradient, chunk_size=chunk_size
+        )
+    if mode == "regression":
+        return compute_neighborhood_gradient_regression(
+            X, coords, weights, k_gradient=k_gradient, chunk_size=chunk_size, ridge=ridge
+        )
+    raise ValueError(f"Unknown gradient mode: {mode}. Use 'cosphi' or 'regression'.")
+
+
 def expr_k_neighbors(n_obs: int, k_expr: Optional[int] = None) -> int:
     """Expression-space kNN count (Space Ranger-inspired log scaling)."""
     if k_expr is not None:

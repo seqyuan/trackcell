@@ -33,6 +33,21 @@ TrackCell requires the following packages:
 
 These dependencies are automatically installed when installing TrackCell via pip.
 
+Optional Dependencies (YardCluster)
+------------------------------------
+
+Spatial clustering with :doc:`usage/spatial_clustering` additionally requires:
+
+.. code-block:: bash
+
+   pip install leidenalg python-igraph
+
+For multi-sample Harmony batch integration (``integrate='joint'``):
+
+.. code-block:: bash
+
+   pip install harmonypy
+
 Development Installation
 ------------------------
 

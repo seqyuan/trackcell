@@ -257,5 +257,13 @@ If you try to plot without synchronizing, the plotting function may:
 * Attempt to access geometries for cells that no longer exist in the subset
 * Produce incorrect visualizations
 
+Next Steps
+~~~~~~~~~~
+
+After loading cell segmentation data, you can run spatial clustering with
+:doc:`spatial_clustering` (``tcl.tl.spatial_cluster``) or visualize
+Space Ranger's pre-computed ``classification`` labels directly with
+:doc:`visualization`.
+
 Always call ``sync_geometries_after_subset()`` after subsetting to avoid these issues.
 
