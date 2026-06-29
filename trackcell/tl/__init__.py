@@ -12,6 +12,16 @@ from .spatial_cluster import (
     yard_cluster,
     yard_embed,
 )
+from .slice_separation import (
+    dbscan_slice_labels,
+    distance_to_nearest_centroids,
+    mark_colony_centroids,
+    slice_cluster_summary,
+    spatial_colony_cluster,
+    spatial_slice_cluster,
+    split_by_slice,
+    write_slice_annotation,
+)
 
 __all__ = [
     "hd_labeldist",
@@ -21,4 +31,12 @@ __all__ = [
     "neighborhood_features",
     "yard_embed",
     "yard_cluster",
+    "dbscan_slice_labels",
+    "spatial_slice_cluster",
+    "spatial_colony_cluster",
+    "mark_colony_centroids",
+    "distance_to_nearest_centroids",
+    "slice_cluster_summary",
+    "split_by_slice",
+    "write_slice_annotation",
 ]

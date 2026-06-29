@@ -437,6 +437,12 @@ def read_xenium_cellseg(
     matrix_file: str = "cell_feature_matrix.h5",
     experiment_file: str = "experiment.xenium",
     panel_file: str = "gene_panel.json",
+    slice_separate: bool = False,
+    slice_eps: float = 80.0,
+    slice_min_samples: int = 10,
+    slice_min_cells: int = 1000,
+    slice_start: int = 1,
+    slice_prefix: str = "S",
 ) -> sc.AnnData:
     """
     Read 10x Xenium cell segmentation output and create an AnnData object.
@@ -466,6 +472,19 @@ def read_xenium_cellseg(
         Name of the experiment metadata JSON file.
     panel_file : str
         Name of the gene panel JSON file.
+    slice_separate : bool, default False
+        If True, run DBSCAN slice separation on cell centroids and add
+        ``obs['slice_id']`` / ``obs['slice_cluster']`` (for Xenium TMA data).
+    slice_eps : float, default 80.0
+        DBSCAN neighborhood radius in µm when ``slice_separate=True``.
+    slice_min_samples : int, default 10
+        DBSCAN ``min_samples`` when ``slice_separate=True``.
+    slice_min_cells : int, default 1000
+        Minimum cells per cluster to keep as a valid slice.
+    slice_start : int, default 1
+        Starting index for slice IDs (S001 when ``slice_start=1``).
+    slice_prefix : str, default "S"
+        Prefix for slice IDs.
     
     Returns
     -------
@@ -717,6 +736,20 @@ def read_xenium_cellseg(
         print(f'[Xenium] Geometries: {n_geo:,}/{len(common_cells):,} cells '
               f'({n_geo/len(common_cells)*100:.1f}%)')
     
+    if slice_separate:
+        from ..tl.slice_separation import spatial_slice_cluster
+
+        spatial_slice_cluster(
+            adata,
+            eps=slice_eps,
+            min_samples=slice_min_samples,
+            min_cells=slice_min_cells,
+            slice_start=slice_start,
+            slice_prefix=slice_prefix,
+        )
+        n_slices = adata.uns.get("slice_id_summary", {}).get("n_slices", 0)
+        print(f'[Xenium] Slice separation: {n_slices} slices (eps={slice_eps})')
+
     elapsed = time.time() - t_total
     print(f'[Xenium] Total: read_xenium_cellseg done [{elapsed:.1f}s]')
     

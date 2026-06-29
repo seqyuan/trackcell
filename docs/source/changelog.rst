@@ -1,5 +1,26 @@
 Changelog
 
+Version 0.3.33
+--------------
+
+* **DBSCAN spatial slice separation** (``tcl.tl.spatial_slice_cluster``):
+
+  * Split Xenium TMA regions into physical tissue sections (``S001``–``SNNN``)
+    via density clustering on cell centroids (CCHD defaults: ``eps=80`` µm,
+    ``min_samples=10``, ``min_cells=1000``).
+  * ``read_xenium_cellseg(..., slice_separate=True)`` for one-step load + annotate.
+  * Helpers: ``split_by_slice``, ``slice_cluster_summary``, ``write_slice_annotation``.
+
+* **Micro-region colony clustering** (GC / tumor nests):
+
+  * ``spatial_colony_cluster`` — DBSCAN on BANKSY-filtered subsets
+    (defaults: ``eps=50``, ``min_samples=5``, ``min_cluster_size=40``).
+  * ``mark_colony_centroids`` and ``distance_to_nearest_centroids`` for GCC/TNC
+    distance analysis (CCHD ``54_1_GC_dist.ipynb`` workflow).
+  * New tutorial: ``docs/source/usage/xenium_slice_separation.rst``.
+
+
+
 Version 0.3.32
 --------------
 

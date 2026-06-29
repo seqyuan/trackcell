@@ -58,6 +58,23 @@ The resulting AnnData object contains:
 After loading, the AnnData is fully compatible with ``tcl.pl.spatial_cell()`` for
 cell polygon visualization.
 
+TMA multi-core slice separation
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+For Xenium TMA data (multiple tissue cores in one region), enable DBSCAN slice
+separation during load or as a separate step. See :doc:`xenium_slice_separation`
+for the full workflow.
+
+.. code-block:: python
+
+   adata = tcl.io.read_xenium_cellseg(
+       datapath="/path/to/xenium/region",
+       sample="85811_S",
+       slice_separate=True,
+       slice_eps=80,
+   )
+   print(adata.obs["slice_id"].value_counts())
+
 
 Reading Cell Segmentation Data (Visium HD)
 -------------------------------------------
