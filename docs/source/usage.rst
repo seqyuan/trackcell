@@ -10,3 +10,4 @@ This guide provides examples of how to use TrackCell for reading and analyzing s
    usage/reading
    usage/visualization
    usage/computing_distances
+   usage/spatial_clustering
