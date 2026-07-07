@@ -1,0 +1,12 @@
+{
+  "enabled": true,
+  "channel": "wecom",
+  "botId": "aibQrKPmDXmqzp6pVOgI2eAvzqs5jWTDf-c",
+  "requireMentionInGroup": false,
+  "allowedUsers": [],
+  "pairingCode": "826318",
+  "boundChatId": null,
+  "modelProvider": null,
+  "modelId": null,
+  "updatedAt": "2026-06-24T07:37:09.481Z"
+}

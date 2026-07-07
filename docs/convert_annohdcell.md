@@ -44,7 +44,7 @@ adata = tcio.convert_annohdcell_to_trackcell(
 
 # Now visualize with trackcell
 import trackcell.pl as tcpl
-tcpl.spatial_cell(adata, sample="sample1")
+tcpl.spatial_cell(adata, library_id="sample1")
 ```
 
 #### Advanced Options
@@ -89,7 +89,7 @@ adata = tcio.add_geometries_to_annohdcell_output(
 
 # Now visualize with trackcell
 import trackcell.pl as tcpl
-tcpl.spatial_cell(adata, sample="sample1")
+tcpl.spatial_cell(adata, library_id="sample1")
 ```
 
 #### Advanced Options
@@ -195,7 +195,7 @@ adata = tcio.convert_annohdcell_to_trackcell(
 
 # 3. Visualize with trackcell
 import trackcell.pl as tcpl
-tcpl.spatial_cell(adata, sample="sample1", show=True)
+tcpl.spatial_cell(adata, library_id="sample1", show=True)
 ```
 
 ### Workflow 2: Preserve Exact annohdcell Output (Method 2)
@@ -216,7 +216,7 @@ adata = tcio.add_geometries_to_annohdcell_output(
 
 # 3. Visualize with trackcell
 import trackcell.pl as tcpl
-tcpl.spatial_cell(adata, sample="sample1", show=True)
+tcpl.spatial_cell(adata, library_id="sample1", show=True)
 
 # 4. Perform spatial analysis
 import trackcell.tl as tctl
@@ -290,7 +290,7 @@ adata = tcio.restore_geometries(adata)
 
 # Now you can visualize
 import trackcell.pl as tcpl
-tcpl.spatial_cell(adata, sample="sample1")
+tcpl.spatial_cell(adata, library_id="sample1")
 ```
 
 ### What This Does

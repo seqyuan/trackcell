@@ -242,6 +242,8 @@ Facet-specific parameters:
 * ``figsize``: Figure size (auto-computed if None)
 * ``edges_width``: Cell boundary width (default 0.3)
 * ``edges_color``: Cell boundary color (default ``'#cccccc30'``)
+* ``alpha_facet``: Cell transparency for facet plots (default 0.8)
+* ``show``: Whether to call ``plt.show()`` (default ``True``)
 
 Square-bin visualization
 ------------------------
@@ -559,6 +561,7 @@ Key parameters for :func:`tcl.pl.select_regions`
 
 * ``color`` — column in ``adata.obs`` or gene in ``adata.var_names`` to colour
   the spatial plot.
+* ``library_id`` — spatial library key (auto-detected if ``None``).
 * ``mode`` — ``"auto"`` (default), ``"cellbin"``, or ``"squarebin"``.
 * ``basis`` — key in ``adata.obsm`` for squarebin coordinates (default
   ``"spatial"``).
@@ -567,8 +570,7 @@ Key parameters for :func:`tcl.pl.select_regions`
   after every selection; ``False`` → use ``selector.to_adata()``.
 * ``roi_prefix`` — prefix for auto-generated names (default ``"ROI"`` →
   ``ROI_1``, ``ROI_2``, …).
-  after each selection; ``False`` stores results only on the ``RegionSelector``
-  — use ``selector.to_adata()`` to get a copy.
+* ``figsize`` — figure size when ``ax`` is not provided.
 * ``invert_y`` — default ``True`` to match image/spatial coordinates where y
   increases from top to bottom.
 * Extra keyword arguments are forwarded to ``spatial_cell`` or

@@ -114,6 +114,19 @@ After loading, the AnnData object is fully compatible with `tcl.pl.spatial_cell(
 tcl.pl.spatial_cell(adata, color="EPCAM", cmap="Reds", edges_width=0.3)
 ```
 
+**TMA multi-core slice separation**: For Xenium TMA data (multiple tissue cores in one
+region), enable automatic DBSCAN slice separation during load:
+
+```python
+adata = tcl.io.read_xenium_cellseg(
+    "/path/to/xenium/region", sample="85811_S",
+    slice_separate=True, slice_eps=80,
+)
+print(adata.obs["slice_id"].value_counts())  # S001, S002, ...
+```
+
+See the DBSCAN Slice Separation section below for the full workflow.
+
 #### Reading Bin-Level Data (2um/8um/16um)
 
 ```python
@@ -230,6 +243,58 @@ tcl.pl.spatial_squarebin(
     alpha=0.8,
     alpha_img=0.4,
 )
+
+# Use square markers (shape='square') instead of circles (shape='circle', default)
+tcl.pl.spatial_squarebin(adata_bin, color="EPCAM", shape="circle")
+
+# Cartesian y-axis (invert_y=False) instead of image coordinates (default True)
+tcl.pl.spatial_squarebin(adata_bin, color="EPCAM", invert_y=False)
+```
+
+##### Marking Regions
+
+Draw rectangular highlights on spatial plots to annotate regions of interest (ROI):
+
+```python
+# mark_region works on any matplotlib Axes
+ax = tcl.pl.spatial_cell(adata, color="CellType")
+tcl.pl.mark_region(ax, xlim=(54500, 56000), ylim=(15000, 16000))
+
+# With semi-transparent fill
+tcl.pl.mark_region(
+    ax, xlim=(54500, 56000), ylim=(15000, 16000),
+    fill_color='red', fill_alpha=0.15, edges_width=3.0,
+)
+
+# Multiple regions efficiently (defer refresh)
+tcl.pl.mark_region(ax, xlim=(40000, 42000), ylim=(5000, 7000),
+                   edges_color='cyan', fill_color='cyan', refresh=False, show=False)
+tcl.pl.mark_region(ax, xlim=(55000, 57000), ylim=(15000, 17000),
+                   edges_color='yellow', fill_color='yellow', refresh=False, show=False)
+tcl.pl.mark_region(ax, xlim=(60000, 62000), ylim=(10000, 12000),
+                   edges_color='magenta', fill_color='magenta')  # show=True by default
+```
+
+##### Interactive ROI Selection (Jupyter)
+
+Select regions of interest interactively in a Jupyter notebook with auto-naming,
+real-time cell highlighting, toolbar, undo, and keyboard shortcuts.
+
+```python
+%matplotlib widget  # required in Jupyter
+
+selector = tcl.pl.select_regions(
+    adata, color="CellType", key_added="ROI", inplace=True,
+)
+# Use toolbar buttons (■ Rect, ● Ellipse, ✎ Lasso) or keyboard r/e/l
+# ROIs are auto-named: ROI_1, ROI_2, ...
+
+# Post-hoc renaming
+selector.rename_roi("ROI_1", "tumor")
+selector.rename_roi("ROI_2", "stroma")
+
+# Results in adata.obs
+adata.obs["ROI"].value_counts()
 ```
 
 ##### Traditional Point-based Visualization
@@ -276,7 +341,7 @@ adata = tcl.io.convert_annohdcell_to_trackcell(
 )
 
 # Now visualize with trackcell
-tcl.pl.spatial_cell(adata, sample="sample1")
+tcl.pl.spatial_cell(adata, library_id="sample1")
 ```
 
 #### Method 2: Add Geometries to Existing Cell H5AD
@@ -295,7 +360,7 @@ adata = tcl.io.add_geometries_to_annohdcell_output(
 )
 
 # Now visualize with trackcell
-tcl.pl.spatial_cell(adata, sample="sample1")
+tcl.pl.spatial_cell(adata, library_id="sample1")
 ```
 
 **Key differences:**
@@ -375,6 +440,92 @@ tcl.tl.multigene_blend(
 )
 ```
 
+### YardCluster Spatial Clustering
+
+Lightweight CPU spatial clustering that combines BANKSY-style neighborhood features
+with dual-channel identity/context embeddings and Leiden clustering. One function
+covers the full pipeline (preprocessing, spatial features, embedding, clustering):
+
+```python
+# One-shot YardCluster — includes HVG/normalize/log/scale by default
+import trackcell as tcl
+
+tcl.tl.spatial_cluster(adata, mode="auto")
+
+# Visualize tissue domains and cell-type-oriented clusters
+tcl.pl.spatial_cell(adata, color="yardcluster_domain", figsize=(10, 10))
+tcl.pl.spatial_cell(adata, color="yardcluster_celltype", figsize=(10, 10))
+```
+
+Clustering modes:
+- `mode="celltype"` (λ=0.2): emphasizes cell-intrinsic expression → cell typing
+- `mode="domain"` (λ=0.8): emphasizes neighborhood context → tissue domains
+- `mode="auto"` (default): runs both in one call
+
+Advanced options: multi-sample Harmony integration (`integrate="joint"`),
+DE-guided cluster merging (`merge_clusters=True`), sketch mode for >500k cells,
+and gradient features (`use_gradient=True`).
+
+```python
+# Multi-sample integration
+tcl.tl.spatial_cluster(adata, batch_key="sample_id", integrate="joint", mode="celltype")
+
+# Per-sample separate clustering
+tcl.tl.spatial_cluster(adata, batch_key="sample_id", integrate="separate")
+
+# Skip built-in preprocessing if data is already prepared
+tcl.tl.spatial_cluster(adata, preprocess=False, mode="auto")
+```
+
+### DBSCAN Slice Separation & Colony Clustering
+
+#### TMA Slice Separation (Xenium)
+
+Split multi-core Xenium TMA regions into physical tissue sections (S001, S002, …)
+using DBSCAN density clustering on cell centroids:
+
+```python
+import trackcell as tcl
+
+# Option A: during load
+adata = tcl.io.read_xenium_cellseg("/path/to/xenium/region",
+                                    sample="85811_S",
+                                    slice_separate=True, slice_eps=80)
+
+# Option B: separate step
+adata = tcl.io.read_xenium_cellseg("/path/to/xenium/region")
+tcl.tl.spatial_slice_cluster(adata, eps=80, min_cells=1000)
+
+# Summarize and split
+summary = tcl.tl.slice_cluster_summary(adata)
+slices = tcl.tl.split_by_slice(adata)          # dict: "S001" → AnnData
+
+# Visualize
+tcl.pl.spatial_cell(adata, color="slice_id", figsize=(12, 12))
+```
+
+#### Micro-Region Colony Clustering (GC / Tumor Nests)
+
+Separate spatially disconnected germinal centers or tumor nests within a single
+tissue section (after BANKSY / YardCluster filtering):
+
+```python
+# After clustering with YardCluster, isolate e.g. GC B cells
+tcl.tl.spatial_cluster(sub, mode="auto")
+gc = sub[sub.obs["yardcluster_domain"] == "Germinal Center B Cells"].copy()
+
+# DBSCAN colony identification
+tcl.tl.spatial_colony_cluster(gc, eps=50, min_samples=5, min_cluster_size=40)
+tcl.tl.mark_colony_centroids(gc, centroid_label="GCC")
+
+# Distance analysis
+tcl.tl.distance_to_nearest_centroids(
+    sub, centroid_key="cell_centroid_type",
+    distance_key="distance_to_nearest_gcc", centroid_label="GCC",
+)
+tcl.pl.spatial_cell(sub, color="distance_to_nearest_gcc", cmap="Reds")
+```
+
 ## Development
 
 
@@ -387,7 +538,7 @@ tcl.tl.multigene_blend(
 git tag v0.3.8
 git push origin v0.3.8
 
-# In GitHub, go to “Releases” → “Draft a new release”.
+# In GitHub, go to "Releases" → "Draft a new release".
 ```
 
 

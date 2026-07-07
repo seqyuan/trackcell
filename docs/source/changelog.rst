@@ -1,5 +1,31 @@
 Changelog
 
+Version 0.3.34
+--------------
+
+* **Documentation overhaul** — synchronized all usage tutorials with actual
+  function signatures and parameters:
+
+  * Fixed ``spatial_cell(..., sample=...)`` → ``library_id=...`` in all
+    code examples (12 places across docstrings, RST, Markdown).
+  * **New usage tutorial**: ``docs/source/usage/annohdcell_conversion.rst``
+    — annohdcell (bin2cell) conversion, now integrated into Sphinx.
+  * ``README.md``: added YardCluster, DBSCAN slice separation, interactive ROI
+    selection, and mark_region sections.
+  * ``spatial_clustering.rst``: documented missing advanced parameters
+    (``preprocess``, ``layer``, ``use_raw``, ``hvg_by_batch``,
+    ``scale_by_batch``, ``harmony_integrate``, ``copy``).
+  * ``computing_distances.rst``: added ``hd_labeldist`` ``method`` parameter
+    (kdtree vs cdist) and colony centroid distance section
+    (``mark_colony_centroids``, ``distance_to_nearest_centroids``).
+  * ``visualization.rst``: fixed garbled key-parameters section for
+    ``select_regions``, added missing ``alpha_facet``/``show`` for facet mode,
+    ``library_id``/``figsize`` for ROI select.
+  * ``examples.rst``: replaced duplicate toctree with ``:doc:`` links.
+  * ``annohdcell_conversion.rst``: added ``create_polygons`` and ``n_jobs``
+    method-specific parameter docs.
+
+
 Version 0.3.33
 --------------
 

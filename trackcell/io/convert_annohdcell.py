@@ -145,7 +145,7 @@ def convert_annohdcell_to_trackcell(
     >>> print(adata)
     >>> # Now can use trackcell visualization functions
     >>> import trackcell.pl as tcpl
-    >>> tcpl.spatial_cell(adata, sample="sample1")
+    >>> tcpl.spatial_cell(adata, library_id="sample1")
 
     Notes
     -----
@@ -390,7 +390,7 @@ def add_geometries_to_annohdcell_output(
     ... )
     >>> # Now can use trackcell visualization
     >>> import trackcell.pl as tcpl
-    >>> tcpl.spatial_cell(adata, sample="sample1")
+    >>> tcpl.spatial_cell(adata, library_id="sample1")
 
     Notes
     -----

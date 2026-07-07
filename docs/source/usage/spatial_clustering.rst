@@ -304,6 +304,63 @@ Neighborhood **mean** ``M`` is always computed. Optional **gradient** ``G``
        k_gradient=30,               # default: 2 * k_spatial
    )
 
+Preprocessing Control
+~~~~~~~~~~~~~~~~~~~~~
+
+By default (``preprocess=True``), ``spatial_cluster`` runs NormalizeTotal →
+Log1p → HVG → Scale before clustering.  Fine-tune or skip:
+
+.. code-block:: python
+
+   tcl.tl.spatial_cluster(
+       adata,
+       mode="auto",
+       preprocess=True,          # default: run standard scanpy pipeline
+       n_top_genes=2000,         # HVG count (default 2000)
+       hvg_by_batch=True,        # run HVG per batch when batch_key is set
+       scale_by_batch=False,     # scale each batch independently
+   )
+
+   # If data is already log-normalised and scaled
+   tcl.tl.spatial_cluster(adata, preprocess=False, mode="auto")
+
+   # Use a pre-computed layer (e.g. scVI denoised) instead of adata.X
+   tcl.tl.spatial_cluster(adata, layer="denoised", preprocess=False, mode="domain")
+
+   # Use adata.raw.X instead of adata.X
+   tcl.tl.spatial_cluster(adata, use_raw=True, mode="celltype")
+
+Harmony Integration (per-channel)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+When ``integrate='joint'``, Harmony is run on **both** identity and context
+embeddings before mixing.  You can also enable Harmony independently of the
+``integrate`` parameter:
+
+.. code-block:: python
+
+   tcl.tl.spatial_cluster(
+       adata,
+       batch_key="sample_id",
+       harmony_integrate=True,   # Harmony on each embedding channel
+       integrate="none",         # no separate/joint mode
+       mode="domain",
+   )
+
+This differs from ``integrate='joint'`` in that ``harmony_integrate`` only
+corrects the embedding channels, while ``integrate='joint'`` also triggers
+Harmony during the embedding stage.
+
+Return-Copy Mode
+~~~~~~~~~~~~~~~~
+
+Set ``copy=True`` to leave the original ``adata`` untouched and return a
+modified copy:
+
+.. code-block:: python
+
+   result = tcl.tl.spatial_cluster(adata, mode="auto", copy=True)
+
 When to Use YardCluster vs Space Ranger graphclust
 --------------------------------------------------
 
