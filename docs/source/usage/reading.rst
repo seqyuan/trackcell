@@ -284,3 +284,21 @@ Space Ranger's pre-computed ``classification`` labels directly with
 
 Always call ``sync_geometries_after_subset()`` after subsetting to avoid these issues.
 
+
+Converting annohdcell Output
+-----------------------------
+
+TrackCell provides two functions for converting annohdcell (bin2cell) output
+to trackcell-compatible format with polygon geometries:
+
+* :func:`~trackcell.io.convert_annohdcell_to_trackcell` — create a new
+  cell-level h5ad from a 2μm bin h5ad (simple count summation).
+* :func:`~trackcell.io.add_geometries_to_annohdcell_output` — add polygon
+  geometries to annohdcell's final cell h5ad (preserves exact aggregation).
+
+After reading an h5ad that contains WKT geometry strings, restore the
+GeoDataFrame for visualization with :func:`~trackcell.io.restore_geometries`.
+
+See :doc:`annohdcell_conversion` for the full tutorial with examples,
+parameter details, and troubleshooting.
+

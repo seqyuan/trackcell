@@ -12,6 +12,7 @@ metrics, **DBSCAN TMA slice separation**, and **YardCluster** spatial clustering
    :caption: Usage Topics:
 
    usage/reading
+   usage/annohdcell_conversion
    usage/xenium_slice_separation
    usage/visualization
    usage/computing_distances
