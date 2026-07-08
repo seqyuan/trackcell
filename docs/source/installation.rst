@@ -40,6 +40,12 @@ Spatial clustering with :doc:`usage/spatial_clustering` additionally requires:
 
 .. code-block:: bash
 
+   pip install trackcell[clustering]
+
+Or manually:
+
+.. code-block:: bash
+
    pip install leidenalg python-igraph
 
 For multi-sample Harmony batch integration (``integrate='joint'``):
