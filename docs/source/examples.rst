@@ -17,3 +17,5 @@ See also the usage tutorials:
 * :doc:`usage/visualization` — multi-gene blending, dual-color, interactive ROI selection
 * :doc:`usage/computing_distances` — ``hd_labeldist`` and colony centroid distance
 * :doc:`usage/annohdcell_conversion` — converting annohdcell output to trackcell format
+* :doc:`notebooks/STOmics_mouse_brain_demo` — STOmics (Stereo-seq) cellbin clustering and boundary visualization
+* :doc:`notebooks/YardCluster_STOmics_demo` — YardCluster spatial clustering on STOmics mouse brain
