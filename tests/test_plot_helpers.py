@@ -70,3 +70,33 @@ def test_spatial_cell_does_not_tight_layout_user_axes(monkeypatch):
         legend=False,
     )
     plt.close(fig)
+
+
+def test_spatial_cell_flips_colored_background_when_invert_y_false():
+    img = np.arange(12, dtype=np.float32).reshape(3, 4)
+    adata = AnnData(
+        X=np.ones((1, 1), dtype=np.float32),
+        obs=pd.DataFrame({"celltype": ["A"]}, index=["c0"]),
+        var=pd.DataFrame(index=["g0"]),
+    )
+    adata.obsm["spatial"] = np.array([[1.5, 1.5]])
+    adata.uns["spatial"] = {
+        "sample": {
+            "images": {"hires": img},
+            "scalefactors": {"tissue_hires_scalef": 1.0},
+            "geometries": gpd.GeoDataFrame(geometry=[_square(1, 1)], index=["c0"]),
+        }
+    }
+
+    ax = spatial_cell(
+        adata,
+        color="celltype",
+        library_id="sample",
+        invert_y=False,
+        show=False,
+        legend=False,
+    )
+
+    rendered_background = np.asarray(ax.images[0].get_array())
+    np.testing.assert_array_equal(rendered_background, img[::-1])
+    plt.close(ax.figure)

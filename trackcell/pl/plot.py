@@ -912,7 +912,10 @@ def spatial_cell(
                 else:
                     current_ax.imshow(img[::-1], extent=img_extent, origin='upper', alpha=1.0)
             else:
-                current_ax.imshow(img, extent=img_extent, origin='upper', alpha=alpha_img)
+                if invert_y:
+                    current_ax.imshow(img, extent=img_extent, origin='upper', alpha=alpha_img)
+                else:
+                    current_ax.imshow(img[::-1], extent=img_extent, origin='upper', alpha=alpha_img)
         
         # If color is None, skip geometry plotting and only show HE image
         if color_key is None:
@@ -1492,7 +1495,10 @@ def spatial_squarebin(
                 else:
                     current_ax.imshow(img[::-1], extent=img_extent, origin='upper', alpha=1.0)
             else:
-                current_ax.imshow(img, extent=img_extent, origin='upper', alpha=alpha_img)
+                if invert_y:
+                    current_ax.imshow(img, extent=img_extent, origin='upper', alpha=alpha_img)
+                else:
+                    current_ax.imshow(img[::-1], extent=img_extent, origin='upper', alpha=alpha_img)
 
         if color_key is None:
             if img is not None and img_extent is not None:
