@@ -1,5 +1,18 @@
 Changelog
 
+Version 0.3.38
+--------------
+
+* **Fix ssDNA grayscale image → RGB** in ``io.read_sto``: STOmics ssDNA images
+  are single-channel grayscale. ``sc.pl.spatial`` applies viridis colormap to
+  2D arrays, producing misleading purple backgrounds. The reader now converts
+  to (H, W, 3) RGB at load time.
+
+* **``trackcell[clustering]`` extra**: ``leidenalg`` and ``python-igraph`` are
+  now an optional extra (``pip install trackcell[clustering]``) rather than
+  hard dependencies.
+
+
 Version 0.3.37
 --------------
 

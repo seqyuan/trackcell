@@ -180,7 +180,11 @@ def _load_tissue_image(
     image_path: Optional[Union[str, Path]],
     gef_dir: Path,
 ) -> Optional[np.ndarray]:
-    """Load a tissue image for STOmics data.
+    """Load a tissue image for STOmics data, converting grayscale to RGB.
+
+    STOmics ssDNA images are single-channel grayscale.  ``sc.pl.spatial``
+    applies viridis to 2D arrays, producing misleading purple backgrounds.
+    We convert to (H, W, 3) RGB so the image displays correctly.
 
     Parameters
     ----------
@@ -193,8 +197,26 @@ def _load_tissue_image(
     Returns
     -------
     np.ndarray or None
-        The loaded image array, or None if not found.
+        The loaded image array (always 3-channel RGB), or None if not found.
     """
+    def _ensure_rgb(img: np.ndarray) -> np.ndarray:
+        """Convert grayscale (H,W) or (H,W,1) to (H,W,3) RGB."""
+        if img.ndim == 2:
+            img = np.stack([img] * 3, axis=-1)
+        elif img.ndim == 3 and img.shape[2] == 1:
+            img = np.repeat(img, 3, axis=2)
+        # Normalize to uint8-safe range if needed
+        if img.dtype != np.uint8:
+            img = (img / img.max() * 255).clip(0, 255).astype(np.uint8)
+        return img
+
+    def _read_and_convert(path: Path) -> np.ndarray:
+        import imageio.v3 as iio
+        img = iio.imread(path)
+        img = _ensure_rgb(img)
+        print(f"[STO] Loaded tissue image: {path.name}"
+              f" ({img.shape[0]}×{img.shape[1]})")
+        return img
     if image_path is not None:
         image_path = Path(image_path).resolve()
         if image_path.is_dir():
@@ -205,11 +227,7 @@ def _load_tissue_image(
                 warnings.warn(f"No tissue image found in {image_path}")
                 return None
         if image_path.suffix.lower() in ('.tif', '.tiff'):
-            import imageio.v3 as iio
-            img = iio.imread(image_path)
-            print(f"[STO] Loaded tissue image: {image_path.name}"
-                  f" ({img.shape[0]}×{img.shape[1]})")
-            return img
+            return _read_and_convert(image_path)
         elif image_path.suffix.lower() in ('.rpi',):
             warnings.warn(
                 "RPI pyramid images are not supported yet. "
@@ -230,11 +248,7 @@ def _load_tissue_image(
         if reg_dir.is_dir():
             found = _find_register_image(reg_dir)
             if found is not None:
-                import imageio.v3 as iio
-                img = iio.imread(found)
-                print(f"[STO] Auto-loaded tissue image: {found.name}"
-                      f" ({img.shape[0]}×{img.shape[1]})")
-                return img
+                return _read_and_convert(found)
 
     # Also check two levels up (some pipelines nest deeper)
     grandparent = parent.parent
@@ -243,11 +257,7 @@ def _load_tissue_image(
         if reg_dir.is_dir():
             found = _find_register_image(reg_dir)
             if found is not None:
-                import imageio.v3 as iio
-                img = iio.imread(found)
-                print(f"[STO] Auto-loaded tissue image: {found.name}"
-                      f" ({img.shape[0]}×{img.shape[1]})")
-                return img
+                return _read_and_convert(found)
 
     return None
 

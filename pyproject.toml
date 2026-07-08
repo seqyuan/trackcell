@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "trackcell"
-version = "0.3.37"
+version = "0.3.38"
 description = "A Python package for processing single-cell and spatial transcriptomics data"
 authors = ["Zan Yuan <yfinddream@gmail.com>"]
 readme = "README.md"
@@ -31,6 +31,9 @@ nbsphinx = "^0.9.0"
 sphinx-gallery = "^0.15.0"
 sphinx-autodoc-typehints = "^1.19.0"
 ipython = "^7.0.0"
+
+[tool.poetry.extras]
+clustering = ["leidenalg", "python-igraph"]
 
 
 [build-system]
