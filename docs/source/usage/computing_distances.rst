@@ -59,6 +59,40 @@ After computing distances, you can visualize them using ``tcl.pl.spatial_cell()`
    # Visualize the distance
    tcl.pl.spatial_cell(adata, color='Cluster-2_dist', cmap='Reds', figsize=(10, 10))
 
+Controlling the Coordinate System
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+When the auto-detection of hires vs fullres pixels is ambiguous (e.g. for
+non-standard bin2cell outputs or cropped tissue), you can set the coordinate
+system explicitly:
+
+.. code-block:: python
+
+   tcl.tl.hd_labeldist(
+       adata,
+       groupby="classification",
+       label="Cluster-2",
+       coordinate_system="fullres",   # or "hires"
+   )
+
+Pass ``coordinate_system='auto'`` (the default) to keep the automatic
+heuristic; a warning will be emitted when the choice is uncertain.
+You can also override individual scalefactors:
+
+.. code-block:: python
+
+   tcl.tl.hd_labeldist(
+       adata,
+       groupby="classification",
+       label="Cluster-2",
+       library_id="sample1",              # pick a specific spatial library
+       microns_per_pixel=0.2125,           # override from scalefactors
+       hires_scale=0.05,                   # override tissue_hires_scalef
+   )
+
+The resolved parameters are stored in ``adata.uns['{label}_dist_params']``
+(or ``DataFrame.attrs['params']`` when ``inplace=False``) for reproducibility.
+
 Coordinate Resolution Detection
 -------------------------------
 

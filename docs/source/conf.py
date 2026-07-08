@@ -9,7 +9,7 @@
 project = 'trackcell'
 copyright = '2025, Zan Yuan'
 author = 'Zan Yuan'
-release = '0.3.22'
+release = '0.3.35'
 
 # -- General configuration ---------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#general-configuration
@@ -128,6 +128,30 @@ autodoc_mock_imports = [
     'numba',
     'anndata',
     'h5py',
+    'scipy',
+    'scipy.sparse',
+    'scipy.spatial',
+    'scipy.cluster',
+    'scipy.stats',
+    'matplotlib',
+    'matplotlib.pyplot',
+    'matplotlib.patches',
+    'matplotlib.colors',
+    'matplotlib.collections',
+    'matplotlib.widgets',
+    'matplotlib.cm',
+    'geopandas',
+    'shapely',
+    'shapely.geometry',
+    'imageio',
+    'imageio.v3',
+    'sklearn',
+    'sklearn.cluster',
+    'leidenalg',
+    'igraph',
+    'harmonypy',
+    'ipympl',
+    'squidpy',
 ]
 
 # Intersphinx mapping
