@@ -73,18 +73,21 @@ def test_spatial_cell_does_not_tight_layout_user_axes(monkeypatch):
 
 
 def test_spatial_cell_flips_colored_background_when_invert_y_false():
+    """Colored background image with invert_y=False must be vertically flipped."""
     img = np.arange(12, dtype=np.float32).reshape(3, 4)
+    # Polygon that covers the whole 4×3 image area so the crop is a no-op
+    full_poly = Polygon([(0, 0), (4, 0), (4, 3), (0, 3)])
     adata = AnnData(
         X=np.ones((1, 1), dtype=np.float32),
         obs=pd.DataFrame({"celltype": ["A"]}, index=["c0"]),
         var=pd.DataFrame(index=["g0"]),
     )
-    adata.obsm["spatial"] = np.array([[1.5, 1.5]])
+    adata.obsm["spatial"] = np.array([[2.0, 1.5]])
     adata.uns["spatial"] = {
         "sample": {
             "images": {"hires": img},
             "scalefactors": {"tissue_hires_scalef": 1.0},
-            "geometries": gpd.GeoDataFrame(geometry=[_square(1, 1)], index=["c0"]),
+            "geometries": gpd.GeoDataFrame(geometry=[full_poly], index=["c0"]),
         }
     }
 

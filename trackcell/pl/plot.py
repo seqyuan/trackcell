@@ -37,7 +37,9 @@ def _process_background_image(spatial_info, img_key, data_coords_range=None):
     img_key : str or None
         Key for the image to use
     data_coords_range : tuple, optional
-        Tuple of (x_min, y_min, x_max, y_max) for data coordinate range
+        Tuple of (x_min, y_min, x_max, y_max) for data coordinate range.
+        When provided, the image is cropped to cover only the data region,
+        improving rendering quality and performance.
         
     Returns
     -------
@@ -66,6 +68,44 @@ def _process_background_image(spatial_info, img_key, data_coords_range=None):
     # Image shape is (height, width) in pixels
     img_height, img_width = img.shape[:2]
     
+    if data_coords_range is not None:
+        x_min, y_min, x_max, y_max = data_coords_range
+        
+        # Convert data coordinates to image pixel coordinates
+        if scale_factor < 1.0:
+            # Data is in fullres, image is downscaled
+            px_x0 = int(np.floor(x_min * scale_factor))
+            px_x1 = int(np.ceil(x_max * scale_factor))
+            px_y0 = int(np.floor(y_min * scale_factor))
+            px_y1 = int(np.ceil(y_max * scale_factor))
+        else:
+            # Data and image share the same coordinate system
+            px_x0 = int(np.floor(x_min))
+            px_x1 = int(np.ceil(x_max))
+            px_y0 = int(np.floor(y_min))
+            px_y1 = int(np.ceil(y_max))
+        
+        # Clamp to image bounds
+        px_x0 = max(0, px_x0)
+        px_x1 = min(img_width, px_x1)
+        px_y0 = max(0, px_y0)
+        px_y1 = min(img_height, px_y1)
+        
+        if px_x0 < px_x1 and px_y0 < px_y1:
+            img = img[px_y0:px_y1, px_x0:px_x1]
+            # Compute extent: [left, right, bottom, top]
+            # Row 0 (original py0, top of tissue) maps to y=py0 (smaller)
+            # Last row (original py1-1, bottom) maps to y=py1 (larger)
+            if scale_factor < 1.0:
+                img_extent = [
+                    px_x0 / scale_factor, px_x1 / scale_factor,
+                    px_y1 / scale_factor, px_y0 / scale_factor,
+                ]
+            else:
+                img_extent = [px_x0, px_x1, px_y1, px_y0]
+            return img, img_extent
+    
+    # Fallback: return full image
     if scale_factor < 1.0:
         # Image is downscaled, need to scale up the extent
         # The image pixels represent a smaller region in full-res coordinates
@@ -467,7 +507,7 @@ def _infer_square_size(adata, library_id, coords, binsize=None):
 
 
 def _draw_background_only(ax, spatial_info, img_key, x_min, y_min, x_max, y_max, xlabel, ylabel, invert_y=True):
-    img, img_extent = _process_background_image(spatial_info, img_key)
+    img, img_extent = _process_background_image(spatial_info, img_key, (x_min, y_min, x_max, y_max))
     if img is not None and img_extent is not None:
         ax.imshow(img, extent=img_extent, origin='upper', alpha=1.0)
         ax.set_xlim(img_extent[0], img_extent[1])
@@ -1487,7 +1527,7 @@ def spatial_squarebin(
         square_size = _infer_square_size(adata, library_id, coords, binsize=binsize)
         (x_min, y_min, x_max, y_max), (x_padding, y_padding) = _compute_data_extent_from_coords(coords, extra_pad=square_size / 2.0)
 
-        img, img_extent = _process_background_image(spatial_info, img_key)
+        img, img_extent = _process_background_image(spatial_info, img_key, (x_min, y_min, x_max, y_max))
         if img is not None and img_extent is not None:
             if color_key is None:
                 if invert_y:

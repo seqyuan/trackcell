@@ -1,6 +1,17 @@
 Changelog
 
 
+Version 0.3.40
+--------------
+
+* **Fix background image cropping in ROI views**: ``_process_background_image``
+  now uses ``data_coords_range`` to crop the background image to the visible
+  data region before passing it to ``imshow`` (matching scanpy's behaviour).
+  Previously, the full image was always rendered and then zoomed, which could
+  cause alignment drift between the background image and cell geometries on
+  ROI-subset data due to matplotlib downsampling of large images.
+
+
 Version 0.3.39
 --------------
 
