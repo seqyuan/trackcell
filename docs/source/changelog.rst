@@ -1,5 +1,17 @@
 Changelog
 
+
+Version 0.3.39
+--------------
+
+* **Fix background image direction when ``invert_y=False``**: ``spatial_cell``
+  and ``spatial_squarebin`` now respect ``invert_y=False`` for colored
+  background image overlays by vertically flipping the image, matching the
+  existing ``color=None`` behavior. Previously, the background image was
+  rendered unflipped while axis limits were inverted, causing ROI views to
+  appear inconsistent when compared to manually-cropped images.
+
+
 Version 0.3.38
 --------------
 
