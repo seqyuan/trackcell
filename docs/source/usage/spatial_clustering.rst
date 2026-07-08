@@ -270,6 +270,7 @@ YardCluster offers a similar optional post-processing step:
        mode="domain",
        merge_clusters=True,
        merge_adj_p=0.05,
+       merge_max_de_tests=2000,  # cap on pairwise DE tests (default 2000)
    )
 
 Large Datasets (Sketch Mode)
