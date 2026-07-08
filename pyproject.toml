@@ -1,13 +1,13 @@
 [tool.poetry]
 name = "trackcell"
-version = "0.3.36"
+version = "0.3.37"
 description = "A Python package for processing single-cell and spatial transcriptomics data"
 authors = ["Zan Yuan <yfinddream@gmail.com>"]
 readme = "README.md"
 packages = [{include = "trackcell"}]
 
 [tool.poetry.dependencies]
-python = ">=3.10,<3.12"
+python = ">=3.10,<3.13"
 scanpy = ">=1.9,<2.0"
 geopandas = ">=1.1.1,<2.0"
 pandas = ">=2.1,<2.4"

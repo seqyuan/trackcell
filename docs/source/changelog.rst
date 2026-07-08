@@ -1,5 +1,19 @@
 Changelog
 
+Version 0.3.37
+--------------
+
+* **Relax Python version constraint** from ``>=3.10,<3.12`` to ``>=3.10,<3.13``
+  to allow installation on Python 3.12 environments.
+
+* **Docs fixes** (:pr:`#—`):
+
+  * STOmics notebook now has embedded figures (PCA, UMAP, spatial cell polygons
+    with ssDNA background, ROI zoom with cell boundaries).
+  * Gallery thumbnails for STOmics and YardCluster notebooks.
+  * ``usage.rst`` updated to mention STOmics support.
+
+
 Version 0.3.36
 --------------
 
