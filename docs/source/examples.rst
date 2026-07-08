@@ -4,11 +4,19 @@ Examples
 This section contains example notebooks and links to usage tutorials.
 
 .. nbgallery::
-    :caption: Colon Cancer Demo
-    :name: colon-cancer-gallery
+    :caption: Visium HD (10X)
+    :name: visium-hd-gallery
     :glob:
 
     notebooks/Colon_Cancer_demo
+
+.. nbgallery::
+    :caption: STOmics (Stereo-seq)
+    :name: sto-gallery
+    :glob:
+
+    notebooks/STOmics_mouse_brain_demo
+    notebooks/YardCluster_STOmics_demo
 
 See also the usage tutorials:
 
