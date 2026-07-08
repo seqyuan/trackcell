@@ -3,9 +3,9 @@ Usage Guide
 
 This guide provides examples of how to use TrackCell for reading and analyzing spatial transcriptomics data.
 
-Topics include loading 10x Visium HD / Xenium data, polygon visualization, distance
-metrics, **DBSCAN TMA slice separation**, and **YardCluster** spatial clustering
-(``tcl.tl.spatial_cluster``).
+Topics include loading 10x Visium HD / Xenium data, **STOmics (Stereo-seq)** GEF data,
+polygon visualization, distance metrics, **DBSCAN TMA slice separation**, and
+**YardCluster** spatial clustering (``tcl.tl.spatial_cluster``).
 
 .. toctree::
    :maxdepth: 2
