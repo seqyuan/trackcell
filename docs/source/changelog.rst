@@ -1,5 +1,103 @@
 Changelog
 
+Version 0.3.35
+--------------
+
+* **Defensive fixes from code review** (:pr:`#—`):
+
+  **Spatial weights NaN / zero-division protection**
+  (``tl._spatial_graph.build_spatial_weights``):
+
+  * Handle duplicate spatial coordinates correctly (use neighbour index, not
+    zero-distance, to exclude self).
+  * Filter out non-finite distances before computing the Gaussian bandwidth.
+  * Guard against zero or non-finite weight-sum with uniform fallback.
+  * Validate input shapes (``coords.ndim == 2``, ``batch_labels`` length).
+
+  **Annohdcell polygon generation robustness**
+  (``io.convert_annohdcell.bins_to_cell_polygon``):
+
+  * Colinear bins now produce a valid buffered Polygon instead of a
+    LineString.
+  * Exception fallback uses ``Point(…).buffer(…)`` instead of a degenerate
+    3-identical-point polygon.
+
+  **Input alignment checks in SpaceRanger readers**
+  (``io.read_data.read_hd_bin`` / ``read_hd_cellseg``):
+
+  * Reject duplicate barcodes or missing tissue positions early with clear
+    error messages.
+  * Warn when expression barcodes lack segmentation geometries, and vice
+    versa.
+  * Use ``reindex`` instead of ``.loc[]`` for safer alignment.
+  * Protect against ``IndexError`` on empty classification / geometry
+    columns.
+
+  **YardCluster sparse-matrix scaling** (``tl.spatial_cluster``):
+
+  * ``_scale_for_yardcluster`` now uses ``zero_center=False`` when
+    ``adata.X`` is sparse, avoiding accidental densification / OOM.
+
+  **DE-merge guard against expensive pair enumeration**
+  (``tl._cluster_merge.merge_clusters_de``):
+
+  * New ``max_de_tests`` parameter (default 2000). When the number of
+    potential cluster-pair comparisons exceeds the cap, the merge is skipped
+    with a warning instead of running a large number of Wilcoxon tests.
+  * Parameter exposed through ``yard_cluster`` and ``spatial_cluster`` as
+    ``merge_max_de_tests``.
+
+  **Bug fix: ``integrate='separate'`` batch label corruption**
+  (``tl.spatial_cluster``):
+
+  * Fixed a bug where batch-prefixed labels were written as a single
+    string containing the entire array instead of per-cell labels.
+
+  **Classification color-parsing robustness**
+  (``io.read_data.convert_classification_to_color_dict``):
+
+  * Rewritten to tolerate mixed dict / JSON-string / list formats without
+    relying on ``DataFrame.explode().unique()``.
+
+  **``hd_labeldist`` explicit coordinate-system control**
+  (``tl.spatial.hd_labeldist``):
+
+  * New ``coordinate_system`` parameter: ``'fullres'``, ``'hires'``, or
+    ``'auto'`` (default, preserves old heuristic but warns when ambiguous).
+  * New ``library_id``, ``microns_per_pixel``, ``hires_scale`` overrides.
+  * Resolved parameters stored in ``adata.uns`` / ``DataFrame.attrs`` for
+    reproducibility.
+
+  **Plotting geometry auto-sync after subset**
+  (``pl.plot.spatial_cell`` / ``pl.select.select_regions``):
+
+  * ``_sync_geometries_to_obs`` automatically filters and re-orders
+    ``uns['spatial'][sample]['geometries']`` to match current
+    ``adata.obs_names`` on first use after subsetting.
+  * Simplified ``spatial_cell`` geometry-bounds validation: replaced nested
+    retry loop with a single pass + ``aspect='equal'`` fallback.
+  * ``spatial_cell`` and ``spatial_squarebin`` no longer call
+    ``fig.tight_layout()`` on user-provided axes.
+  * Added ``from __future__ import annotations`` so geopandas type hints
+    don't break module import when geopandas is absent.
+
+  * The following files were changed as part of this work:
+
+    * ``trackcell/tl/_spatial_graph.py``
+    * ``trackcell/tl/_cluster_merge.py``
+    * ``trackcell/tl/spatial_cluster.py``
+    * ``trackcell/tl/spatial.py``
+    * ``trackcell/io/convert_annohdcell.py``
+    * ``trackcell/io/read_data.py``
+    * ``trackcell/pl/plot.py``
+    * ``trackcell/pl/select.py``
+    * ``tests/test_yardcluster.py``
+    * ``tests/test_convert_annohdcell.py`` (new)
+    * ``tests/test_read_data_helpers.py`` (new)
+    * ``tests/test_spatial.py`` (new)
+    * ``tests/test_plot_helpers.py`` (new)
+
+
 Version 0.3.34
 --------------
 

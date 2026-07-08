@@ -59,6 +59,8 @@ def build_spatial_weights(
         Row-normalized weights, shape (n_obs, n_obs).
     """
     coords = np.asarray(coords, dtype=np.float64)
+    if coords.ndim != 2:
+        raise ValueError("coords must be a 2D array.")
     n_obs = coords.shape[0]
     if n_obs == 0:
         raise ValueError("coords must contain at least one point.")
@@ -77,6 +79,8 @@ def build_spatial_weights(
         batch_iter = [(np.arange(n_obs, dtype=np.int64), coords)]
     else:
         batch_labels = np.asarray(batch_labels)
+        if batch_labels.shape[0] != n_obs:
+            raise ValueError("batch_labels must have one entry per observation.")
         batch_iter = []
         for b in np.unique(batch_labels):
             idx = np.where(batch_labels == b)[0]
@@ -102,8 +106,8 @@ def build_spatial_weights(
             neighbor_dists = dists[i]
             neighbor_local = local_nbrs[i]
 
-            # Drop self (zero distance)
-            mask = neighbor_dists > 0
+            # Drop only the query point itself. Distinct cells can share coordinates.
+            mask = neighbor_local != i
             if not np.any(mask):
                 rows.append(int(gi))
                 cols.append(int(gi))
@@ -112,12 +116,28 @@ def build_spatial_weights(
 
             nd = neighbor_dists[mask]
             nl = neighbor_local[mask]
-            r_k = nd[-1] if nd.size >= k else nd.max()
-            if r_k <= 0:
+
+            finite = np.isfinite(nd)
+            if not np.any(finite):
+                rows.append(int(gi))
+                cols.append(int(gi))
+                data.append(1.0)
+                continue
+            nd = nd[finite]
+            nl = nl[finite]
+
+            positive_dist = nd[nd > 0]
+            if positive_dist.size > 0:
+                r_k = positive_dist[min(k - 1, positive_dist.size - 1)]
+            else:
                 r_k = 1.0
 
             weights = np.exp(-(nd / r_k) ** 2)
-            weights /= weights.sum()
+            weight_sum = weights.sum()
+            if not np.isfinite(weight_sum) or weight_sum <= 0:
+                weights = np.full(nd.shape, 1.0 / nd.size, dtype=np.float64)
+            else:
+                weights /= weight_sum
 
             for lj, w in zip(nl, weights):
                 rows.append(int(gi))

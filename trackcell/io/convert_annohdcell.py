@@ -10,7 +10,7 @@ import scanpy as sc
 import geopandas as gpd
 import pandas as pd
 import numpy as np
-from shapely.geometry import Polygon, MultiPoint
+from shapely.geometry import Polygon, MultiPoint, Point
 from shapely import wkt
 from scipy.sparse import csr_matrix, issparse
 from typing import Optional, Union
@@ -18,6 +18,15 @@ from pathlib import Path
 import warnings
 from multiprocessing import Pool, cpu_count
 from functools import partial
+
+
+def _bin_half_size_pixels(
+    bin_size_um: float,
+    microns_per_pixel: Optional[float],
+) -> float:
+    if microns_per_pixel is not None and microns_per_pixel > 0:
+        return (bin_size_um / microns_per_pixel) / 2
+    return 1.0
 
 
 def bins_to_cell_polygon(bin_coords: np.ndarray, bin_size_um: float = 2.0,
@@ -43,13 +52,11 @@ def bins_to_cell_polygon(bin_coords: np.ndarray, bin_size_um: float = 2.0,
     if len(bin_coords) == 0:
         raise ValueError("Cannot create polygon from empty bin coordinates")
 
+    half_size = _bin_half_size_pixels(bin_size_um, microns_per_pixel)
+
     if len(bin_coords) == 1:
-        # Single bin - create a small square around it
+        # Single bin - create a small square around it.
         x, y = bin_coords[0]
-        if microns_per_pixel is not None:
-            half_size = (bin_size_um / microns_per_pixel) / 2
-        else:
-            half_size = 1.0  # Default pixel size
         return Polygon([
             (x - half_size, y - half_size),
             (x + half_size, y - half_size),
@@ -57,14 +64,20 @@ def bins_to_cell_polygon(bin_coords: np.ndarray, bin_size_um: float = 2.0,
             (x - half_size, y + half_size)
         ])
 
-    # Multiple bins - use convex hull
+    # Multiple bins - use convex hull. Colinear bins produce a LineString, so
+    # buffer non-polygon hulls into a small valid polygon.
     points = MultiPoint(bin_coords)
     polygon = points.convex_hull
 
-    # Optionally buffer the polygon slightly to account for bin size
-    if microns_per_pixel is not None and isinstance(polygon, Polygon):
-        buffer_pixels = (bin_size_um / microns_per_pixel) / 2
-        polygon = polygon.buffer(buffer_pixels)
+    if isinstance(polygon, Polygon):
+        if microns_per_pixel is not None:
+            polygon = polygon.buffer(half_size)
+    else:
+        polygon = polygon.buffer(half_size)
+
+    if not isinstance(polygon, Polygon) or polygon.is_empty:
+        centroid = np.asarray(bin_coords, dtype=float).mean(axis=0)
+        polygon = Point(float(centroid[0]), float(centroid[1])).buffer(half_size)
 
     return polygon
 
@@ -259,11 +272,12 @@ def convert_annohdcell_to_trackcell(
                 geometry_wkt.append(polygon.wkt)
             except Exception as e:
                 warnings.warn(f"Failed to create polygon for cell {label}: {e}")
-                # Create a point as fallback
+                # Create a small valid polygon as fallback.
                 centroid = bin_coords.mean(axis=0)
-                point = Polygon([(centroid[0], centroid[1])] * 3)  # Degenerate polygon
-                geometries.append(point)
-                geometry_wkt.append(point.wkt)
+                radius = _bin_half_size_pixels(bin_size_um, microns_per_pixel)
+                polygon = Point(float(centroid[0]), float(centroid[1])).buffer(radius)
+                geometries.append(polygon)
+                geometry_wkt.append(polygon.wkt)
 
         # Add WKT strings to .obs
         adata_cell.obs["geometry"] = geometry_wkt

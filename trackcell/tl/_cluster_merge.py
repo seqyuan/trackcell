@@ -4,6 +4,7 @@ DE-guided cluster merging (Space Ranger-inspired).
 
 from __future__ import annotations
 
+import warnings
 from typing import Optional
 
 import numpy as np
@@ -75,15 +76,40 @@ def merge_clusters_de(
     use_rep: str,
     adj_p_threshold: float = 0.05,
     key_added: Optional[str] = None,
+    max_de_tests: Optional[int] = 2000,
 ) -> str:
     """
     Merge sibling clusters with no significant DE genes (hierarchical medoids + Wilcoxon).
+
+    ``max_de_tests`` caps the number of pairwise DE comparisons. When the
+    possible cluster pairs exceed this cap, labels are left unchanged instead of
+    launching an unexpectedly expensive merge pass.
     """
     out_key = key_added or f"{cluster_key}_merged"
     labels = adata.obs[cluster_key].astype(str).copy()
     unique = sorted(labels.unique(), key=lambda x: (len(x), x))
     if len(unique) <= 1:
         adata.obs[out_key] = labels.values
+        return out_key
+
+    max_possible_tests = len(unique) * (len(unique) - 1) // 2
+    if max_de_tests is not None and max_possible_tests > max_de_tests:
+        warnings.warn(
+            f"Skipping DE-guided cluster merge: {len(unique)} clusters could require "
+            f"up to {max_possible_tests} pairwise DE tests, above max_de_tests={max_de_tests}. "
+            "Increase max_de_tests to run the merge anyway."
+        )
+        adata.obs[out_key] = labels.values
+        adata.uns[f"{out_key}_merge_params"] = {
+            "source": cluster_key,
+            "use_rep": use_rep,
+            "adj_p_threshold": adj_p_threshold,
+            "n_before": len(unique),
+            "n_after": len(unique),
+            "skipped": True,
+            "max_de_tests": max_de_tests,
+            "max_possible_tests": max_possible_tests,
+        }
         return out_key
 
     medoids, clusters = _cluster_medoids(adata, cluster_key, use_rep)
@@ -125,5 +151,7 @@ def merge_clusters_de(
         "adj_p_threshold": adj_p_threshold,
         "n_before": len(unique),
         "n_after": len(set(merged_map.values())),
+        "skipped": False,
+        "max_de_tests": max_de_tests,
     }
     return out_key
