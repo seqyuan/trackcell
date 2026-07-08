@@ -1,5 +1,43 @@
 Changelog
 
+Version 0.3.36
+--------------
+
+* **STOmics (Stereo-seq) GEF/GEM data support** (:pr:`#—`):
+
+  **New IO module** (``io/read_sto.py``):
+
+  * ``read_sto_cellbin()`` — reads STOmics cellbin GEF (HDF5) and creates an
+    AnnData with cell polygon geometries (``cellBorder`` → Shapely polygons).
+    Supports both file and folder path input with auto-discovery.
+  * ``read_sto_bin()`` — reads STOmics squarebin/tissue GEF files for bin-level
+    analysis. Supports automatic bin merging and GEM.gzip fallback with
+    auto-redirect to matching GEF.
+  * Auto-discovers ssDNA tissue images from ``03.register/`` directory
+    (sibling or parent of GEF path).
+  * Reads ``resolution`` attribute (500nm/unit) from GEF metadata and stores
+    proper physical scalefactors (``pixel_size_um``, ``resolution_nm``,
+    ``tissue_hires_scalef``).
+  * Handles ``cellBorder`` sentinel stripping (32767 padding for cells with
+    fewer than 32 vertices).
+
+  **New example notebooks**:
+
+  * ``STOmics_mouse_brain_demo`` — full STOmics cellbin read→QC→Leiden
+    clustering→spatial visualization→subset→cell boundary zoom-in workflow.
+  * ``YardCluster_STOmics_demo`` — YardCluster spatial clustering on STOmics
+    mouse brain (auto mode: celltype + domain output).
+
+  **Documentation updates**:
+
+  * ``usage/reading.rst`` — added "Reading STOmics (Stereo-seq) Data" section.
+  * ``examples.rst`` — linked both new notebooks.
+
+* **Image auto-discovery for STOmics readers** — ``image_path`` parameter
+  accepts file, register directory, or None (auto-discover from
+  ``03.register/`` sibling of GEF).
+
+
 Version 0.3.35
 --------------
 

@@ -285,6 +285,78 @@ Space Ranger's pre-computed ``classification`` labels directly with
 Always call ``sync_geometries_after_subset()`` after subsetting to avoid these issues.
 
 
+Reading STOmics (Stereo-seq) Data
+---------------------------------
+
+TrackCell supports reading STOmics GEF format data for both cellbin (cell
+segmentation) and squarebin (tissue bin) analysis.
+
+.. _sto_data_structure:
+
+Data Structure
+~~~~~~~~~~~~~~
+
+A typical STOmics pipeline output looks like:
+
+::
+
+   C57_7/
+   ├── 03.register/
+   │   ├── ssDNA_B02825B2_regist.tif      # 注册后的 ssDNA 组织底图
+   │   ├── B02825B2.rpi                   # 金字塔图像 (HDF5)
+   │   └── B02825B2.reregist.ipr          # 配准参数 (HDF5)
+   ├── 04.tissuecut/
+   │   ├── B02825B2.tissue.gef            # squarebin 表达矩阵 (HDF5)
+   │   └── B02825B2.tissue.gem.gz         # squarebin 表达矩阵 (文本)
+   └── 041.cellcut/
+       ├── B02825B2.cellbin.gef           # cellbin 表达矩阵 + 细胞轮廓 (HDF5)
+       └── B02825B2.cellbin.gem           # cellbin 表达矩阵 (文本)
+
+**物理分辨率**: 1 GEF 坐标单位 = 500nm = 0.5μm。图像像素与 GEF 坐标 1:1 对齐。
+
+Read Cellbin Data
+~~~~~~~~~~~~~~~~~
+
+.. code-block:: python
+
+   import trackcell as tcl
+
+   # 支持文件夹路径（自动发现）或文件路径
+   adata = tcl.io.read_sto_cellbin(
+       "path/to/C57_7/041.cellcut/",   # 或直接传 ".cellbin.gef" 文件
+       sample="C57_7"
+   )
+
+返回的 AnnData 包含:
+
+* ``.X``: CSR 表达矩阵 (cells × genes)
+* ``.obs``: cell_id, area, dnb_count, gene_count, exp_count, geometry (WKT)
+* ``.obsm['spatial']``: 细胞质心坐标
+* ``.obs['geometry']``: WKT 多边形字符串
+* ``.uns['spatial'][sample]['geometries']``: GeoDataFrame 细胞多边形
+* ``.uns['spatial'][sample]['images']``: 自动加载的 ssDNA 底图（如存在）
+* ``.uns['spatial'][sample]['metadata']``: resolution_nm, pixel_size_um, coordinate_range
+
+Read Squarebin Data
+~~~~~~~~~~~~~~~~~~~
+
+.. code-block:: python
+
+   # squarebin 数据用于 bin 级别的组织分析
+   adata = tcl.io.read_sto_bin(
+       "path/to/C57_7/04.tissuecut/",   # 或直接传 ".tissue.gef" 文件
+       bin_size=50,                      # 合并 50 个 500nm 单位 = 25μm per bin
+       sample="C57_7"
+   )
+
+See the full workflow in the :doc:`STOmics notebook </notebooks/STOmics_mouse_brain_demo>`.
+
+.. note::
+
+   GEF 文件本身 **不包含** ssDNA 组织底图。底图存储在 ``03.register/`` 目录中。
+   ``read_sto_cellbin()`` 和 ``read_sto_bin()`` 会自动发现并加载底图。
+
+
 Converting annohdcell Output
 -----------------------------
 
