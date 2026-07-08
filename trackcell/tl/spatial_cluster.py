@@ -269,6 +269,7 @@ def yard_cluster(
     neighbors_key: Optional[str] = None,
     merge_clusters: bool = False,
     merge_adj_p: float = 0.05,
+    merge_max_de_tests: Optional[int] = 2000,
     sketch: bool = False,
     sketch_threshold: int = _SKETCH_THRESHOLD,
     sketch_n: int = _SKETCH_N,
@@ -291,7 +292,13 @@ def yard_cluster(
         sc.pp.neighbors(adata_sk, n_neighbors=n_neighbors, use_rep=use_rep, key_added=neighbors_key)
         _leiden(adata_sk, resolution, key_added, neighbors_key)
         if merge_clusters:
-            merge_clusters_de(adata_sk, key_added, use_rep, adj_p_threshold=merge_adj_p)
+            merge_clusters_de(
+                adata_sk,
+                key_added,
+                use_rep,
+                adj_p_threshold=merge_adj_p,
+                max_de_tests=merge_max_de_tests,
+            )
             key_added = f"{key_added}_merged"
         _assign_by_nearest_medoid(adata, adata_sk, key_added, use_rep)
         adata.uns[f"{key_added}_cluster_params"] = {
@@ -305,13 +312,20 @@ def yard_cluster(
     sc.pp.neighbors(adata, n_neighbors=n_neighbors, use_rep=use_rep, key_added=neighbors_key)
     _leiden(adata, resolution, key_added, neighbors_key)
     if merge_clusters:
-        merged_key = merge_clusters_de(adata, key_added, use_rep, adj_p_threshold=merge_adj_p)
+        merged_key = merge_clusters_de(
+            adata,
+            key_added,
+            use_rep,
+            adj_p_threshold=merge_adj_p,
+            max_de_tests=merge_max_de_tests,
+        )
         adata.obs[key_added] = adata.obs[merged_key].astype(str).values
     adata.uns[f"{key_added}_cluster_params"] = {
         "use_rep": use_rep,
         "k_expr": n_neighbors,
         "resolution": resolution,
         "merge_clusters": merge_clusters,
+        "merge_max_de_tests": merge_max_de_tests,
         "sketch": False,
     }
     return adata if copy else None
@@ -337,6 +351,7 @@ def _run_single_yardcluster(
     neighbors_key: str,
     merge_clusters: bool,
     merge_adj_p: float,
+    merge_max_de_tests: Optional[int],
     harmony_integrate: bool,
     sketch: bool,
     sketch_threshold: int,
@@ -376,6 +391,7 @@ def _run_single_yardcluster(
         neighbors_key=neighbors_key,
         merge_clusters=merge_clusters,
         merge_adj_p=merge_adj_p,
+        merge_max_de_tests=merge_max_de_tests,
         sketch=sketch,
         sketch_threshold=sketch_threshold,
         sketch_n=sketch_n,
@@ -408,6 +424,7 @@ def spatial_cluster(
     n_top_genes: int = 2000,
     merge_clusters: bool = False,
     merge_adj_p: float = 0.05,
+    merge_max_de_tests: Optional[int] = 2000,
     sketch: bool = False,
     sketch_threshold: int = _SKETCH_THRESHOLD,
     sketch_n: int = _SKETCH_N,
@@ -461,6 +478,7 @@ def spatial_cluster(
                 preprocess=False,
                 merge_clusters=merge_clusters,
                 merge_adj_p=merge_adj_p,
+                merge_max_de_tests=merge_max_de_tests,
                 sketch=sketch,
                 sketch_threshold=sketch_threshold,
                 sketch_n=sketch_n,
@@ -468,7 +486,9 @@ def spatial_cluster(
             )
             for col in sub.obs.columns:
                 if col.startswith(key_added):
-                    adata.obs.loc[sub.obs_names, col] = f"{b}_{sub.obs[col].values}"
+                    adata.obs.loc[sub.obs_names, col] = [
+                        f"{b}_{label}" for label in sub.obs[col].astype(str).values
+                    ]
         _store_params(adata, f"{key_added}_params", {"integrate": "separate", "batch_key": batch_key})
         return adata if copy else None
 
@@ -488,6 +508,7 @@ def spatial_cluster(
         key_added=key_added,
         merge_clusters=merge_clusters,
         merge_adj_p=merge_adj_p,
+        merge_max_de_tests=merge_max_de_tests,
         harmony_integrate=use_harmony,
         sketch=sketch,
         sketch_threshold=sketch_threshold,
@@ -521,11 +542,24 @@ def spatial_cluster(
             "integrate": integrate,
             "harmony_integrate": use_harmony,
             "merge_clusters": merge_clusters,
+            "merge_max_de_tests": merge_max_de_tests,
             "gradient_mode": gradient_mode,
             "sketch": sketch,
         },
     )
     return adata if copy else None
+
+
+def _scale_for_yardcluster(adata: AnnData, max_value: float = 10) -> None:
+    if sps.issparse(adata.X):
+        warnings.warn(
+            "Sparse adata.X detected during YardCluster preprocessing; using "
+            "zero_center=False in sc.pp.scale() to avoid densifying the matrix.",
+            stacklevel=3,
+        )
+        sc.pp.scale(adata, max_value=max_value, zero_center=False)
+    else:
+        sc.pp.scale(adata, max_value=max_value)
 
 
 def _preprocess_for_yardcluster(
@@ -559,7 +593,7 @@ def _preprocess_for_yardcluster(
         for b in adata.obs[batch_key].unique():
             idx = adata.obs[batch_key] == b
             sub = adata[idx].copy()
-            sc.pp.scale(sub, max_value=10)
+            _scale_for_yardcluster(sub, max_value=10)
             adata.X[idx] = sub.X
     else:
-        sc.pp.scale(adata, max_value=10)
+        _scale_for_yardcluster(adata, max_value=10)

@@ -33,7 +33,12 @@ from matplotlib.widgets import (
 from shapely.geometry import Polygon, Point
 from shapely import wkt
 
-from .plot import spatial_cell, spatial_squarebin, _resolve_library_id
+from .plot import (
+    spatial_cell,
+    spatial_squarebin,
+    _resolve_library_id,
+    _sync_geometries_to_obs,
+)
 
 
 ModeType = Literal["auto", "cellbin", "squarebin"]
@@ -728,6 +733,7 @@ def select_regions(
     """
 
     library_id = _resolve_library_id(adata, library_id)
+    _sync_geometries_to_obs(adata, library_id)
     spatial_info = adata.uns["spatial"][library_id]
     mode = _detect_mode(adata, library_id, mode, basis)
     valid_ids = _valid_ids(adata, spatial_info, mode, basis)

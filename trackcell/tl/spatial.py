@@ -306,7 +306,109 @@ def multigene_blend(
     return result
 
 
-def hd_labeldist(adata, groupby: str, label: str, inplace: bool = True, method: str = "kdtree"):
+def _resolve_labeldist_scalefactors(
+    adata,
+    library_id: Optional[str],
+    microns_per_pixel: Optional[float],
+    hires_scale: Optional[float],
+) -> tuple[str, float, Optional[float]]:
+    spatial_meta = adata.uns.get("spatial")
+    if not spatial_meta:
+        raise ValueError("`adata.uns['spatial']` is missing scalefactor information.")
+
+    if library_id is None:
+        available = list(spatial_meta.keys())
+        if len(available) == 0:
+            raise ValueError("No library_id found in `adata.uns['spatial']`.")
+        library_id = available[0]
+        if len(available) > 1:
+            warnings.warn(
+                f"Multiple library_ids found: {available}. Using '{library_id}'. "
+                "Specify `library_id` explicitly to use a different one."
+            )
+    elif library_id not in spatial_meta:
+        raise ValueError(
+            f"`library_id` '{library_id}' not found in `adata.uns['spatial']`. "
+            f"Available library_ids: {list(spatial_meta.keys())}"
+        )
+
+    scalefactors = spatial_meta[library_id].get("scalefactors", {})
+    resolved_mpp = microns_per_pixel
+    if resolved_mpp is None:
+        resolved_mpp = scalefactors.get("microns_per_pixel")
+    if resolved_mpp is None or not np.isfinite(resolved_mpp) or resolved_mpp <= 0:
+        raise ValueError(
+            "A positive `microns_per_pixel` is required. Provide it explicitly "
+            "or include `microns_per_pixel` in scalefactors."
+        )
+
+    resolved_hires_scale = hires_scale
+    if resolved_hires_scale is None:
+        resolved_hires_scale = (
+            scalefactors.get("tissue_hires_scalef")
+            or scalefactors.get("regist_target_img_scalef")
+        )
+    if resolved_hires_scale is not None and (
+        not np.isfinite(resolved_hires_scale) or resolved_hires_scale <= 0
+    ):
+        raise ValueError("`hires_scale` must be positive when provided.")
+
+    return library_id, float(resolved_mpp), (
+        float(resolved_hires_scale) if resolved_hires_scale is not None else None
+    )
+
+
+def _infer_labeldist_coordinate_system(
+    coords_all: np.ndarray,
+    microns_per_pixel: float,
+    hires_scale: Optional[float],
+) -> str:
+    if hires_scale is None or hires_scale >= 0.99:
+        return "fullres"
+
+    coord_range = np.ptp(coords_all[:, :2], axis=0)
+    max_range_px = float(np.nanmax(coord_range))
+    if not np.isfinite(max_range_px) or max_range_px <= 0:
+        warnings.warn(
+            "Could not infer spatial coordinate resolution from coordinate range; "
+            "using coordinate_system='fullres'."
+        )
+        return "fullres"
+
+    size_um_fullres = max_range_px * microns_per_pixel
+    size_um_hires = max_range_px * (microns_per_pixel / hires_scale)
+    expected_max_size_um = 7000
+
+    fullres_reasonable = size_um_fullres <= expected_max_size_um
+    hires_reasonable = size_um_hires <= expected_max_size_um
+
+    if hires_reasonable and not fullres_reasonable:
+        return "hires"
+    if fullres_reasonable and not hires_reasonable:
+        return "fullres"
+
+    resolved = "hires" if hires_scale < 0.5 else "fullres"
+    warnings.warn(
+        "Could not confidently infer whether `adata.obsm['spatial']` is in fullres "
+        f"or hires pixels (fullres span={size_um_fullres:.1f} um, "
+        f"hires span={size_um_hires:.1f} um). Using coordinate_system='{resolved}'. "
+        "Pass `coordinate_system='fullres'` or `coordinate_system='hires'` explicitly "
+        "to avoid this heuristic."
+    )
+    return resolved
+
+
+def hd_labeldist(
+    adata,
+    groupby: str,
+    label: str,
+    inplace: bool = True,
+    method: str = "kdtree",
+    coordinate_system: str = "auto",
+    library_id: Optional[str] = None,
+    microns_per_pixel: Optional[float] = None,
+    hires_scale: Optional[float] = None,
+):
     """
     Compute the distance from every cell to the nearest cell annotated with a specific label (10x HD data).
     
@@ -314,9 +416,9 @@ def hd_labeldist(adata, groupby: str, label: str, inplace: bool = True, method: 
     (SpaceRanger target/hires layer) and in microns using the scalefactors embedded in
     `adata.uns["spatial"]`.
     
-    The function automatically detects whether coordinates are in hires or full-res resolution
-    by comparing the computed tissue size with the expected chip size (6.5mm for 10X HD).
-    This ensures compatibility with both SpaceRanger output and bin2cell-processed data.
+    By default, the function preserves the previous auto-detection heuristic for
+    hires vs full-res coordinates. For reproducible distances, pass
+    ``coordinate_system='fullres'`` or ``coordinate_system='hires'`` explicitly.
     
     Parameters
     ----------
@@ -337,6 +439,16 @@ def hd_labeldist(adata, groupby: str, label: str, inplace: bool = True, method: 
                    Best for large datasets with many cells.
         - "cdist": Use scipy's cdist function (O(n*m) time and memory, where m is number of label cells).
                    Faster for small datasets but memory-intensive for large ones.
+    coordinate_system : {'auto', 'fullres', 'hires'}, default 'auto'
+        Pixel coordinate system used by `adata.obsm['spatial']`. `fullres` uses
+        `microns_per_pixel` directly; `hires` divides by `hires_scale`; `auto`
+        uses a heuristic and warns when ambiguous.
+    library_id : str, optional
+        Spatial library id in `adata.uns['spatial']`. Defaults to the first one.
+    microns_per_pixel : float, optional
+        Override the value stored in scalefactors.
+    hires_scale : float, optional
+        Override `tissue_hires_scalef` / `regist_target_img_scalef`.
     
     Returns
     -------
@@ -350,6 +462,10 @@ def hd_labeldist(adata, groupby: str, label: str, inplace: bool = True, method: 
         raise ValueError(f"`{groupby}` not found in `adata.obs`.")
     if label not in adata.obs[groupby].unique():
         raise ValueError(f"`{label}` not present in `adata.obs['{groupby}']`.")
+
+    coordinate_system = coordinate_system.lower()
+    if coordinate_system not in {"auto", "fullres", "hires"}:
+        raise ValueError("`coordinate_system` must be 'auto', 'fullres', or 'hires'.")
     
     coords = adata.obsm["spatial"]
     if coords is None or len(coords) == 0:
@@ -360,6 +476,9 @@ def hd_labeldist(adata, groupby: str, label: str, inplace: bool = True, method: 
         raise ValueError(f"No observations with label `{label}` were found.")
     
     coords_all = np.asarray(coords, dtype=float)
+    if coords_all.ndim != 2 or coords_all.shape[1] < 2:
+        raise ValueError("`adata.obsm['spatial']` must be an n_obs x >=2 array.")
+    coords_all = coords_all[:, :2]
     coords_label = coords_all[mask_label]
     
     # Compute distances using selected method
@@ -376,63 +495,50 @@ def hd_labeldist(adata, groupby: str, label: str, inplace: bool = True, method: 
     else:
         raise ValueError(f"Unknown method: {method}. Choose 'kdtree' or 'cdist'.")
     
-    spatial_meta = adata.uns.get("spatial")
-    if not spatial_meta:
-        raise ValueError("`adata.uns['spatial']` is missing scalefactor information.")
-    sample_key = next(iter(spatial_meta))
-    scalefactors = spatial_meta[sample_key].get("scalefactors", {})
-    
-    microns_per_pixel = scalefactors.get("microns_per_pixel")
-    if microns_per_pixel is None:
-        raise ValueError("`microns_per_pixel` not found in scalefactors.")
-    
-    hires_scale = scalefactors.get("tissue_hires_scalef") or scalefactors.get("regist_target_img_scalef") or 1.0
-    
-    # Auto-detect coordinate resolution by comparing computed size with expected chip size
-    # 10X HD chip is 6.5mm x 6.5mm, VisiumHD is similar
-    # Calculate coordinate range in both possible resolutions
-    coord_range = np.ptp(coords_all, axis=0)  # [max_x - min_x, max_y - min_y]
-    max_range_px = np.max(coord_range)
-    
-    # Test both hypotheses:
-    # 1. Coordinates are hires: need to divide by hires_scale
-    size_um_hires = max_range_px * (microns_per_pixel / hires_scale)
-    # 2. Coordinates are full-res: use directly
-    size_um_fullres = max_range_px * microns_per_pixel
-    
-    # Expected chip size: 6.5mm = 6500um (with some tolerance for tissue coverage)
-    # Typical tissue coverage is 60-90% of chip, so reasonable range is 4000-7000um
-    expected_max_size_um = 7000  # Upper bound for reasonable chip size
-    
-    # Determine which resolution gives more reasonable results
-    # If hires calculation gives reasonable size (< expected_max_size_um), coordinates are hires
-    # If fullres calculation gives reasonable size, coordinates are full-res
-    # If hires_scale is 1.0 or very close, assume full-res
-    if hires_scale < 1.01:  # hires_scale close to 1.0 means likely full-res
-        is_hires = False
-    elif size_um_hires <= expected_max_size_um and size_um_fullres > expected_max_size_um:
-        # hires calculation gives reasonable result, fullres doesn't
-        is_hires = True
-    elif size_um_fullres <= expected_max_size_um and size_um_hires > expected_max_size_um:
-        # fullres calculation gives reasonable result, hires doesn't
-        is_hires = False
+    resolved_library_id, resolved_mpp, resolved_hires_scale = _resolve_labeldist_scalefactors(
+        adata,
+        library_id=library_id,
+        microns_per_pixel=microns_per_pixel,
+        hires_scale=hires_scale,
+    )
+
+    resolved_coordinate_system = coordinate_system
+    if coordinate_system == "auto":
+        resolved_coordinate_system = _infer_labeldist_coordinate_system(
+            coords_all,
+            microns_per_pixel=resolved_mpp,
+            hires_scale=resolved_hires_scale,
+        )
+    elif coordinate_system == "hires" and resolved_hires_scale is None:
+        raise ValueError(
+            "coordinate_system='hires' requires `hires_scale` or a hires scale "
+            "in scalefactors."
+        )
+
+    if resolved_coordinate_system == "hires":
+        dist_um = dist_px * (resolved_mpp / resolved_hires_scale)
     else:
-        # Both or neither give reasonable results, prefer hires if hires_scale is significantly < 1.0
-        # This handles edge cases where tissue might be larger than chip
-        is_hires = (hires_scale < 0.5)  # If hires_scale is significantly < 1, likely hires coords
-    
-    # Calculate physical distance based on detected resolution
-    if is_hires:
-        dist_um = dist_px * (microns_per_pixel / hires_scale)
-    else:
-        dist_um = dist_px * microns_per_pixel
+        dist_um = dist_px * resolved_mpp
     
     col_px = f"{label}_px"
     col_um = f"{label}_dist"
+    params = {
+        "groupby": groupby,
+        "label": label,
+        "method": method,
+        "coordinate_system": resolved_coordinate_system,
+        "requested_coordinate_system": coordinate_system,
+        "library_id": resolved_library_id,
+        "microns_per_pixel": resolved_mpp,
+        "hires_scale": resolved_hires_scale,
+    }
     
     if inplace:
         adata.obs[col_px] = dist_px
         adata.obs[col_um] = dist_um
+        adata.uns[f"{label}_dist_params"] = params
         return None
     
-    return pd.DataFrame({col_px: dist_px, col_um: dist_um}, index=adata.obs.index)
+    result = pd.DataFrame({col_px: dist_px, col_um: dist_um}, index=adata.obs.index)
+    result.attrs["params"] = params
+    return result

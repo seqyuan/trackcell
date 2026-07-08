@@ -5,6 +5,8 @@ This module provides functions for visualizing spatial transcriptomics data,
 including cell polygon visualization.
 """
 
+from __future__ import annotations
+
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -235,6 +237,84 @@ def _resolve_library_id(adata, library_id: Optional[str] = None) -> str:
             f"Available library_ids: {list(adata.uns['spatial'].keys())}"
         )
     return library_id
+
+
+def _has_valid_geometry_bounds(geom) -> bool:
+    if geom is None:
+        return False
+    try:
+        if pd.isna(geom):
+            return False
+    except (TypeError, ValueError):
+        pass
+    if not hasattr(geom, 'bounds'):
+        return False
+    if hasattr(geom, 'is_empty') and geom.is_empty:
+        return False
+    if hasattr(geom, 'is_valid') and not geom.is_valid:
+        return False
+    try:
+        bounds = geom.bounds
+        return all(np.isfinite(bounds)) and bounds[2] > bounds[0] and bounds[3] > bounds[1]
+    except Exception:
+        return False
+
+
+def _bounds_are_finite(bounds) -> bool:
+    try:
+        return all(np.isfinite(bounds)) and bounds[2] > bounds[0] and bounds[3] > bounds[1]
+    except Exception:
+        return False
+
+
+def _filter_gdf_to_valid_bounds(temp_gdf: gpd.GeoDataFrame) -> tuple[gpd.GeoDataFrame, bool]:
+    """Return a GeoDataFrame with invalid geometry bounds removed."""
+    if len(temp_gdf) == 0:
+        return temp_gdf, False
+    try:
+        if _bounds_are_finite(temp_gdf.total_bounds):
+            return temp_gdf, False
+    except Exception:
+        pass
+
+    valid_mask = temp_gdf.geometry.apply(_has_valid_geometry_bounds)
+    return temp_gdf.loc[valid_mask].copy(), bool((~valid_mask).any())
+
+
+def _sync_geometries_to_obs(adata, library_id: str, warn: bool = True):
+    """Filter/reorder stored geometries to match current adata.obs_names."""
+    spatial_info = adata.uns.get("spatial", {}).get(library_id, {})
+    geometries = spatial_info.get("geometries")
+    if geometries is None or not HAS_GEOPANDAS:
+        return geometries
+    if not isinstance(geometries, (gpd.GeoDataFrame, gpd.GeoSeries)):
+        return geometries
+
+    obs_index = pd.Index(adata.obs_names)
+    geom_index = pd.Index(geometries.index)
+    if geom_index.equals(obs_index):
+        return geometries
+
+    geom_ids = set(geom_index)
+    common_ids = [cid for cid in obs_index if cid in geom_ids]
+    if len(common_ids) == 0:
+        if warn:
+            warnings.warn(
+                "No observation IDs match the geometry index. Plotting may fall back "
+                "to adata.obs['geometry'] if available."
+            )
+        return geometries
+
+    missing_ids = obs_index.difference(geom_index)
+    if len(missing_ids) > 0 and warn:
+        warnings.warn(
+            f"{len(missing_ids)} observations have no stored geometry and will be skipped. "
+            f"Examples: {missing_ids[:5].tolist()}"
+        )
+
+    synced = geometries.loc[common_ids].copy()
+    spatial_info["geometries"] = synced
+    return synced
 
 
 def _normalize_color_argument(color):
@@ -670,7 +750,7 @@ def spatial_cell(
     use_wkt = False
     
     if "geometries" in spatial_info:
-        geometries = spatial_info["geometries"]
+        geometries = _sync_geometries_to_obs(adata, library_id)
     elif "geometry" in adata.obs.columns:
         # Fallback: use WKT strings from obs
         use_wkt = True
@@ -1005,82 +1085,25 @@ def spatial_cell(
             )
             plot_column = color_key
         
-        # Validate and fix total_bounds after creating temp_gdf
-        # This is critical for subset data where geometries may not be properly synchronized
-        max_retries = 2
-        retry_count = 0
-        while retry_count <= max_retries:
-            try:
-                # Validate total_bounds
-                bounds = temp_gdf.total_bounds
-                if not all(np.isfinite(bounds)) or bounds[2] <= bounds[0] or bounds[3] <= bounds[1]:
-                    # Invalid bounds detected - filter out problematic geometries
-                    if retry_count == 0:
-                        warnings.warn(
-                            f"Invalid geometry bounds detected (bounds: {bounds}). "
-                            f"Filtering out problematic geometries. "
-                            f"Consider using tcl.io.sync_geometries_after_subset() after subsetting."
-                        )
-                    
-                    # Filter geometries with valid bounds
-                    valid_mask = pd.Series(True, index=temp_gdf.index)
-                    for idx in temp_gdf.index:
-                        try:
-                            geom = temp_gdf.loc[idx, 'geometry']
-                            if geom is None or pd.isna(geom):
-                                valid_mask.loc[idx] = False
-                                continue
-                            geom_bounds = geom.bounds
-                            if not all(np.isfinite(geom_bounds)) or geom_bounds[2] <= geom_bounds[0] or geom_bounds[3] <= geom_bounds[1]:
-                                valid_mask.loc[idx] = False
-                        except Exception:
-                            valid_mask.loc[idx] = False
-                    
-                    temp_gdf = temp_gdf[valid_mask]
-                    
-                    if len(temp_gdf) == 0:
-                        warnings.warn("No valid geometries remaining after filtering. Skipping plot.")
-                        axes_list.append(current_ax)
-                        break  # Exit the retry loop and continue to next color
-                    
-                    # Update valid_cells to match filtered temp_gdf
-                    valid_cells = temp_gdf.index.tolist()
-                    
-                    # Re-validate bounds
-                    bounds = temp_gdf.total_bounds
-                    if not all(np.isfinite(bounds)) or bounds[2] <= bounds[0] or bounds[3] <= bounds[1]:
-                        # Still invalid after filtering - will use aspect='equal' as fallback
-                        if retry_count == 0:
-                            warnings.warn(
-                                f"Still invalid bounds after filtering (bounds: {bounds}). "
-                                f"Will use aspect='equal' to avoid errors."
-                            )
-                        retry_count += 1
-                        continue
-                    else:
-                        # Bounds are now valid
-                        break
-                else:
-                    # Bounds are valid
-                    break
-            except Exception as e:
-                if retry_count == 0:
-                    warnings.warn(
-                        f"Error validating geometry bounds: {e}. "
-                        f"Will use aspect='equal' to avoid errors."
-                    )
-                retry_count += 1
-                continue
-        
-        # If we still have invalid bounds after retries, we'll set aspect='equal' later
-        use_equal_aspect = False
-        if retry_count > max_retries:
-            try:
-                bounds = temp_gdf.total_bounds
-                if not all(np.isfinite(bounds)) or bounds[2] <= bounds[0] or bounds[3] <= bounds[1]:
-                    use_equal_aspect = True
-            except Exception:
-                use_equal_aspect = True
+        temp_gdf, filtered_invalid_bounds = _filter_gdf_to_valid_bounds(temp_gdf)
+        if filtered_invalid_bounds:
+            warnings.warn(
+                "Filtered out geometries with invalid or non-finite bounds before plotting."
+            )
+        if len(temp_gdf) == 0:
+            warnings.warn("No valid geometries remaining after filtering. Skipping plot.")
+            axes_list.append(current_ax)
+            continue
+
+        valid_cells = temp_gdf.index.tolist()
+        try:
+            use_equal_aspect = not _bounds_are_finite(temp_gdf.total_bounds)
+        except Exception as e:
+            warnings.warn(
+                f"Could not validate geometry bounds after filtering: {e}. "
+                "Using aspect='equal' to avoid GeoPandas aspect errors."
+            )
+            use_equal_aspect = True
         
         # Determine if continuous or categorical immediately after creating temp_gdf
         # This allows all subsequent logic to use is_categorical directly
@@ -1335,12 +1358,10 @@ def spatial_cell(
         axes_list.append(current_ax)
     
     if show:
-        # Adjust layout to make room for legend/colorbar on the right
-        # This is similar to scanpy's approach
-        if ax is None:  # Only adjust if we created the figure
-            fig.tight_layout(rect=[0, 0, 0.95, 1])  # Leave 5% space on the right
-        else:
-            fig.tight_layout()
+        # Only adjust layout for figures created inside this function. User-provided
+        # axes may belong to a larger subplot layout that should not be changed here.
+        if ax is None:
+            fig.tight_layout(rect=[0, 0, 0.95, 1])
         plt.show()
     
     if len(axes_list) == 1:
@@ -1526,8 +1547,6 @@ def spatial_squarebin(
     if show:
         if ax is None:
             fig.tight_layout(rect=[0, 0, 0.95, 1])
-        else:
-            fig.tight_layout()
         plt.show()
 
     return axes_list[0] if len(axes_list) == 1 else axes_list

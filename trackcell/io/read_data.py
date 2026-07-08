@@ -156,6 +156,20 @@ def read_hd_bin(
         if len(df_tissue_positions.columns) > 0:
             df_tissue_positions = df_tissue_positions.set_index(df_tissue_positions.columns[0])
     
+    if df_tissue_positions.index.has_duplicates:
+        duplicate_examples = df_tissue_positions.index[df_tissue_positions.index.duplicated()].unique()[:5].tolist()
+        raise ValueError(
+            "Tissue positions contain duplicate barcodes; cannot align spatial coordinates safely. "
+            f"Examples: {duplicate_examples}"
+        )
+
+    missing_positions = pd.Index(adata.obs_names).difference(df_tissue_positions.index)
+    if len(missing_positions) > 0:
+        raise ValueError(
+            f"{len(missing_positions)} expression barcodes are missing from tissue positions. "
+            f"Examples: {missing_positions[:5].tolist()}"
+        )
+
     # Adding the tissue positions to the metadata
     adata.obs = pd.merge(adata.obs, df_tissue_positions, left_index=True, right_index=True, how='left')
     
@@ -179,7 +193,14 @@ def read_hd_bin(
             "['pxl_col', 'pxl_row'], ['x', 'y'], or ['array_col', 'array_row']"
         )
     
-    adata.obsm['spatial'] = adata.obs[coord_cols].values
+    coord_values = adata.obs[coord_cols]
+    if coord_values.isna().any().any():
+        bad_barcodes = coord_values[coord_values.isna().any(axis=1)].index[:5].tolist()
+        raise ValueError(
+            "Spatial coordinate columns contain missing values after alignment. "
+            f"Examples: {bad_barcodes}"
+        )
+    adata.obsm['spatial'] = coord_values.values
     
     # Read tissue images
     try:
@@ -318,35 +339,59 @@ def read_hd_cellseg(
     gdf_seg = gpd.read_file(seg_file_path)
     df = pd.DataFrame(gdf_seg)
     
+    if "cell_id" not in df.columns:
+        raise ValueError("Cell segmentation file must contain a 'cell_id' column.")
+    if "geometry" not in df.columns:
+        raise ValueError("Cell segmentation file must contain a geometry column.")
+
     # Create cellid in the format expected by SpaceRanger
     df['cellid'] = df['cell_id'].apply(lambda x: f"cellid_{str(x).zfill(9)}-1")
+    if df['cellid'].duplicated().any():
+        duplicate_examples = df.loc[df['cellid'].duplicated(), 'cellid'].head().tolist()
+        raise ValueError(
+            "Cell segmentation file contains duplicate cell IDs; cannot align safely. "
+            f"Examples: {duplicate_examples}"
+        )
     
     # Read expression matrix
     adata = sc.read_10x_h5(datapath / matrix_file)
     
     # Align cell segmentations with expression data
-    # Filter adata to only include cells that have segmentations
-    adata = adata[adata.obs_names.isin(df['cellid']),:]
+    expr_cellids = pd.Index(adata.obs_names)
+    seg_cellids = pd.Index(df['cellid'])
+    matched_cellids = expr_cellids.intersection(seg_cellids)
+    if len(matched_cellids) == 0:
+        raise ValueError(
+            "No expression barcodes match the cell segmentation IDs. "
+            f"Expression examples: {expr_cellids[:5].tolist()}; "
+            f"segmentation examples: {seg_cellids[:5].tolist()}"
+        )
+    if len(matched_cellids) < len(expr_cellids):
+        missing_seg = expr_cellids.difference(seg_cellids)
+        warnings.warn(
+            f"{len(missing_seg)} expression cells have no segmentation geometry and will be dropped. "
+            f"Examples: {missing_seg[:5].tolist()}"
+        )
+    extra_seg = seg_cellids.difference(expr_cellids)
+    if len(extra_seg) > 0:
+        warnings.warn(
+            f"{len(extra_seg)} segmented cells have no expression matrix row and will be ignored. "
+            f"Examples: {extra_seg[:5].tolist()}"
+        )
+    adata = adata[expr_cellids.isin(seg_cellids), :].copy()
     
     # Filter and reorder df to match adata.obs_names order
-    # Keep cellid as a column throughout (reset_index converts index back to column)
-    df = df.set_index("cellid").loc[adata.obs_names]
+    df = df.set_index("cellid").reindex(adata.obs_names)
+    if df["geometry"].isna().any():
+        bad_cellids = df[df["geometry"].isna()].index[:5].tolist()
+        raise ValueError(
+            "Missing segmentation geometries after expression/segmentation alignment. "
+            f"Examples: {bad_cellids}"
+        )
     
-    # Handle case where reset_index creates 'index' column instead of 'cellid'
-    # This can happen if the index name was lost during operations
-    """
-    if "cellid" not in df.columns:
-        if "index" in df.columns:
-            # Rename 'index' to 'cellid' if it exists
-            df = df.rename(columns={"index": "cellid"})
-        else:
-            raise ValueError(
-                f"Unexpected: cellid is not a column after reset_index(). "
-                f"Index name: {df.index.name}, Columns: {list(df.columns)}"
-            )
-    """
     # Convert geometry strings to shapely objects if needed
-    if isinstance(df["geometry"].iloc[0], str):
+    first_geometry = df["geometry"].dropna().iloc[0]
+    if isinstance(first_geometry, str):
         df["geometry"] = df["geometry"].apply(wkt.loads)
     
     # Extract centroid coordinates
@@ -356,12 +401,19 @@ def read_hd_cellseg(
     # Store spatial coordinates
     adata.obsm["spatial"] = np.array(df[["x", "y"]])
     
-    if 'classification' in df.columns:
-        if isinstance(df['classification'].iloc[0], str):
-            classifications = df['classification'].apply(ast.literal_eval)
+    if 'classification' in df.columns and not df['classification'].isna().all():
+        first_classification = df['classification'].dropna().iloc[0]
+        if isinstance(first_classification, str):
+            classifications = df['classification'].apply(
+                lambda value: ast.literal_eval(value) if pd.notna(value) else None
+            )
         else:
             classifications = df['classification']
-        adata.obs['classification'] = [i['name'] for i in classifications]
+        df['classification'] = classifications
+        adata.obs['classification'] = [
+            item.get('name') if isinstance(item, dict) else None
+            for item in classifications
+        ]
         adata.uns['classification_colors'] = convert_classification_to_color_dict(df, 'classification')
 
     # Read tissue images
@@ -772,20 +824,23 @@ def convert_classification_to_color_dict(df, classification_col='classification'
     dict
         Dictionary mapping classification names to hexadecimal color codes.
     """
-    # Ensure data is in dictionary format (convert to dictionary if it's a string)
-    classifications = df[classification_col]
-    
-    # Get unique classifications
-    unique_classes = classifications.explode().unique()
-    
-    # Create color dictionary
     color_dict = {}
-    for cls in unique_classes:
-        if isinstance(cls, dict):  # Ensure it's in dictionary format
-            name = cls['name']
-            rgb = cls['color']
-            # Convert RGB list to hexadecimal color code
-            hex_color = '#{:02x}{:02x}{:02x}'.format(*rgb)
+    for value in df[classification_col].dropna():
+        if isinstance(value, str):
+            try:
+                value = ast.literal_eval(value)
+            except (ValueError, SyntaxError):
+                continue
+        entries = value if isinstance(value, list) else [value]
+        for cls in entries:
+            if not isinstance(cls, dict):
+                continue
+            name = cls.get('name')
+            rgb = cls.get('color')
+            if name is None or rgb is None or len(rgb) < 3:
+                continue
+            # Convert RGB list to hexadecimal color code.
+            hex_color = '#{:02x}{:02x}{:02x}'.format(*rgb[:3])
             color_dict[name] = hex_color
     
     return color_dict

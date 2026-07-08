@@ -46,6 +46,14 @@ def test_build_spatial_weights_row_normalized():
     np.testing.assert_allclose(row_sums, 1.0, rtol=1e-5)
 
 
+def test_build_spatial_weights_duplicate_coords_no_nan():
+    coords = np.array([[0, 0], [0, 0], [1, 0], [2, 0]], dtype=float)
+    w = build_spatial_weights(coords, k=2)
+    row_sums = np.array(w.sum(axis=1)).ravel()
+    assert np.isfinite(w.data).all()
+    np.testing.assert_allclose(row_sums, 1.0, rtol=1e-5)
+
+
 def test_gradient_regression():
     pytest.importorskip("leidenalg")
     adata = _make_ring_adata(n_per_ring=12, n_genes=20)
@@ -95,7 +103,9 @@ def test_spatial_cluster_separate_batches():
         resolution=0.5,
     )
     labels = adata.obs["yardcluster"].astype(str)
-    assert labels.str.startswith("A_").any() or labels.str.startswith("B_").any()
+    assert labels.iloc[:15].str.startswith("A_").all()
+    assert labels.iloc[15:].str.startswith("B_").all()
+    assert not labels.str.contains("\\[").any()
 
 
 def test_sketch_clustering():
@@ -124,6 +134,25 @@ def test_merge_clusters_de():
     merge_clusters_de(adata, "yardcluster", "X_yard_mixed", adj_p_threshold=0.05)
     n_after = adata.obs["yardcluster_merged"].nunique()
     assert n_after <= n_before
+
+
+def test_merge_clusters_de_guard_skips_expensive_merge():
+    adata = AnnData(X=np.random.default_rng(2).normal(size=(9, 5)).astype(np.float32))
+    adata.obs["cluster"] = ["0", "1", "2"] * 3
+    adata.obsm["X_test"] = np.random.default_rng(3).normal(size=(9, 2)).astype(np.float32)
+
+    with pytest.warns(UserWarning, match="Skipping DE-guided cluster merge"):
+        out_key = merge_clusters_de(
+            adata,
+            "cluster",
+            "X_test",
+            adj_p_threshold=0.05,
+            max_de_tests=1,
+        )
+
+    assert out_key == "cluster_merged"
+    assert adata.obs[out_key].tolist() == adata.obs["cluster"].astype(str).tolist()
+    assert adata.uns["cluster_merged_merge_params"]["skipped"] is True
 
 
 def test_sparse_expression_input():
