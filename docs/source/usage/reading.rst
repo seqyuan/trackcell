@@ -356,6 +356,34 @@ See the full workflow in the :doc:`STOmics notebook </notebooks/STOmics_mouse_br
    GEF 文件本身 **不包含** ssDNA 组织底图。底图存储在 ``03.register/`` 目录中。
    ``read_sto_cellbin()`` 和 ``read_sto_bin()`` 会自动发现并加载底图。
 
+Using the ssDNA Image with scanpy
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+STOmics ssDNA images are single-channel grayscale.  When loaded by
+``read_sto_cellbin()`` / ``read_sto_bin()`` they are automatically converted
+to 3-channel (H, W, 3) RGB so that ``sc.pl.spatial`` and
+``tcl.pl.spatial_cell`` display them correctly.
+
+.. code-block:: python
+
+   # Load with image — automatic grayscale→RGB conversion
+   adata = tcl.io.read_sto_cellbin(
+       "path/to/cellbin.gef",
+       image_path="path/to/regist.tif",
+       sample="sample1"
+   )
+
+   # Direct plot — no purple background
+   sc.pl.spatial(adata, color="leiden", spot_size=10, alpha_img=0.8)
+
+   # trackcell polygon plot with ssDNA background
+   tcl.pl.spatial_cell(adata, color="leiden", alpha_img=0.5)
+
+Background visibility tips
+   * ``alpha_img=0`` — hide the image entirely (white background)
+   * ``alpha_img=0.3`` — dimmed background, cells pop out
+   * ``alpha_img=0.8`` — darker image, better for gene expression overlay
+
 
 Converting annohdcell Output
 -----------------------------
