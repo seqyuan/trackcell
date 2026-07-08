@@ -18,7 +18,10 @@ from shapely import wkt
 from scipy.sparse import csr_matrix
 from pathlib import Path
 from typing import Optional, Union, List
-import h5py
+try:
+    import h5py
+except ImportError:
+    h5py = None
 import time
 import warnings
 import glob
@@ -375,6 +378,11 @@ def read_sto_cellbin(
     if not gef_path.exists():
         raise FileNotFoundError(f"GEF file not found: {gef_path}")
 
+    if h5py is None:
+        raise ImportError(
+            "h5py is required to read GEF files. Install with: pip install h5py"
+        )
+
     t_total = time.time()
 
     # ── 1. Open GEF and validate ──
@@ -656,6 +664,11 @@ def _read_sto_bin_from_gef(
     image_path: Optional[Union[str, Path]] = None,
 ) -> sc.AnnData:
     """Read squarebin data from a GEF (HDF5) file."""
+    if h5py is None:
+        raise ImportError(
+            "h5py is required to read GEF files. Install with: pip install h5py"
+        )
+
     t_total = time.time()
 
     with h5py.File(path, 'r') as f:
