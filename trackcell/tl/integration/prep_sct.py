@@ -57,35 +57,42 @@ def _batch_anchor_residuals(
     obs_names: Sequence[str],
     anchor_features: Sequence[str],
 ) -> pd.DataFrame:
-    """Seurat GetResidualSCTModel parity: pearson residuals, SCT clip, row-center."""
+    """Seurat GetResidualSCTModel parity: reuse scale.data, compute missing pearson residuals."""
     vst_out = _unpack_vst_out(entry)
-    umi = _as_genes_by_cells(counts, var_names, obs_names)
-    n_cells = umi.shape[1]
-    clip_range = _sct_clip_range(entry, n_cells)
-
+    obs_index = pd.Index(obs_names)
     genes = pd.Index(anchor_features).intersection(vst_out["model_pars_fit"].index)
     if len(genes) == 0:
         raise ValueError("No anchor features overlap the SCT model.")
 
     scale_data = vst_out.get("y")
-    if isinstance(scale_data, pd.DataFrame):
-        common_genes = genes.intersection(scale_data.index)
-        common_cells = pd.Index(obs_names).intersection(scale_data.columns)
-        if len(common_genes) == len(genes) and len(common_cells) == len(obs_names):
-            return scale_data.loc[common_genes, common_cells]
+    out = pd.DataFrame(index=genes, columns=obs_index, dtype=np.float64)
 
-    cell_attr = vst_out["cell_attr"].reindex(obs_names)
-    res = get_residuals(
-        vst_out,
-        umi,
-        genes,
-        pd.Index(var_names),
-        cell_attr=cell_attr,
-        res_clip_range=clip_range,
-    )
-    res = res.reindex(index=genes, columns=obs_names)
-    centered = res.sub(res.mean(axis=1), axis=0)
-    return centered
+    cached_genes = pd.Index([])
+    if isinstance(scale_data, pd.DataFrame):
+        cached_genes = genes.intersection(scale_data.index)
+        common_cells = obs_index.intersection(scale_data.columns)
+        if len(cached_genes) > 0 and len(common_cells) == len(obs_index):
+            out.loc[cached_genes, obs_index] = scale_data.loc[cached_genes, obs_index].to_numpy()
+
+    missing_genes = genes.difference(cached_genes)
+    if len(missing_genes) > 0:
+        umi = _as_genes_by_cells(counts, var_names, obs_names)
+        clip_range = _sct_clip_range(entry, umi.shape[1])
+        cell_attr = vst_out["cell_attr"].reindex(obs_index)
+        res = get_residuals(
+            vst_out,
+            umi,
+            missing_genes,
+            pd.Index(var_names),
+            cell_attr=cell_attr,
+            res_clip_range=clip_range,
+            residual_type="pearson",
+        )
+        res = res.reindex(index=missing_genes, columns=obs_index)
+        res = res.sub(res.mean(axis=1), axis=0)
+        out.loc[missing_genes, obs_index] = res.to_numpy()
+
+    return out
 
 
 def prep_sct_integration(
@@ -100,8 +107,9 @@ def prep_sct_integration(
     """
     Compute Pearson residuals for anchor genes per batch (Seurat ``PrepSCTIntegration``).
 
-    Matches Seurat ``GetResidualSCTModel``: pearson residuals clipped to the SCT
-    clip range, then row-centered. Uses stored ``scale.data`` when available.
+    Matches Seurat ``GetResidualSCTModel`` / ``PrepSCTIntegration``: reuse stored
+    per-batch ``scale.data`` for anchor genes already present, compute pearson
+    residuals (row-centered) only for missing genes.
 
     Stores a cells x genes residual matrix in ``adata.obsm[f'X_{key_added}']`` and
     per-batch metadata in ``adata.uns[key_added]``.
