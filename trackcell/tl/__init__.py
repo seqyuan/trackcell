@@ -12,6 +12,8 @@ from .spatial_cluster import (
     yard_cluster,
     yard_embed,
 )
+from .sctransform import pack_sct_model, sctransform
+from .integration import integrate_sct_rpca, prep_sct_integration, select_integration_features
 from .slice_separation import (
     dbscan_slice_labels,
     distance_to_nearest_centroids,
@@ -24,6 +26,11 @@ from .slice_separation import (
 )
 
 __all__ = [
+    "sctransform",
+    "pack_sct_model",
+    "select_integration_features",
+    "prep_sct_integration",
+    "integrate_sct_rpca",
     "hd_labeldist",
     "multigene_blend",
     "spatial_cluster",
