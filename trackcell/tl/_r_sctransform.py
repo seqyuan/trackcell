@@ -410,10 +410,26 @@ def normalize_r_model_pars(model_pars: pd.DataFrame) -> pd.DataFrame:
 
 
 def read_r_gmean_series(path: Path) -> pd.Series:
-    """Load R-exported log10 geometric mean series (index = R gene names)."""
+    """Load R-exported geometric mean series (index = R gene names)."""
     df = pd.read_csv(path, index_col=0)
     col = "gmean" if "gmean" in df.columns else df.columns[0]
     return pd.Series(df[col].to_numpy(dtype=np.float64), index=df.index.astype(str))
+
+
+def coerce_genes_log_gmean(series: pd.Series) -> pd.Series:
+    """
+    Normalize an R export to log10 geometric mean (``vst`` ``genes_log_gmean`` scale).
+
+    Older exports wrote linear ``gene_attr$gmean`` into ``genes_log_gmean.csv``.
+    """
+    values = np.asarray(series, dtype=np.float64)
+    if values.size == 0:
+        return series.astype(float)
+    finite = values[np.isfinite(values)]
+    # log10 gmean for UMI data is typically within ~[-4, 4]; linear gmean can be >> 5.
+    if finite.size and np.nanmax(finite) > 5:
+        values = np.log10(np.maximum(values, 1e-9))
+    return pd.Series(values, index=series.index.astype(str))
 
 
 def align_r_gmean_series(series: pd.Series, target_genes: pd.Index) -> pd.Series:
@@ -478,17 +494,16 @@ def load_r_vst_export(export_dir: Path | str) -> dict[str, Any]:
     genes_log_gmean: Optional[pd.Series] = None
     gmean_path = root / "genes_log_gmean.csv"
     if gmean_path.exists():
-        genes_log_gmean = read_r_gmean_series(gmean_path)
+        genes_log_gmean = coerce_genes_log_gmean(read_r_gmean_series(gmean_path))
     elif gene_attr is not None and "gmean" in gene_attr.columns:
-        genes_log_gmean = pd.Series(
-            gene_attr["gmean"].to_numpy(dtype=np.float64),
-            index=gene_attr.index.astype(str),
+        genes_log_gmean = coerce_genes_log_gmean(
+            pd.Series(gene_attr["gmean"].to_numpy(dtype=np.float64), index=gene_attr.index.astype(str))
         )
 
     genes_log_gmean_step1: Optional[pd.Series] = None
     gmean_step1_path = root / "genes_log_gmean_step1.csv"
     if gmean_step1_path.exists():
-        genes_log_gmean_step1 = read_r_gmean_series(gmean_step1_path)
+        genes_log_gmean_step1 = coerce_genes_log_gmean(read_r_gmean_series(gmean_step1_path))
 
     return {
         "model_pars_step1": model_pars_step1,

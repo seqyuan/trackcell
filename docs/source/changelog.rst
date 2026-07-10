@@ -1,6 +1,28 @@
 Changelog
 
 
+Version 0.3.41
+--------------
+
+* **SCT v2 parity fixes** (native pyglmGamPoi path):
+
+  * Fix ``vst()`` step-1 cell slicing: use ``cells.get_indexer(cells_step1)`` so
+    count columns align with ``cell_attr`` offset (was ``cells.isin``, wrong order).
+  * ``mark_suspicious_theta`` uses full-matrix row means/variances (matches R
+    ``get_model_pars``).
+  * Seurat-parity benchmark loader assigns R rownames by position for duplicate
+    genes (``.N`` vs scanpy ``-N``).
+
+* **SCT benchmark** (docs → Benchmark → SCT evaluation):
+
+  * ``trackcell/benchmark/sct/`` — stepwise R→Python injection + end-to-end
+    comparison on GSE288946 (3 samples, 6 seeds).
+  * ``scripts/run_sct_benchmark.py`` — R export via ``ata`` + Python metrics.
+  * QC: ≥100 cells/gene, ≥50 genes/cell. Native HVG Jaccard ~0.98 vs R.
+
+* **Optional dependency** ``trackcell[sct]`` → ``pyglmGamPoi>=0.2.1``.
+
+
 Version 0.3.40
 --------------
 

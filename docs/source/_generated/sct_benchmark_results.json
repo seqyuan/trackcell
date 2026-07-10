@@ -1,0 +1,2755 @@
+{
+  "status": "ok",
+  "filter": {
+    "min_cells_gene": 100,
+    "min_features": 50
+  },
+  "benchmark_root": "/Volumes/process/tmp/tcl_test",
+  "samples": [
+    "GSM8779707",
+    "GSM8779708",
+    "GSM8779709"
+  ],
+  "seeds": [
+    1448145,
+    1448146,
+    42,
+    123,
+    999,
+    2024
+  ],
+  "ref_seed": 1448145,
+  "missing_r_exports": [],
+  "stepwise": [
+    {
+      "sample": "GSM8779707",
+      "seed": 1448145,
+      "n_cells": 14724,
+      "n_genes": 15297,
+      "r_step1_to_py_ksmooth": {
+        "n_genes": 15297,
+        "n_inf_py": 76,
+        "n_inf_r": 76,
+        "n_inf_both": 76,
+        "theta": {
+          "n": 15297,
+          "corr": 0.9999878761042543,
+          "median_abs_diff": 0.0017508593352462132,
+          "max_abs_diff": 0.009706663700952689
+        },
+        "Intercept": {
+          "n": 15297,
+          "corr": 0.9999998736377974,
+          "median_abs_diff": 0.0004513871597424668,
+          "max_abs_diff": 0.003008874928086769
+        },
+        "log_umi": {
+          "n": 15297,
+          "corr": NaN,
+          "median_abs_diff": 3.9968028886505635e-15,
+          "max_abs_diff": 1.5987211554602254e-14
+        }
+      },
+      "r_fit_to_py_residuals": {
+        "n_genes": 15297,
+        "n_cells": 14724,
+        "corr": 1.0,
+        "median_abs_diff": 2.55351295663786e-15,
+        "max_abs_diff": 5.5280224842135794e-12,
+        "residual_variance": {
+          "n": 15297,
+          "corr": 0.9999999999999999,
+          "median_abs_diff": 1.2656542480726785e-14,
+          "max_abs_diff": 5.130118552187923e-12
+        },
+        "hvg_jaccard": 1.0
+      },
+      "r_step1_golden_path": {
+        "model_pars_fit": {
+          "n_genes": 2000,
+          "n_inf_py": 0,
+          "n_inf_r": 0,
+          "n_inf_both": 0,
+          "theta": {
+            "n": 2000,
+            "corr": 0.9999864646372377,
+            "median_abs_diff": 0.00076260544649151,
+            "max_abs_diff": 0.009706608375869064
+          },
+          "Intercept": {
+            "n": 2000,
+            "corr": 0.9999999193975736,
+            "median_abs_diff": 0.00045076809464905665,
+            "max_abs_diff": 0.003007946723947441
+          },
+          "log_umi": {
+            "n": 2000,
+            "corr": 0.1209061327303645,
+            "median_abs_diff": 3.9968028886505635e-15,
+            "max_abs_diff": 1.4210854715202004e-14
+          }
+        },
+        "gene_attr": {
+          "residual_variance": {
+            "n": 2000,
+            "corr": 0.9999980440140045,
+            "median_abs_diff": 0.0008620346158459968,
+            "max_abs_diff": 0.27250043983662664,
+            "spearman": 0.9999693729923433
+          }
+        },
+        "hvg_jaccard": 1.0,
+        "note": "HVG from R fit \u2192 Py residuals (golden vst returns step1-sized gene_attr only)"
+      },
+      "native_full_vst": {
+        "model_pars_step1": {
+          "n_genes": 2000,
+          "n_inf_py": 165,
+          "n_inf_r": 165,
+          "n_inf_both": 165,
+          "theta": {
+            "n": 2000,
+            "corr": 0.9592186929132837,
+            "median_abs_diff": 1.1641110786442255e-07,
+            "max_abs_diff": 3.6523908620683443
+          },
+          "Intercept": {
+            "n": 2000,
+            "corr": 0.999998777802011,
+            "median_abs_diff": 0.000718768853820162,
+            "max_abs_diff": 0.047942428489907485
+          },
+          "log_umi": {
+            "n": 2000,
+            "corr": NaN,
+            "median_abs_diff": 3.9968028886505635e-15,
+            "max_abs_diff": 3.9968028886505635e-15
+          }
+        },
+        "model_pars_fit": {
+          "n_genes": 15297,
+          "n_inf_py": 76,
+          "n_inf_r": 76,
+          "n_inf_both": 76,
+          "theta": {
+            "n": 15297,
+            "corr": 0.9998458315068575,
+            "median_abs_diff": 0.011080932020602008,
+            "max_abs_diff": 0.034062355847960024
+          },
+          "Intercept": {
+            "n": 15297,
+            "corr": 0.999998718270762,
+            "median_abs_diff": 0.003443328915263777,
+            "max_abs_diff": 0.011555805533360441
+          },
+          "log_umi": {
+            "n": 15297,
+            "corr": NaN,
+            "median_abs_diff": 3.9968028886505635e-15,
+            "max_abs_diff": 1.5987211554602254e-14
+          }
+        },
+        "gene_attr": {
+          "residual_variance": {
+            "n": 15297,
+            "corr": 0.9999608662854357,
+            "median_abs_diff": 0.0034117520777675603,
+            "max_abs_diff": 4.112415302122713,
+            "spearman": 0.9997613376103947
+          }
+        },
+        "hvg_jaccard": 0.9801980198019802,
+        "residuals": {
+          "n_genes": 15297,
+          "n_cells": 14724,
+          "corr": 0.9999872358045229,
+          "median_abs_diff": 0.0003799773209156032,
+          "max_abs_diff": 1.739707658203713
+        }
+      }
+    },
+    {
+      "sample": "GSM8779708",
+      "seed": 1448145,
+      "n_cells": 13437,
+      "n_genes": 15154,
+      "r_step1_to_py_ksmooth": {
+        "n_genes": 15154,
+        "n_inf_py": 56,
+        "n_inf_r": 56,
+        "n_inf_both": 56,
+        "theta": {
+          "n": 15154,
+          "corr": 0.9999727632239243,
+          "median_abs_diff": 9.043129549710094e-05,
+          "max_abs_diff": 0.012163972109149622
+        },
+        "Intercept": {
+          "n": 15154,
+          "corr": 0.9999995825045817,
+          "median_abs_diff": 0.00017681221439325157,
+          "max_abs_diff": 0.005269231345854664
+        },
+        "log_umi": {
+          "n": 15154,
+          "corr": -0.031420099030884746,
+          "median_abs_diff": 3.9968028886505635e-15,
+          "max_abs_diff": 1.4210854715202004e-14
+        }
+      },
+      "r_fit_to_py_residuals": {
+        "n_genes": 15154,
+        "n_cells": 13437,
+        "corr": 0.9999999999999991,
+        "median_abs_diff": 2.3314683517128287e-15,
+        "max_abs_diff": 4.874323167314287e-12,
+        "residual_variance": {
+          "n": 15154,
+          "corr": 1.0,
+          "median_abs_diff": 1.2545520178264269e-14,
+          "max_abs_diff": 5.5990767577895895e-12
+        },
+        "hvg_jaccard": 1.0
+      },
+      "r_step1_golden_path": {
+        "model_pars_fit": {
+          "n_genes": 2000,
+          "n_inf_py": 0,
+          "n_inf_r": 0,
+          "n_inf_both": 0,
+          "theta": {
+            "n": 2000,
+            "corr": 0.9999801845548983,
+            "median_abs_diff": 9.286584579654145e-05,
+            "max_abs_diff": 0.012155291643993094
+          },
+          "Intercept": {
+            "n": 2000,
+            "corr": 0.999999785713532,
+            "median_abs_diff": 0.0002734994564042026,
+            "max_abs_diff": 0.005264417096389806
+          },
+          "log_umi": {
+            "n": 2000,
+            "corr": 0.10487267422249379,
+            "median_abs_diff": 3.9968028886505635e-15,
+            "max_abs_diff": 5.773159728050814e-15
+          }
+        },
+        "gene_attr": {
+          "residual_variance": {
+            "n": 2000,
+            "corr": 0.9999893510226241,
+            "median_abs_diff": 0.00018030349272235568,
+            "max_abs_diff": 1.0387549821108308,
+            "spearman": 0.9999457629864407
+          }
+        },
+        "hvg_jaccard": 1.0,
+        "note": "HVG from R fit \u2192 Py residuals (golden vst returns step1-sized gene_attr only)"
+      },
+      "native_full_vst": {
+        "model_pars_step1": {
+          "n_genes": 2000,
+          "n_inf_py": 131,
+          "n_inf_r": 131,
+          "n_inf_both": 131,
+          "theta": {
+            "n": 2000,
+            "corr": 0.9306723182564626,
+            "median_abs_diff": 1.0565962749176094e-07,
+            "max_abs_diff": 3.819582516374302
+          },
+          "Intercept": {
+            "n": 2000,
+            "corr": 0.999997625706081,
+            "median_abs_diff": 0.0013618573716183136,
+            "max_abs_diff": 0.051167234898697345
+          },
+          "log_umi": {
+            "n": 2000,
+            "corr": NaN,
+            "median_abs_diff": 3.9968028886505635e-15,
+            "max_abs_diff": 3.9968028886505635e-15
+          }
+        },
+        "model_pars_fit": {
+          "n_genes": 15154,
+          "n_inf_py": 56,
+          "n_inf_r": 56,
+          "n_inf_both": 56,
+          "theta": {
+            "n": 15154,
+            "corr": 0.999193070739655,
+            "median_abs_diff": 0.032643105317929216,
+            "max_abs_diff": 0.07522767488054403
+          },
+          "Intercept": {
+            "n": 15154,
+            "corr": 0.9999890955166774,
+            "median_abs_diff": 0.006120996137689794,
+            "max_abs_diff": 0.04724010238901322
+          },
+          "log_umi": {
+            "n": 15154,
+            "corr": -0.031420099030884746,
+            "median_abs_diff": 3.9968028886505635e-15,
+            "max_abs_diff": 1.4210854715202004e-14
+          }
+        },
+        "gene_attr": {
+          "residual_variance": {
+            "n": 15154,
+            "corr": 0.9990778525067999,
+            "median_abs_diff": 0.009932539081674518,
+            "max_abs_diff": 17.009008851785353,
+            "spearman": 0.9971532545651962
+          }
+        },
+        "hvg_jaccard": 0.9512195121951219,
+        "residuals": {
+          "n_genes": 15154,
+          "n_cells": 13437,
+          "corr": 0.9997252215715389,
+          "median_abs_diff": 0.0007838136592804162,
+          "max_abs_diff": 9.304649861862401
+        }
+      }
+    },
+    {
+      "sample": "GSM8779709",
+      "seed": 1448145,
+      "n_cells": 7787,
+      "n_genes": 13379,
+      "r_step1_to_py_ksmooth": {
+        "n_genes": 13379,
+        "n_inf_py": 5,
+        "n_inf_r": 5,
+        "n_inf_both": 5,
+        "theta": {
+          "n": 13379,
+          "corr": 1.0,
+          "median_abs_diff": 1.2212453270876722e-15,
+          "max_abs_diff": 9.492406860545088e-15
+        },
+        "Intercept": {
+          "n": 13379,
+          "corr": 1.0,
+          "median_abs_diff": 2.1316282072803006e-14,
+          "max_abs_diff": 9.947598300641403e-14
+        },
+        "log_umi": {
+          "n": 13379,
+          "corr": 0.032224159836320994,
+          "median_abs_diff": 3.9968028886505635e-15,
+          "max_abs_diff": 1.5987211554602254e-14
+        }
+      },
+      "r_fit_to_py_residuals": {
+        "n_genes": 13379,
+        "n_cells": 7787,
+        "corr": 0.9999999999999999,
+        "median_abs_diff": 2.0539125955565396e-15,
+        "max_abs_diff": 4.391154106997419e-12,
+        "residual_variance": {
+          "n": 13379,
+          "corr": 0.9999999999999998,
+          "median_abs_diff": 1.27675647831893e-14,
+          "max_abs_diff": 6.195932655828074e-12
+        },
+        "hvg_jaccard": 1.0
+      },
+      "r_step1_golden_path": {
+        "model_pars_fit": {
+          "n_genes": 2000,
+          "n_inf_py": 0,
+          "n_inf_r": 0,
+          "n_inf_both": 0,
+          "theta": {
+            "n": 2000,
+            "corr": 0.9999999999999999,
+            "median_abs_diff": 8.881784197001252e-16,
+            "max_abs_diff": 7.077671781985373e-15
+          },
+          "Intercept": {
+            "n": 2000,
+            "corr": 1.0,
+            "median_abs_diff": 1.0658141036401503e-14,
+            "max_abs_diff": 9.059419880941277e-14
+          },
+          "log_umi": {
+            "n": 2000,
+            "corr": 0.09111410664309913,
+            "median_abs_diff": 3.9968028886505635e-15,
+            "max_abs_diff": 1.4210854715202004e-14
+          }
+        },
+        "gene_attr": {
+          "residual_variance": {
+            "n": 2000,
+            "corr": 1.0,
+            "median_abs_diff": 5.662137425588298e-15,
+            "max_abs_diff": 3.467448550509289e-12,
+            "spearman": 1.0
+          }
+        },
+        "hvg_jaccard": 1.0,
+        "note": "HVG from R fit \u2192 Py residuals (golden vst returns step1-sized gene_attr only)"
+      },
+      "native_full_vst": {
+        "model_pars_step1": {
+          "n_genes": 2000,
+          "n_inf_py": 57,
+          "n_inf_r": 57,
+          "n_inf_both": 57,
+          "theta": {
+            "n": 2000,
+            "corr": 0.9206177322140077,
+            "median_abs_diff": 1.045217863440695e-07,
+            "max_abs_diff": 4.06328867874468
+          },
+          "Intercept": {
+            "n": 2000,
+            "corr": 0.9999894173106701,
+            "median_abs_diff": 0.0022554625461861377,
+            "max_abs_diff": 0.06707351654778293
+          },
+          "log_umi": {
+            "n": 2000,
+            "corr": NaN,
+            "median_abs_diff": 3.9968028886505635e-15,
+            "max_abs_diff": 3.9968028886505635e-15
+          }
+        },
+        "model_pars_fit": {
+          "n_genes": 13379,
+          "n_inf_py": 5,
+          "n_inf_r": 5,
+          "n_inf_both": 5,
+          "theta": {
+            "n": 13379,
+            "corr": 0.9993611368215677,
+            "median_abs_diff": 0.05443299226597348,
+            "max_abs_diff": 0.07901401181290182
+          },
+          "Intercept": {
+            "n": 13379,
+            "corr": 0.9999924285056159,
+            "median_abs_diff": 0.011559648477877715,
+            "max_abs_diff": 0.04520144674308746
+          },
+          "log_umi": {
+            "n": 13379,
+            "corr": 0.032224159836320994,
+            "median_abs_diff": 3.9968028886505635e-15,
+            "max_abs_diff": 1.5987211554602254e-14
+          }
+        },
+        "gene_attr": {
+          "residual_variance": {
+            "n": 13379,
+            "corr": 0.9994552330975208,
+            "median_abs_diff": 0.02418894750418621,
+            "max_abs_diff": 23.16252065543881,
+            "spearman": 0.9989250889626016
+          }
+        },
+        "hvg_jaccard": 0.9821605550049554,
+        "residuals": {
+          "n_genes": 13379,
+          "n_cells": 7787,
+          "corr": 0.9997713033774133,
+          "median_abs_diff": 0.001444315747580166,
+          "max_abs_diff": 9.575656394920614
+        }
+      }
+    },
+    {
+      "sample": "GSM8779707",
+      "seed": 1448146,
+      "n_cells": 14724,
+      "n_genes": 15297,
+      "r_step1_to_py_ksmooth": {
+        "n_genes": 15297,
+        "n_inf_py": 76,
+        "n_inf_r": 76,
+        "n_inf_both": 76,
+        "theta": {
+          "n": 15297,
+          "corr": 0.9999881046744677,
+          "median_abs_diff": 0.0007091860157120156,
+          "max_abs_diff": 0.01227174501795325
+        },
+        "Intercept": {
+          "n": 15297,
+          "corr": 0.9999999225535426,
+          "median_abs_diff": 0.00024724176985557733,
+          "max_abs_diff": 0.0018984558535013463
+        },
+        "log_umi": {
+          "n": 15297,
+          "corr": NaN,
+          "median_abs_diff": 3.9968028886505635e-15,
+          "max_abs_diff": 1.5987211554602254e-14
+        }
+      },
+      "r_fit_to_py_residuals": {
+        "n_genes": 15297,
+        "n_cells": 14724,
+        "corr": 1.0,
+        "median_abs_diff": 2.609024107869118e-15,
+        "max_abs_diff": 5.4853899200679734e-12,
+        "residual_variance": {
+          "n": 15297,
+          "corr": 0.9999999999999999,
+          "median_abs_diff": 1.2878587085651816e-14,
+          "max_abs_diff": 4.206412995699793e-12
+        },
+        "hvg_jaccard": 1.0
+      },
+      "r_step1_golden_path": {
+        "model_pars_fit": {
+          "n_genes": 2000,
+          "n_inf_py": 0,
+          "n_inf_r": 0,
+          "n_inf_both": 0,
+          "theta": {
+            "n": 2000,
+            "corr": 0.9999857401789604,
+            "median_abs_diff": 0.0006126267393735882,
+            "max_abs_diff": 0.012271664563389795
+          },
+          "Intercept": {
+            "n": 2000,
+            "corr": 0.9999999567922904,
+            "median_abs_diff": 0.0003034573320670475,
+            "max_abs_diff": 0.0018966741643993146
+          },
+          "log_umi": {
+            "n": 2000,
+            "corr": 0.055969227086905285,
+            "median_abs_diff": 3.9968028886505635e-15,
+            "max_abs_diff": 1.4210854715202004e-14
+          }
+        },
+        "gene_attr": {
+          "residual_variance": {
+            "n": 2000,
+            "corr": 0.9999989799320091,
+            "median_abs_diff": 0.0002841916578022463,
+            "max_abs_diff": 0.7609307497430109,
+            "spearman": 0.9999820044955009
+          }
+        },
+        "hvg_jaccard": 1.0,
+        "note": "HVG from R fit \u2192 Py residuals (golden vst returns step1-sized gene_attr only)"
+      },
+      "native_full_vst": {
+        "model_pars_step1": {
+          "n_genes": 2000,
+          "n_inf_py": 156,
+          "n_inf_r": 156,
+          "n_inf_both": 156,
+          "theta": {
+            "n": 2000,
+            "corr": 0.9718217425781817,
+            "median_abs_diff": 1.283478703872909e-07,
+            "max_abs_diff": 3.2422329906397707
+          },
+          "Intercept": {
+            "n": 2000,
+            "corr": 0.9999977981560619,
+            "median_abs_diff": 0.0006575136566535633,
+            "max_abs_diff": 0.14949539299196601
+          },
+          "log_umi": {
+            "n": 2000,
+            "corr": NaN,
+            "median_abs_diff": 3.9968028886505635e-15,
+            "max_abs_diff": 3.9968028886505635e-15
+          }
+        },
+        "model_pars_fit": {
+          "n_genes": 15297,
+          "n_inf_py": 76,
+          "n_inf_r": 76,
+          "n_inf_both": 76,
+          "theta": {
+            "n": 15297,
+            "corr": 0.9997701416267072,
+            "median_abs_diff": 0.009814630111934022,
+            "max_abs_diff": 0.034706091195508604
+          },
+          "Intercept": {
+            "n": 15297,
+            "corr": 0.9999972405949585,
+            "median_abs_diff": 0.0018233122928847934,
+            "max_abs_diff": 0.01760140932386456
+          },
+          "log_umi": {
+            "n": 15297,
+            "corr": NaN,
+            "median_abs_diff": 3.9968028886505635e-15,
+            "max_abs_diff": 1.5987211554602254e-14
+          }
+        },
+        "gene_attr": {
+          "residual_variance": {
+            "n": 15297,
+            "corr": 0.9998500752233345,
+            "median_abs_diff": 0.003017699826023623,
+            "max_abs_diff": 9.70980596109814,
+            "spearman": 0.9994303412960107
+          }
+        },
+        "hvg_jaccard": 0.9847833278200463,
+        "residuals": {
+          "n_genes": 15297,
+          "n_cells": 14724,
+          "corr": 0.9999691130699656,
+          "median_abs_diff": 0.0002557587942139533,
+          "max_abs_diff": 4.233176884353895
+        }
+      }
+    },
+    {
+      "sample": "GSM8779708",
+      "seed": 1448146,
+      "n_cells": 13437,
+      "n_genes": 15154,
+      "r_step1_to_py_ksmooth": {
+        "n_genes": 15154,
+        "n_inf_py": 56,
+        "n_inf_r": 56,
+        "n_inf_both": 56,
+        "theta": {
+          "n": 15154,
+          "corr": 0.9999734703214093,
+          "median_abs_diff": 8.596524427939567e-05,
+          "max_abs_diff": 0.010260136273652687
+        },
+        "Intercept": {
+          "n": 15154,
+          "corr": 0.9999998800127828,
+          "median_abs_diff": 0.00012551838771024393,
+          "max_abs_diff": 0.0022841198104259774
+        },
+        "log_umi": {
+          "n": 15154,
+          "corr": -0.02998031475574162,
+          "median_abs_diff": 3.9968028886505635e-15,
+          "max_abs_diff": 1.5987211554602254e-14
+        }
+      },
+      "r_fit_to_py_residuals": {
+        "n_genes": 15154,
+        "n_cells": 13437,
+        "corr": 1.0,
+        "median_abs_diff": 2.3245294578089215e-15,
+        "max_abs_diff": 4.874323167314287e-12,
+        "residual_variance": {
+          "n": 15154,
+          "corr": 1.0,
+          "median_abs_diff": 1.2351231148954867e-14,
+          "max_abs_diff": 3.865352482534945e-12
+        },
+        "hvg_jaccard": 1.0
+      },
+      "r_step1_golden_path": {
+        "model_pars_fit": {
+          "n_genes": 2000,
+          "n_inf_py": 0,
+          "n_inf_r": 0,
+          "n_inf_both": 0,
+          "theta": {
+            "n": 2000,
+            "corr": 0.9999828831114544,
+            "median_abs_diff": 5.948512370371195e-05,
+            "max_abs_diff": 0.010259845440262677
+          },
+          "Intercept": {
+            "n": 2000,
+            "corr": 0.9999999551576703,
+            "median_abs_diff": 0.00013805737518923777,
+            "max_abs_diff": 0.002282680474452903
+          },
+          "log_umi": {
+            "n": 2000,
+            "corr": 0.13250342047989142,
+            "median_abs_diff": 3.9968028886505635e-15,
+            "max_abs_diff": 1.5987211554602254e-14
+          }
+        },
+        "gene_attr": {
+          "residual_variance": {
+            "n": 2000,
+            "corr": 0.9999965503082257,
+            "median_abs_diff": 0.00012745112128176306,
+            "max_abs_diff": 0.7665547681476994,
+            "spearman": 0.9999787794946949
+          }
+        },
+        "hvg_jaccard": 1.0,
+        "note": "HVG from R fit \u2192 Py residuals (golden vst returns step1-sized gene_attr only)"
+      },
+      "native_full_vst": {
+        "model_pars_step1": {
+          "n_genes": 2000,
+          "n_inf_py": 112,
+          "n_inf_r": 112,
+          "n_inf_both": 112,
+          "theta": {
+            "n": 2000,
+            "corr": 0.9374024959842093,
+            "median_abs_diff": 1.1730213250737975e-07,
+            "max_abs_diff": 4.023338895906293
+          },
+          "Intercept": {
+            "n": 2000,
+            "corr": 0.9999967171106305,
+            "median_abs_diff": 0.001446545422650658,
+            "max_abs_diff": 0.05778894986143168
+          },
+          "log_umi": {
+            "n": 2000,
+            "corr": NaN,
+            "median_abs_diff": 3.9968028886505635e-15,
+            "max_abs_diff": 3.9968028886505635e-15
+          }
+        },
+        "model_pars_fit": {
+          "n_genes": 15154,
+          "n_inf_py": 56,
+          "n_inf_r": 56,
+          "n_inf_both": 56,
+          "theta": {
+            "n": 15154,
+            "corr": 0.9997303986449121,
+            "median_abs_diff": 0.02966730063930021,
+            "max_abs_diff": 0.04914736657124654
+          },
+          "Intercept": {
+            "n": 15154,
+            "corr": 0.9999936902667804,
+            "median_abs_diff": 0.00642884966625612,
+            "max_abs_diff": 0.03588252930630276
+          },
+          "log_umi": {
+            "n": 15154,
+            "corr": -0.02998031475574162,
+            "median_abs_diff": 3.9968028886505635e-15,
+            "max_abs_diff": 1.5987211554602254e-14
+          }
+        },
+        "gene_attr": {
+          "residual_variance": {
+            "n": 15154,
+            "corr": 0.999755137812471,
+            "median_abs_diff": 0.013640207972777652,
+            "max_abs_diff": 9.325829866802735,
+            "spearman": 0.999334870607091
+          }
+        },
+        "hvg_jaccard": 0.9795447047179149,
+        "residuals": {
+          "n_genes": 15154,
+          "n_cells": 13437,
+          "corr": 0.9999104598363722,
+          "median_abs_diff": 0.0007704105814634876,
+          "max_abs_diff": 6.1594881956195735
+        }
+      }
+    },
+    {
+      "sample": "GSM8779709",
+      "seed": 1448146,
+      "n_cells": 7787,
+      "n_genes": 13379,
+      "r_step1_to_py_ksmooth": {
+        "n_genes": 13379,
+        "n_inf_py": 5,
+        "n_inf_r": 5,
+        "n_inf_both": 5,
+        "theta": {
+          "n": 13379,
+          "corr": 0.999969108587219,
+          "median_abs_diff": 1.0695718566336443e-05,
+          "max_abs_diff": 0.01056755372162312
+        },
+        "Intercept": {
+          "n": 13379,
+          "corr": 0.9999995354734814,
+          "median_abs_diff": 2.509181141796546e-05,
+          "max_abs_diff": 0.004327243443908557
+        },
+        "log_umi": {
+          "n": 13379,
+          "corr": 0.027265075139535487,
+          "median_abs_diff": 3.9968028886505635e-15,
+          "max_abs_diff": 1.4210854715202004e-14
+        }
+      },
+      "r_fit_to_py_residuals": {
+        "n_genes": 13379,
+        "n_cells": 7787,
+        "corr": 0.9999999999999997,
+        "median_abs_diff": 2.1094237467877974e-15,
+        "max_abs_diff": 4.334310688136611e-12,
+        "residual_variance": {
+          "n": 13379,
+          "corr": 0.9999999999999998,
+          "median_abs_diff": 1.2989609388114332e-14,
+          "max_abs_diff": 3.382183422218077e-12
+        },
+        "hvg_jaccard": 1.0
+      },
+      "r_step1_golden_path": {
+        "model_pars_fit": {
+          "n_genes": 2000,
+          "n_inf_py": 0,
+          "n_inf_r": 0,
+          "n_inf_both": 0,
+          "theta": {
+            "n": 2000,
+            "corr": 0.9999795716124292,
+            "median_abs_diff": 6.941914678024186e-06,
+            "max_abs_diff": 0.01056698148736306
+          },
+          "Intercept": {
+            "n": 2000,
+            "corr": 0.9999998384942788,
+            "median_abs_diff": 1.5084657624342412e-05,
+            "max_abs_diff": 0.00432547834538255
+          },
+          "log_umi": {
+            "n": 2000,
+            "corr": 0.07409983920088015,
+            "median_abs_diff": 3.9968028886505635e-15,
+            "max_abs_diff": 5.773159728050814e-15
+          }
+        },
+        "gene_attr": {
+          "residual_variance": {
+            "n": 2000,
+            "corr": 0.9999992857996468,
+            "median_abs_diff": 1.1740619182520895e-05,
+            "max_abs_diff": 0.28213520506684375,
+            "spearman": 0.9999724329931083
+          }
+        },
+        "hvg_jaccard": 1.0,
+        "note": "HVG from R fit \u2192 Py residuals (golden vst returns step1-sized gene_attr only)"
+      },
+      "native_full_vst": {
+        "model_pars_step1": {
+          "n_genes": 2000,
+          "n_inf_py": 62,
+          "n_inf_r": 63,
+          "n_inf_both": 62,
+          "theta": {
+            "n": 2000,
+            "corr": 0.9136405663922919,
+            "median_abs_diff": 1.1632567015196216e-07,
+            "max_abs_diff": Infinity
+          },
+          "Intercept": {
+            "n": 2000,
+            "corr": 0.9999887625093644,
+            "median_abs_diff": 0.0025556370867745315,
+            "max_abs_diff": 0.10268690385451151
+          },
+          "log_umi": {
+            "n": 2000,
+            "corr": NaN,
+            "median_abs_diff": 3.9968028886505635e-15,
+            "max_abs_diff": 3.9968028886505635e-15
+          }
+        },
+        "model_pars_fit": {
+          "n_genes": 13379,
+          "n_inf_py": 5,
+          "n_inf_r": 5,
+          "n_inf_both": 5,
+          "theta": {
+            "n": 13379,
+            "corr": 0.9967869397450734,
+            "median_abs_diff": 0.04662621504637174,
+            "max_abs_diff": 0.12569406837117064
+          },
+          "Intercept": {
+            "n": 13379,
+            "corr": 0.999973921048509,
+            "median_abs_diff": 0.01570035993001717,
+            "max_abs_diff": 0.045778539745496616
+          },
+          "log_umi": {
+            "n": 13379,
+            "corr": 0.027265075139535487,
+            "median_abs_diff": 3.9968028886505635e-15,
+            "max_abs_diff": 1.4210854715202004e-14
+          }
+        },
+        "gene_attr": {
+          "residual_variance": {
+            "n": 13379,
+            "corr": 0.9989547678555893,
+            "median_abs_diff": 0.02024302148912449,
+            "max_abs_diff": 19.596579147610726,
+            "spearman": 0.9967812948096286
+          }
+        },
+        "hvg_jaccard": 0.9543973941368078,
+        "residuals": {
+          "n_genes": 13379,
+          "n_cells": 7787,
+          "corr": 0.9995302283329793,
+          "median_abs_diff": 0.0013960646524978637,
+          "max_abs_diff": 12.013761907573482
+        }
+      }
+    },
+    {
+      "sample": "GSM8779707",
+      "seed": 42,
+      "n_cells": 14724,
+      "n_genes": 15297,
+      "r_step1_to_py_ksmooth": {
+        "n_genes": 15297,
+        "n_inf_py": 76,
+        "n_inf_r": 76,
+        "n_inf_both": 76,
+        "theta": {
+          "n": 15297,
+          "corr": 1.0,
+          "median_abs_diff": 1.942890293094024e-15,
+          "max_abs_diff": 1.9095836023552692e-14
+        },
+        "Intercept": {
+          "n": 15297,
+          "corr": 1.0,
+          "median_abs_diff": 2.4868995751603507e-14,
+          "max_abs_diff": 1.2789769243681803e-13
+        },
+        "log_umi": {
+          "n": 15297,
+          "corr": NaN,
+          "median_abs_diff": 3.9968028886505635e-15,
+          "max_abs_diff": 1.5987211554602254e-14
+        }
+      },
+      "r_fit_to_py_residuals": {
+        "n_genes": 15297,
+        "n_cells": 14724,
+        "corr": 1.0,
+        "median_abs_diff": 2.5326962749261384e-15,
+        "max_abs_diff": 4.988010005035903e-12,
+        "residual_variance": {
+          "n": 15297,
+          "corr": 1.0,
+          "median_abs_diff": 1.2989609388114332e-14,
+          "max_abs_diff": 3.339550858072471e-12
+        },
+        "hvg_jaccard": 1.0
+      },
+      "r_step1_golden_path": {
+        "model_pars_fit": {
+          "n_genes": 2000,
+          "n_inf_py": 0,
+          "n_inf_r": 0,
+          "n_inf_both": 0,
+          "theta": {
+            "n": 2000,
+            "corr": 1.0,
+            "median_abs_diff": 1.1657341758564144e-15,
+            "max_abs_diff": 7.771561172376096e-15
+          },
+          "Intercept": {
+            "n": 2000,
+            "corr": 1.0,
+            "median_abs_diff": 1.2434497875801753e-14,
+            "max_abs_diff": 9.947598300641403e-14
+          },
+          "log_umi": {
+            "n": 2000,
+            "corr": 0.1692917709651026,
+            "median_abs_diff": 3.9968028886505635e-15,
+            "max_abs_diff": 1.5987211554602254e-14
+          }
+        },
+        "gene_attr": {
+          "residual_variance": {
+            "n": 2000,
+            "corr": 1.0,
+            "median_abs_diff": 7.105427357601002e-15,
+            "max_abs_diff": 6.679101716144942e-13,
+            "spearman": 1.0
+          }
+        },
+        "hvg_jaccard": 1.0,
+        "note": "HVG from R fit \u2192 Py residuals (golden vst returns step1-sized gene_attr only)"
+      },
+      "native_full_vst": {
+        "model_pars_step1": {
+          "n_genes": 2000,
+          "n_inf_py": 173,
+          "n_inf_r": 173,
+          "n_inf_both": 173,
+          "theta": {
+            "n": 2000,
+            "corr": 0.971890498189692,
+            "median_abs_diff": 1.2411233946130196e-07,
+            "max_abs_diff": 3.3322015000838126
+          },
+          "Intercept": {
+            "n": 2000,
+            "corr": 0.9999980769172186,
+            "median_abs_diff": 0.0005762951672521055,
+            "max_abs_diff": 0.08635047395518569
+          },
+          "log_umi": {
+            "n": 2000,
+            "corr": NaN,
+            "median_abs_diff": 3.9968028886505635e-15,
+            "max_abs_diff": 3.9968028886505635e-15
+          }
+        },
+        "model_pars_fit": {
+          "n_genes": 15297,
+          "n_inf_py": 76,
+          "n_inf_r": 76,
+          "n_inf_both": 76,
+          "theta": {
+            "n": 15297,
+            "corr": 0.9999422238317676,
+            "median_abs_diff": 0.0104047745507177,
+            "max_abs_diff": 0.04202748463451167
+          },
+          "Intercept": {
+            "n": 15297,
+            "corr": 0.9999974941350431,
+            "median_abs_diff": 0.002235975518960487,
+            "max_abs_diff": 0.014957416490238629
+          },
+          "log_umi": {
+            "n": 15297,
+            "corr": NaN,
+            "median_abs_diff": 3.9968028886505635e-15,
+            "max_abs_diff": 1.5987211554602254e-14
+          }
+        },
+        "gene_attr": {
+          "residual_variance": {
+            "n": 15297,
+            "corr": 0.9999479007688523,
+            "median_abs_diff": 0.0037200337795845195,
+            "max_abs_diff": 4.807554700260084,
+            "spearman": 0.9997954389874021
+          }
+        },
+        "hvg_jaccard": 0.9860973187686196,
+        "residuals": {
+          "n_genes": 15297,
+          "n_cells": 14724,
+          "corr": 0.9999828681814423,
+          "median_abs_diff": 0.00038936965992514283,
+          "max_abs_diff": 2.490962708088418
+        }
+      }
+    },
+    {
+      "sample": "GSM8779708",
+      "seed": 42,
+      "n_cells": 13437,
+      "n_genes": 15154,
+      "r_step1_to_py_ksmooth": {
+        "n_genes": 15154,
+        "n_inf_py": 56,
+        "n_inf_r": 56,
+        "n_inf_both": 56,
+        "theta": {
+          "n": 15154,
+          "corr": 1.0,
+          "median_abs_diff": 1.7763568394002505e-15,
+          "max_abs_diff": 2.248201624865942e-14
+        },
+        "Intercept": {
+          "n": 15154,
+          "corr": 0.9999999999999997,
+          "median_abs_diff": 2.3092638912203256e-14,
+          "max_abs_diff": 1.1368683772161603e-13
+        },
+        "log_umi": {
+          "n": 15154,
+          "corr": -0.020733817552751065,
+          "median_abs_diff": 3.9968028886505635e-15,
+          "max_abs_diff": 1.5987211554602254e-14
+        }
+      },
+      "r_fit_to_py_residuals": {
+        "n_genes": 15154,
+        "n_cells": 13437,
+        "corr": 0.9999999999999997,
+        "median_abs_diff": 2.3869795029440866e-15,
+        "max_abs_diff": 5.329070518200751e-12,
+        "residual_variance": {
+          "n": 15154,
+          "corr": 1.0,
+          "median_abs_diff": 1.27675647831893e-14,
+          "max_abs_diff": 5.172751116333529e-12
+        },
+        "hvg_jaccard": 1.0
+      },
+      "r_step1_golden_path": {
+        "model_pars_fit": {
+          "n_genes": 2000,
+          "n_inf_py": 0,
+          "n_inf_r": 0,
+          "n_inf_both": 0,
+          "theta": {
+            "n": 2000,
+            "corr": 1.0,
+            "median_abs_diff": 1.3322676295501878e-15,
+            "max_abs_diff": 8.992806499463768e-15
+          },
+          "Intercept": {
+            "n": 2000,
+            "corr": 0.9999999999999998,
+            "median_abs_diff": 1.4210854715202004e-14,
+            "max_abs_diff": 8.348877145181177e-14
+          },
+          "log_umi": {
+            "n": 2000,
+            "corr": 0.11045441982501356,
+            "median_abs_diff": 3.9968028886505635e-15,
+            "max_abs_diff": 1.4210854715202004e-14
+          }
+        },
+        "gene_attr": {
+          "residual_variance": {
+            "n": 2000,
+            "corr": 1.0,
+            "median_abs_diff": 7.16093850883226e-15,
+            "max_abs_diff": 2.0108359422010835e-12,
+            "spearman": 1.0
+          }
+        },
+        "hvg_jaccard": 1.0,
+        "note": "HVG from R fit \u2192 Py residuals (golden vst returns step1-sized gene_attr only)"
+      },
+      "native_full_vst": {
+        "model_pars_step1": {
+          "n_genes": 2000,
+          "n_inf_py": 119,
+          "n_inf_r": 119,
+          "n_inf_both": 119,
+          "theta": {
+            "n": 2000,
+            "corr": 0.9365847911079953,
+            "median_abs_diff": 1.1742081676424654e-07,
+            "max_abs_diff": 3.5069802124086182
+          },
+          "Intercept": {
+            "n": 2000,
+            "corr": 0.9999981375894219,
+            "median_abs_diff": 0.0011873696367157294,
+            "max_abs_diff": 0.031004290231823717
+          },
+          "log_umi": {
+            "n": 2000,
+            "corr": NaN,
+            "median_abs_diff": 3.9968028886505635e-15,
+            "max_abs_diff": 3.9968028886505635e-15
+          }
+        },
+        "model_pars_fit": {
+          "n_genes": 15154,
+          "n_inf_py": 56,
+          "n_inf_r": 56,
+          "n_inf_both": 56,
+          "theta": {
+            "n": 15154,
+            "corr": 0.99982486922419,
+            "median_abs_diff": 0.02621664367539317,
+            "max_abs_diff": 0.04654403807474153
+          },
+          "Intercept": {
+            "n": 15154,
+            "corr": 0.9999954138736368,
+            "median_abs_diff": 0.002588562357190405,
+            "max_abs_diff": 0.0317111870005089
+          },
+          "log_umi": {
+            "n": 15154,
+            "corr": -0.020733817552751065,
+            "median_abs_diff": 3.9968028886505635e-15,
+            "max_abs_diff": 1.5987211554602254e-14
+          }
+        },
+        "gene_attr": {
+          "residual_variance": {
+            "n": 15154,
+            "corr": 0.9995051701543184,
+            "median_abs_diff": 0.009515719847805859,
+            "max_abs_diff": 16.746740044059806,
+            "spearman": 0.9991187400921079
+          }
+        },
+        "hvg_jaccard": 0.9762845849802372,
+        "residuals": {
+          "n_genes": 15154,
+          "n_cells": 13437,
+          "corr": 0.999882254209626,
+          "median_abs_diff": 0.0007374220738848025,
+          "max_abs_diff": 7.778325983593774
+        }
+      }
+    },
+    {
+      "sample": "GSM8779709",
+      "seed": 42,
+      "n_cells": 7787,
+      "n_genes": 13379,
+      "r_step1_to_py_ksmooth": {
+        "n_genes": 13379,
+        "n_inf_py": 5,
+        "n_inf_r": 5,
+        "n_inf_both": 5,
+        "theta": {
+          "n": 13379,
+          "corr": 0.9999543213046528,
+          "median_abs_diff": 0.00017037806300057926,
+          "max_abs_diff": 0.011021633130697678
+        },
+        "Intercept": {
+          "n": 13379,
+          "corr": 0.999999728102137,
+          "median_abs_diff": 0.00018570919737292968,
+          "max_abs_diff": 0.0032106512713543367
+        },
+        "log_umi": {
+          "n": 13379,
+          "corr": 0.0180137287139804,
+          "median_abs_diff": 3.9968028886505635e-15,
+          "max_abs_diff": 5.773159728050814e-15
+        }
+      },
+      "r_fit_to_py_residuals": {
+        "n_genes": 13379,
+        "n_cells": 7787,
+        "corr": 1.0,
+        "median_abs_diff": 2.1649348980190553e-15,
+        "max_abs_diff": 4.106937012693379e-12,
+        "residual_variance": {
+          "n": 13379,
+          "corr": 1.0,
+          "median_abs_diff": 1.354472090042691e-14,
+          "max_abs_diff": 4.192202140984591e-12
+        },
+        "hvg_jaccard": 1.0
+      },
+      "r_step1_golden_path": {
+        "model_pars_fit": {
+          "n_genes": 2000,
+          "n_inf_py": 0,
+          "n_inf_r": 0,
+          "n_inf_both": 0,
+          "theta": {
+            "n": 2000,
+            "corr": 0.9999753029037284,
+            "median_abs_diff": 0.0001295851300836589,
+            "max_abs_diff": 0.01102043094557778
+          },
+          "Intercept": {
+            "n": 2000,
+            "corr": 0.999999916373545,
+            "median_abs_diff": 0.00018458751616812208,
+            "max_abs_diff": 0.003210487044311705
+          },
+          "log_umi": {
+            "n": 2000,
+            "corr": 0.0625751966282926,
+            "median_abs_diff": 3.9968028886505635e-15,
+            "max_abs_diff": 5.773159728050814e-15
+          }
+        },
+        "gene_attr": {
+          "residual_variance": {
+            "n": 2000,
+            "corr": 0.9999991707105842,
+            "median_abs_diff": 0.0001375029566624275,
+            "max_abs_diff": 0.34445137418814653,
+            "spearman": 0.9999832074958017
+          }
+        },
+        "hvg_jaccard": 1.0,
+        "note": "HVG from R fit \u2192 Py residuals (golden vst returns step1-sized gene_attr only)"
+      },
+      "native_full_vst": {
+        "model_pars_step1": {
+          "n_genes": 2000,
+          "n_inf_py": 66,
+          "n_inf_r": 68,
+          "n_inf_both": 66,
+          "theta": {
+            "n": 2000,
+            "corr": 0.9119918296126021,
+            "median_abs_diff": 1.1135976586348906e-07,
+            "max_abs_diff": Infinity
+          },
+          "Intercept": {
+            "n": 2000,
+            "corr": 0.9999857640948225,
+            "median_abs_diff": 0.003080304804440104,
+            "max_abs_diff": 0.09802756612055141
+          },
+          "log_umi": {
+            "n": 2000,
+            "corr": NaN,
+            "median_abs_diff": 3.9968028886505635e-15,
+            "max_abs_diff": 3.9968028886505635e-15
+          }
+        },
+        "model_pars_fit": {
+          "n_genes": 13379,
+          "n_inf_py": 5,
+          "n_inf_r": 5,
+          "n_inf_both": 5,
+          "theta": {
+            "n": 13379,
+            "corr": 0.9990627695386698,
+            "median_abs_diff": 0.04165914103157213,
+            "max_abs_diff": 0.07223862471702035
+          },
+          "Intercept": {
+            "n": 13379,
+            "corr": 0.9999876214833084,
+            "median_abs_diff": 0.008649234726936683,
+            "max_abs_diff": 0.046385076817811566
+          },
+          "log_umi": {
+            "n": 13379,
+            "corr": 0.0180137287139804,
+            "median_abs_diff": 3.9968028886505635e-15,
+            "max_abs_diff": 5.773159728050814e-15
+          }
+        },
+        "gene_attr": {
+          "residual_variance": {
+            "n": 13379,
+            "corr": 0.9995841697417752,
+            "median_abs_diff": 0.013235066379885585,
+            "max_abs_diff": 12.01843973958654,
+            "spearman": 0.9989367181535104
+          }
+        },
+        "hvg_jaccard": 0.9730351857941467,
+        "residuals": {
+          "n_genes": 13379,
+          "n_cells": 7787,
+          "corr": 0.9998320768020967,
+          "median_abs_diff": 0.0009247514464819778,
+          "max_abs_diff": 7.262021394948022
+        }
+      }
+    },
+    {
+      "sample": "GSM8779707",
+      "seed": 123,
+      "n_cells": 14724,
+      "n_genes": 15297,
+      "r_step1_to_py_ksmooth": {
+        "n_genes": 15297,
+        "n_inf_py": 76,
+        "n_inf_r": 76,
+        "n_inf_both": 76,
+        "theta": {
+          "n": 15297,
+          "corr": 1.0,
+          "median_abs_diff": 1.942890293094024e-15,
+          "max_abs_diff": 2.1316282072803006e-14
+        },
+        "Intercept": {
+          "n": 15297,
+          "corr": 1.0,
+          "median_abs_diff": 2.4868995751603507e-14,
+          "max_abs_diff": 1.2789769243681803e-13
+        },
+        "log_umi": {
+          "n": 15297,
+          "corr": NaN,
+          "median_abs_diff": 3.9968028886505635e-15,
+          "max_abs_diff": 1.5987211554602254e-14
+        }
+      },
+      "r_fit_to_py_residuals": {
+        "n_genes": 15297,
+        "n_cells": 14724,
+        "corr": 1.0,
+        "median_abs_diff": 2.4702462297909733e-15,
+        "max_abs_diff": 5.9117155615240335e-12,
+        "residual_variance": {
+          "n": 15297,
+          "corr": 0.9999999999999994,
+          "median_abs_diff": 1.2989609388114332e-14,
+          "max_abs_diff": 5.172751116333529e-12
+        },
+        "hvg_jaccard": 1.0
+      },
+      "r_step1_golden_path": {
+        "model_pars_fit": {
+          "n_genes": 2000,
+          "n_inf_py": 0,
+          "n_inf_r": 0,
+          "n_inf_both": 0,
+          "theta": {
+            "n": 2000,
+            "corr": 1.0,
+            "median_abs_diff": 1.1102230246251565e-15,
+            "max_abs_diff": 7.771561172376096e-15
+          },
+          "Intercept": {
+            "n": 2000,
+            "corr": 1.0,
+            "median_abs_diff": 1.0658141036401503e-14,
+            "max_abs_diff": 9.769962616701378e-14
+          },
+          "log_umi": {
+            "n": 2000,
+            "corr": 0.12393688332832148,
+            "median_abs_diff": 3.9968028886505635e-15,
+            "max_abs_diff": 1.5987211554602254e-14
+          }
+        },
+        "gene_attr": {
+          "residual_variance": {
+            "n": 2000,
+            "corr": 0.9999999999999999,
+            "median_abs_diff": 6.994405055138486e-15,
+            "max_abs_diff": 1.5489831639570184e-12,
+            "spearman": 1.0
+          }
+        },
+        "hvg_jaccard": 1.0,
+        "note": "HVG from R fit \u2192 Py residuals (golden vst returns step1-sized gene_attr only)"
+      },
+      "native_full_vst": {
+        "model_pars_step1": {
+          "n_genes": 2000,
+          "n_inf_py": 145,
+          "n_inf_r": 145,
+          "n_inf_both": 145,
+          "theta": {
+            "n": 2000,
+            "corr": 0.9806290861595824,
+            "median_abs_diff": 1.171288032120188e-07,
+            "max_abs_diff": 2.921758022595705
+          },
+          "Intercept": {
+            "n": 2000,
+            "corr": 0.999998596801462,
+            "median_abs_diff": 0.0008567921926379007,
+            "max_abs_diff": 0.0329370579156425
+          },
+          "log_umi": {
+            "n": 2000,
+            "corr": NaN,
+            "median_abs_diff": 3.9968028886505635e-15,
+            "max_abs_diff": 3.9968028886505635e-15
+          }
+        },
+        "model_pars_fit": {
+          "n_genes": 15297,
+          "n_inf_py": 76,
+          "n_inf_r": 76,
+          "n_inf_both": 76,
+          "theta": {
+            "n": 15297,
+            "corr": 0.9999499426647207,
+            "median_abs_diff": 0.012993113748661855,
+            "max_abs_diff": 0.042075736746086
+          },
+          "Intercept": {
+            "n": 15297,
+            "corr": 0.9999991940021622,
+            "median_abs_diff": 0.0011035540975203872,
+            "max_abs_diff": 0.0077576505197267664
+          },
+          "log_umi": {
+            "n": 15297,
+            "corr": NaN,
+            "median_abs_diff": 3.9968028886505635e-15,
+            "max_abs_diff": 1.5987211554602254e-14
+          }
+        },
+        "gene_attr": {
+          "residual_variance": {
+            "n": 15297,
+            "corr": 0.9999806016714803,
+            "median_abs_diff": 0.0024060606999343204,
+            "max_abs_diff": 3.174104941169702,
+            "spearman": 0.9999144914074595
+          }
+        },
+        "hvg_jaccard": 0.9900497512437811,
+        "residuals": {
+          "n_genes": 15297,
+          "n_cells": 14724,
+          "corr": 0.9999929052958628,
+          "median_abs_diff": 0.0002953146025317377,
+          "max_abs_diff": 2.761358741685683
+        }
+      }
+    },
+    {
+      "sample": "GSM8779708",
+      "seed": 123,
+      "n_cells": 13437,
+      "n_genes": 15154,
+      "r_step1_to_py_ksmooth": {
+        "n_genes": 15154,
+        "n_inf_py": 56,
+        "n_inf_r": 56,
+        "n_inf_both": 56,
+        "theta": {
+          "n": 15154,
+          "corr": 0.9999672443358438,
+          "median_abs_diff": 1.4831774511309126e-05,
+          "max_abs_diff": 0.013904275489961534
+        },
+        "Intercept": {
+          "n": 15154,
+          "corr": 0.9999997748976681,
+          "median_abs_diff": 8.375521092363059e-05,
+          "max_abs_diff": 0.003512627645289257
+        },
+        "log_umi": {
+          "n": 15154,
+          "corr": -0.00556140594637356,
+          "median_abs_diff": 3.9968028886505635e-15,
+          "max_abs_diff": 1.5987211554602254e-14
+        }
+      },
+      "r_fit_to_py_residuals": {
+        "n_genes": 15154,
+        "n_cells": 13437,
+        "corr": 0.9999999999999998,
+        "median_abs_diff": 2.3037127760972e-15,
+        "max_abs_diff": 5.6701310313655995e-12,
+        "residual_variance": {
+          "n": 15154,
+          "corr": 0.9999999999999997,
+          "median_abs_diff": 1.2545520178264269e-14,
+          "max_abs_diff": 6.224354365258478e-12
+        },
+        "hvg_jaccard": 1.0
+      },
+      "r_step1_golden_path": {
+        "model_pars_fit": {
+          "n_genes": 2000,
+          "n_inf_py": 0,
+          "n_inf_r": 0,
+          "n_inf_both": 0,
+          "theta": {
+            "n": 2000,
+            "corr": 0.9999707887330874,
+            "median_abs_diff": 2.2593362457384858e-05,
+            "max_abs_diff": 0.013900918973281138
+          },
+          "Intercept": {
+            "n": 2000,
+            "corr": 0.9999998753545086,
+            "median_abs_diff": 8.175771168517088e-05,
+            "max_abs_diff": 0.0035098962568156367
+          },
+          "log_umi": {
+            "n": 2000,
+            "corr": 0.14395794138875734,
+            "median_abs_diff": 3.9968028886505635e-15,
+            "max_abs_diff": 1.4210854715202004e-14
+          }
+        },
+        "gene_attr": {
+          "residual_variance": {
+            "n": 2000,
+            "corr": 0.999993112335211,
+            "median_abs_diff": 7.661870554992456e-05,
+            "max_abs_diff": 0.979148055686963,
+            "spearman": 0.9999431379857845
+          }
+        },
+        "hvg_jaccard": 1.0,
+        "note": "HVG from R fit \u2192 Py residuals (golden vst returns step1-sized gene_attr only)"
+      },
+      "native_full_vst": {
+        "model_pars_step1": {
+          "n_genes": 2000,
+          "n_inf_py": 126,
+          "n_inf_r": 126,
+          "n_inf_both": 126,
+          "theta": {
+            "n": 2000,
+            "corr": 0.9360332483136111,
+            "median_abs_diff": 1.1715304515380609e-07,
+            "max_abs_diff": 3.8794809884281465
+          },
+          "Intercept": {
+            "n": 2000,
+            "corr": 0.9999963922625481,
+            "median_abs_diff": 0.0011286716487175497,
+            "max_abs_diff": 0.13353094444320668
+          },
+          "log_umi": {
+            "n": 2000,
+            "corr": NaN,
+            "median_abs_diff": 3.9968028886505635e-15,
+            "max_abs_diff": 3.9968028886505635e-15
+          }
+        },
+        "model_pars_fit": {
+          "n_genes": 15154,
+          "n_inf_py": 56,
+          "n_inf_r": 56,
+          "n_inf_both": 56,
+          "theta": {
+            "n": 15154,
+            "corr": 0.9990164309325011,
+            "median_abs_diff": 0.032113280555005064,
+            "max_abs_diff": 0.08047286570267409
+          },
+          "Intercept": {
+            "n": 15154,
+            "corr": 0.9999924682276607,
+            "median_abs_diff": 0.005543636537574059,
+            "max_abs_diff": 0.02418070989908827
+          },
+          "log_umi": {
+            "n": 15154,
+            "corr": -0.00556140594637356,
+            "median_abs_diff": 3.9968028886505635e-15,
+            "max_abs_diff": 1.5987211554602254e-14
+          }
+        },
+        "gene_attr": {
+          "residual_variance": {
+            "n": 15154,
+            "corr": 0.9994766928642838,
+            "median_abs_diff": 0.011225617717802061,
+            "max_abs_diff": 10.384365079116037,
+            "spearman": 0.9979691913094254
+          }
+        },
+        "hvg_jaccard": 0.9505851755526658,
+        "residuals": {
+          "n_genes": 15154,
+          "n_cells": 13437,
+          "corr": 0.9998132551914412,
+          "median_abs_diff": 0.0008516783130758099,
+          "max_abs_diff": 9.84796634267795
+        }
+      }
+    },
+    {
+      "sample": "GSM8779709",
+      "seed": 123,
+      "n_cells": 7787,
+      "n_genes": 13379,
+      "r_step1_to_py_ksmooth": {
+        "n_genes": 13379,
+        "n_inf_py": 5,
+        "n_inf_r": 5,
+        "n_inf_both": 5,
+        "theta": {
+          "n": 13379,
+          "corr": 0.9999682408340465,
+          "median_abs_diff": 0.00027004973744862437,
+          "max_abs_diff": 0.010987895885156158
+        },
+        "Intercept": {
+          "n": 13379,
+          "corr": 0.999999500416457,
+          "median_abs_diff": 0.00022598565630893575,
+          "max_abs_diff": 0.004411211663633452
+        },
+        "log_umi": {
+          "n": 13379,
+          "corr": 0.03345090808066114,
+          "median_abs_diff": 3.9968028886505635e-15,
+          "max_abs_diff": 1.4210854715202004e-14
+        }
+      },
+      "r_fit_to_py_residuals": {
+        "n_genes": 13379,
+        "n_cells": 7787,
+        "corr": 0.9999999999999997,
+        "median_abs_diff": 2.1371793224034263e-15,
+        "max_abs_diff": 4.732214620162267e-12,
+        "residual_variance": {
+          "n": 13379,
+          "corr": 1.0,
+          "median_abs_diff": 1.3378187446733136e-14,
+          "max_abs_diff": 3.439026841078885e-12
+        },
+        "hvg_jaccard": 1.0
+      },
+      "r_step1_golden_path": {
+        "model_pars_fit": {
+          "n_genes": 2000,
+          "n_inf_py": 0,
+          "n_inf_r": 0,
+          "n_inf_both": 0,
+          "theta": {
+            "n": 2000,
+            "corr": 0.999978865312298,
+            "median_abs_diff": 0.0002625032681621009,
+            "max_abs_diff": 0.010987471668705565
+          },
+          "Intercept": {
+            "n": 2000,
+            "corr": 0.9999998169870763,
+            "median_abs_diff": 0.00024597695971451117,
+            "max_abs_diff": 0.004411118639938039
+          },
+          "log_umi": {
+            "n": 2000,
+            "corr": 0.07594460175775022,
+            "median_abs_diff": 3.9968028886505635e-15,
+            "max_abs_diff": 1.4210854715202004e-14
+          }
+        },
+        "gene_attr": {
+          "residual_variance": {
+            "n": 2000,
+            "corr": 0.9999976444882418,
+            "median_abs_diff": 0.00024726596558355407,
+            "max_abs_diff": 0.6471801213963175,
+            "spearman": 0.9999680784920195
+          }
+        },
+        "hvg_jaccard": 1.0,
+        "note": "HVG from R fit \u2192 Py residuals (golden vst returns step1-sized gene_attr only)"
+      },
+      "native_full_vst": {
+        "model_pars_step1": {
+          "n_genes": 2000,
+          "n_inf_py": 66,
+          "n_inf_r": 66,
+          "n_inf_both": 66,
+          "theta": {
+            "n": 2000,
+            "corr": 0.9123183869335025,
+            "median_abs_diff": 1.0490273383290116e-07,
+            "max_abs_diff": 4.1633287852092895
+          },
+          "Intercept": {
+            "n": 2000,
+            "corr": 0.9999898936978046,
+            "median_abs_diff": 0.002244784079004525,
+            "max_abs_diff": 0.06485047056151316
+          },
+          "log_umi": {
+            "n": 2000,
+            "corr": NaN,
+            "median_abs_diff": 3.9968028886505635e-15,
+            "max_abs_diff": 3.9968028886505635e-15
+          }
+        },
+        "model_pars_fit": {
+          "n_genes": 13379,
+          "n_inf_py": 5,
+          "n_inf_r": 5,
+          "n_inf_both": 5,
+          "theta": {
+            "n": 13379,
+            "corr": 0.9988313865808277,
+            "median_abs_diff": 0.04873282226445007,
+            "max_abs_diff": 0.08573924472190658
+          },
+          "Intercept": {
+            "n": 13379,
+            "corr": 0.9999827787728532,
+            "median_abs_diff": 0.011365131787529847,
+            "max_abs_diff": 0.07540504438995921
+          },
+          "log_umi": {
+            "n": 13379,
+            "corr": 0.03345090808066114,
+            "median_abs_diff": 3.9968028886505635e-15,
+            "max_abs_diff": 1.4210854715202004e-14
+          }
+        },
+        "gene_attr": {
+          "residual_variance": {
+            "n": 13379,
+            "corr": 0.9991199796345968,
+            "median_abs_diff": 0.02108973661266822,
+            "max_abs_diff": 18.70844131971107,
+            "spearman": 0.9980208872048798
+          }
+        },
+        "hvg_jaccard": 0.9691499835904168,
+        "residuals": {
+          "n_genes": 13379,
+          "n_cells": 7787,
+          "corr": 0.9996620523764262,
+          "median_abs_diff": 0.0014011644574916104,
+          "max_abs_diff": 9.287239029607576
+        }
+      }
+    },
+    {
+      "sample": "GSM8779707",
+      "seed": 999,
+      "n_cells": 14724,
+      "n_genes": 15297,
+      "r_step1_to_py_ksmooth": {
+        "n_genes": 15297,
+        "n_inf_py": 76,
+        "n_inf_r": 76,
+        "n_inf_both": 76,
+        "theta": {
+          "n": 15297,
+          "corr": 1.0,
+          "median_abs_diff": 1.8596235662471372e-15,
+          "max_abs_diff": 1.9095836023552692e-14
+        },
+        "Intercept": {
+          "n": 15297,
+          "corr": 1.0,
+          "median_abs_diff": 2.4868995751603507e-14,
+          "max_abs_diff": 1.2256862191861728e-13
+        },
+        "log_umi": {
+          "n": 15297,
+          "corr": NaN,
+          "median_abs_diff": 3.9968028886505635e-15,
+          "max_abs_diff": 1.5987211554602254e-14
+        }
+      },
+      "r_fit_to_py_residuals": {
+        "n_genes": 15297,
+        "n_cells": 14724,
+        "corr": 0.9999999999999987,
+        "median_abs_diff": 2.4980018054066022e-15,
+        "max_abs_diff": 5.4001247917767614e-12,
+        "residual_variance": {
+          "n": 15297,
+          "corr": 0.9999999999999999,
+          "median_abs_diff": 1.2656542480726785e-14,
+          "max_abs_diff": 4.661160346586257e-12
+        },
+        "hvg_jaccard": 1.0
+      },
+      "r_step1_golden_path": {
+        "model_pars_fit": {
+          "n_genes": 2000,
+          "n_inf_py": 0,
+          "n_inf_r": 0,
+          "n_inf_both": 0,
+          "theta": {
+            "n": 2000,
+            "corr": 1.0,
+            "median_abs_diff": 9.43689570931383e-16,
+            "max_abs_diff": 9.658940314238862e-15
+          },
+          "Intercept": {
+            "n": 2000,
+            "corr": 1.0,
+            "median_abs_diff": 1.0658141036401503e-14,
+            "max_abs_diff": 9.059419880941277e-14
+          },
+          "log_umi": {
+            "n": 2000,
+            "corr": 0.15133566177320953,
+            "median_abs_diff": 3.9968028886505635e-15,
+            "max_abs_diff": 1.5987211554602254e-14
+          }
+        },
+        "gene_attr": {
+          "residual_variance": {
+            "n": 2000,
+            "corr": 1.0,
+            "median_abs_diff": 6.8833827526759706e-15,
+            "max_abs_diff": 3.836930773104541e-12,
+            "spearman": 1.0
+          }
+        },
+        "hvg_jaccard": 1.0,
+        "note": "HVG from R fit \u2192 Py residuals (golden vst returns step1-sized gene_attr only)"
+      },
+      "native_full_vst": {
+        "model_pars_step1": {
+          "n_genes": 2000,
+          "n_inf_py": 166,
+          "n_inf_r": 166,
+          "n_inf_both": 166,
+          "theta": {
+            "n": 2000,
+            "corr": 0.9658042009814697,
+            "median_abs_diff": 1.198420608861106e-07,
+            "max_abs_diff": 3.5213920407148116
+          },
+          "Intercept": {
+            "n": 2000,
+            "corr": 0.9999982664037232,
+            "median_abs_diff": 0.0005812108383329573,
+            "max_abs_diff": 0.051306802263797024
+          },
+          "log_umi": {
+            "n": 2000,
+            "corr": NaN,
+            "median_abs_diff": 3.9968028886505635e-15,
+            "max_abs_diff": 3.9968028886505635e-15
+          }
+        },
+        "model_pars_fit": {
+          "n_genes": 15297,
+          "n_inf_py": 76,
+          "n_inf_r": 76,
+          "n_inf_both": 76,
+          "theta": {
+            "n": 15297,
+            "corr": 0.9998854102165405,
+            "median_abs_diff": 0.01433128897559155,
+            "max_abs_diff": 0.038534049759263445
+          },
+          "Intercept": {
+            "n": 15297,
+            "corr": 0.9999987239718567,
+            "median_abs_diff": 0.003182887136690127,
+            "max_abs_diff": 0.008520670389914997
+          },
+          "log_umi": {
+            "n": 15297,
+            "corr": NaN,
+            "median_abs_diff": 3.9968028886505635e-15,
+            "max_abs_diff": 1.5987211554602254e-14
+          }
+        },
+        "gene_attr": {
+          "residual_variance": {
+            "n": 15297,
+            "corr": 0.9999575744378975,
+            "median_abs_diff": 0.0038222343570580852,
+            "max_abs_diff": 3.715084467946099,
+            "spearman": 0.9997613119473816
+          }
+        },
+        "hvg_jaccard": 0.977587343441002,
+        "residuals": {
+          "n_genes": 15297,
+          "n_cells": 14724,
+          "corr": 0.9999819950809757,
+          "median_abs_diff": 0.0003164805429897444,
+          "max_abs_diff": 3.1724100139147566
+        }
+      }
+    },
+    {
+      "sample": "GSM8779708",
+      "seed": 999,
+      "n_cells": 13437,
+      "n_genes": 15154,
+      "r_step1_to_py_ksmooth": {
+        "n_genes": 15154,
+        "n_inf_py": 56,
+        "n_inf_r": 56,
+        "n_inf_both": 56,
+        "theta": {
+          "n": 15154,
+          "corr": 0.9999821827357332,
+          "median_abs_diff": 0.00012995591426503104,
+          "max_abs_diff": 0.009128878784402883
+        },
+        "Intercept": {
+          "n": 15154,
+          "corr": 0.9999999341307233,
+          "median_abs_diff": 0.00011428386995238071,
+          "max_abs_diff": 0.0015947775620723803
+        },
+        "log_umi": {
+          "n": 15154,
+          "corr": -0.018103928305412426,
+          "median_abs_diff": 3.9968028886505635e-15,
+          "max_abs_diff": 1.5987211554602254e-14
+        }
+      },
+      "r_fit_to_py_residuals": {
+        "n_genes": 15154,
+        "n_cells": 13437,
+        "corr": 0.9999999999999997,
+        "median_abs_diff": 2.2898349882893854e-15,
+        "max_abs_diff": 4.888534022029489e-12,
+        "residual_variance": {
+          "n": 15154,
+          "corr": 1.0,
+          "median_abs_diff": 1.2434497875801753e-14,
+          "max_abs_diff": 4.476419235288631e-12
+        },
+        "hvg_jaccard": 1.0
+      },
+      "r_step1_golden_path": {
+        "model_pars_fit": {
+          "n_genes": 2000,
+          "n_inf_py": 0,
+          "n_inf_r": 0,
+          "n_inf_both": 0,
+          "theta": {
+            "n": 2000,
+            "corr": 0.9999889458908539,
+            "median_abs_diff": 2.095193916740179e-05,
+            "max_abs_diff": 0.009127741994053543
+          },
+          "Intercept": {
+            "n": 2000,
+            "corr": 0.9999999797090033,
+            "median_abs_diff": 7.707437233683834e-05,
+            "max_abs_diff": 0.0015923086714106915
+          },
+          "log_umi": {
+            "n": 2000,
+            "corr": 0.14760375460396202,
+            "median_abs_diff": 3.9968028886505635e-15,
+            "max_abs_diff": 1.4210854715202004e-14
+          }
+        },
+        "gene_attr": {
+          "residual_variance": {
+            "n": 2000,
+            "corr": 0.9999997695884707,
+            "median_abs_diff": 4.5352305556189965e-05,
+            "max_abs_diff": 0.09935151723774638,
+            "spearman": 0.999991971997993
+          }
+        },
+        "hvg_jaccard": 1.0,
+        "note": "HVG from R fit \u2192 Py residuals (golden vst returns step1-sized gene_attr only)"
+      },
+      "native_full_vst": {
+        "model_pars_step1": {
+          "n_genes": 2000,
+          "n_inf_py": 127,
+          "n_inf_r": 127,
+          "n_inf_both": 127,
+          "theta": {
+            "n": 2000,
+            "corr": 0.9311143921873619,
+            "median_abs_diff": 1.2138538987849223e-07,
+            "max_abs_diff": 4.333881466767412
+          },
+          "Intercept": {
+            "n": 2000,
+            "corr": 0.999994582646617,
+            "median_abs_diff": 0.0012344832214652435,
+            "max_abs_diff": 0.09149058217342443
+          },
+          "log_umi": {
+            "n": 2000,
+            "corr": NaN,
+            "median_abs_diff": 3.9968028886505635e-15,
+            "max_abs_diff": 3.9968028886505635e-15
+          }
+        },
+        "model_pars_fit": {
+          "n_genes": 15154,
+          "n_inf_py": 56,
+          "n_inf_r": 56,
+          "n_inf_both": 56,
+          "theta": {
+            "n": 15154,
+            "corr": 0.9985334020998401,
+            "median_abs_diff": 0.03311550885707129,
+            "max_abs_diff": 0.07546116806426474
+          },
+          "Intercept": {
+            "n": 15154,
+            "corr": 0.9999756713863037,
+            "median_abs_diff": 0.005213151664509752,
+            "max_abs_diff": 0.035597676954925106
+          },
+          "log_umi": {
+            "n": 15154,
+            "corr": -0.018103928305412426,
+            "median_abs_diff": 3.9968028886505635e-15,
+            "max_abs_diff": 1.5987211554602254e-14
+          }
+        },
+        "gene_attr": {
+          "residual_variance": {
+            "n": 15154,
+            "corr": 0.9986844471532058,
+            "median_abs_diff": 0.006489100793701907,
+            "max_abs_diff": 26.11225967609002,
+            "spearman": 0.9964129417504795
+          }
+        },
+        "hvg_jaccard": 0.9455252918287937,
+        "residuals": {
+          "n_genes": 15154,
+          "n_cells": 13437,
+          "corr": 0.9996754525486026,
+          "median_abs_diff": 0.0008231379975571565,
+          "max_abs_diff": 10.743322002843385
+        }
+      }
+    },
+    {
+      "sample": "GSM8779709",
+      "seed": 999,
+      "n_cells": 7787,
+      "n_genes": 13379,
+      "r_step1_to_py_ksmooth": {
+        "n_genes": 13379,
+        "n_inf_py": 5,
+        "n_inf_r": 5,
+        "n_inf_both": 5,
+        "theta": {
+          "n": 13379,
+          "corr": 0.9999884165275787,
+          "median_abs_diff": 0.00013884200281815817,
+          "max_abs_diff": 0.010046613735250856
+        },
+        "Intercept": {
+          "n": 13379,
+          "corr": 0.9999997934690628,
+          "median_abs_diff": 6.886772647085593e-05,
+          "max_abs_diff": 0.004140963943322973
+        },
+        "log_umi": {
+          "n": 13379,
+          "corr": 0.0024039659526878957,
+          "median_abs_diff": 3.9968028886505635e-15,
+          "max_abs_diff": 1.4210854715202004e-14
+        }
+      },
+      "r_fit_to_py_residuals": {
+        "n_genes": 13379,
+        "n_cells": 7787,
+        "corr": 0.9999999999999997,
+        "median_abs_diff": 2.1094237467877974e-15,
+        "max_abs_diff": 4.334310688136611e-12,
+        "residual_variance": {
+          "n": 13379,
+          "corr": 1.0,
+          "median_abs_diff": 1.3211653993039363e-14,
+          "max_abs_diff": 6.0538241086760536e-12
+        },
+        "hvg_jaccard": 1.0
+      },
+      "r_step1_golden_path": {
+        "model_pars_fit": {
+          "n_genes": 2000,
+          "n_inf_py": 0,
+          "n_inf_r": 0,
+          "n_inf_both": 0,
+          "theta": {
+            "n": 2000,
+            "corr": 0.9999876962477445,
+            "median_abs_diff": 0.00017180808888472843,
+            "max_abs_diff": 0.010045786775188609
+          },
+          "Intercept": {
+            "n": 2000,
+            "corr": 0.9999998726720104,
+            "median_abs_diff": 0.00013506398265938913,
+            "max_abs_diff": 0.004136627574508722
+          },
+          "log_umi": {
+            "n": 2000,
+            "corr": 0.06992444308007176,
+            "median_abs_diff": 3.9968028886505635e-15,
+            "max_abs_diff": 5.773159728050814e-15
+          }
+        },
+        "gene_attr": {
+          "residual_variance": {
+            "n": 2000,
+            "corr": 0.9999948997352927,
+            "median_abs_diff": 0.00011633309722947072,
+            "max_abs_diff": 1.2059199737973358,
+            "spearman": 0.9999670794917698
+          }
+        },
+        "hvg_jaccard": 1.0,
+        "note": "HVG from R fit \u2192 Py residuals (golden vst returns step1-sized gene_attr only)"
+      },
+      "native_full_vst": {
+        "model_pars_step1": {
+          "n_genes": 2000,
+          "n_inf_py": 50,
+          "n_inf_r": 50,
+          "n_inf_both": 50,
+          "theta": {
+            "n": 2000,
+            "corr": 0.9232295166909475,
+            "median_abs_diff": 1.0654563760773006e-07,
+            "max_abs_diff": 3.442068959912451
+          },
+          "Intercept": {
+            "n": 2000,
+            "corr": 0.9999887336979212,
+            "median_abs_diff": 0.0025262350376458187,
+            "max_abs_diff": 0.0600268822996366
+          },
+          "log_umi": {
+            "n": 2000,
+            "corr": NaN,
+            "median_abs_diff": 3.9968028886505635e-15,
+            "max_abs_diff": 3.9968028886505635e-15
+          }
+        },
+        "model_pars_fit": {
+          "n_genes": 13379,
+          "n_inf_py": 5,
+          "n_inf_r": 5,
+          "n_inf_both": 5,
+          "theta": {
+            "n": 13379,
+            "corr": 0.999076749938658,
+            "median_abs_diff": 0.04754189497061541,
+            "max_abs_diff": 0.07687576955603492
+          },
+          "Intercept": {
+            "n": 13379,
+            "corr": 0.9999935157245009,
+            "median_abs_diff": 0.01198551231915701,
+            "max_abs_diff": 0.037383090580883405
+          },
+          "log_umi": {
+            "n": 13379,
+            "corr": 0.0024039659526878957,
+            "median_abs_diff": 3.9968028886505635e-15,
+            "max_abs_diff": 1.4210854715202004e-14
+          }
+        },
+        "gene_attr": {
+          "residual_variance": {
+            "n": 13379,
+            "corr": 0.99984004586065,
+            "median_abs_diff": 0.02042496167160701,
+            "max_abs_diff": 8.042125218970284,
+            "spearman": 0.9996750241469348
+          }
+        },
+        "hvg_jaccard": 0.9828155981493721,
+        "residuals": {
+          "n_genes": 13379,
+          "n_cells": 7787,
+          "corr": 0.9998928022833365,
+          "median_abs_diff": 0.0012776345604451622,
+          "max_abs_diff": 4.950516802080287
+        }
+      }
+    },
+    {
+      "sample": "GSM8779707",
+      "seed": 2024,
+      "n_cells": 14724,
+      "n_genes": 15297,
+      "r_step1_to_py_ksmooth": {
+        "n_genes": 15297,
+        "n_inf_py": 76,
+        "n_inf_r": 76,
+        "n_inf_both": 76,
+        "theta": {
+          "n": 15297,
+          "corr": 0.9999814779458653,
+          "median_abs_diff": 0.007254160742725557,
+          "max_abs_diff": 0.015933593944932656
+        },
+        "Intercept": {
+          "n": 15297,
+          "corr": 0.9999996411093675,
+          "median_abs_diff": 0.0008278346250012447,
+          "max_abs_diff": 0.005593212088539801
+        },
+        "log_umi": {
+          "n": 15297,
+          "corr": NaN,
+          "median_abs_diff": 3.9968028886505635e-15,
+          "max_abs_diff": 1.5987211554602254e-14
+        }
+      },
+      "r_fit_to_py_residuals": {
+        "n_genes": 15297,
+        "n_cells": 14724,
+        "corr": 1.0,
+        "median_abs_diff": 2.55351295663786e-15,
+        "max_abs_diff": 5.286437954055145e-12,
+        "residual_variance": {
+          "n": 15297,
+          "corr": 1.0,
+          "median_abs_diff": 1.2656542480726785e-14,
+          "max_abs_diff": 3.751665644813329e-12
+        },
+        "hvg_jaccard": 1.0
+      },
+      "r_step1_golden_path": {
+        "model_pars_fit": {
+          "n_genes": 2000,
+          "n_inf_py": 0,
+          "n_inf_r": 0,
+          "n_inf_both": 0,
+          "theta": {
+            "n": 2000,
+            "corr": 0.9999594211971554,
+            "median_abs_diff": 0.006477016232494692,
+            "max_abs_diff": 0.01593209124873851
+          },
+          "Intercept": {
+            "n": 2000,
+            "corr": 0.9999996396546756,
+            "median_abs_diff": 0.0009296515715258025,
+            "max_abs_diff": 0.005593114485538564
+          },
+          "log_umi": {
+            "n": 2000,
+            "corr": 0.1687009544785532,
+            "median_abs_diff": 3.9968028886505635e-15,
+            "max_abs_diff": 1.4210854715202004e-14
+          }
+        },
+        "gene_attr": {
+          "residual_variance": {
+            "n": 2000,
+            "corr": 0.9999752816095342,
+            "median_abs_diff": 0.0016118771178417202,
+            "max_abs_diff": 1.63534827138578,
+            "spearman": 0.9998762229690557
+          }
+        },
+        "hvg_jaccard": 1.0,
+        "note": "HVG from R fit \u2192 Py residuals (golden vst returns step1-sized gene_attr only)"
+      },
+      "native_full_vst": {
+        "model_pars_step1": {
+          "n_genes": 2000,
+          "n_inf_py": 167,
+          "n_inf_r": 167,
+          "n_inf_both": 167,
+          "theta": {
+            "n": 2000,
+            "corr": 0.9715584841406004,
+            "median_abs_diff": 1.2517351061225312e-07,
+            "max_abs_diff": 3.50475569540552
+          },
+          "Intercept": {
+            "n": 2000,
+            "corr": 0.9999988029166926,
+            "median_abs_diff": 0.0005318564426222139,
+            "max_abs_diff": 0.04805793225122734
+          },
+          "log_umi": {
+            "n": 2000,
+            "corr": NaN,
+            "median_abs_diff": 3.9968028886505635e-15,
+            "max_abs_diff": 3.9968028886505635e-15
+          }
+        },
+        "model_pars_fit": {
+          "n_genes": 15297,
+          "n_inf_py": 76,
+          "n_inf_r": 76,
+          "n_inf_both": 76,
+          "theta": {
+            "n": 15297,
+            "corr": 0.9998874650417929,
+            "median_abs_diff": 0.013170071548660567,
+            "max_abs_diff": 0.0390755897994336
+          },
+          "Intercept": {
+            "n": 15297,
+            "corr": 0.9999966361103602,
+            "median_abs_diff": 0.0014591281437201786,
+            "max_abs_diff": 0.02032870337848358
+          },
+          "log_umi": {
+            "n": 15297,
+            "corr": NaN,
+            "median_abs_diff": 3.9968028886505635e-15,
+            "max_abs_diff": 1.5987211554602254e-14
+          }
+        },
+        "gene_attr": {
+          "residual_variance": {
+            "n": 15297,
+            "corr": 0.9997732942877327,
+            "median_abs_diff": 0.004201180063208132,
+            "max_abs_diff": 11.703808764511194,
+            "spearman": 0.9993745667787728
+          }
+        },
+        "hvg_jaccard": 0.9756338491932829,
+        "residuals": {
+          "n_genes": 15297,
+          "n_cells": 14724,
+          "corr": 0.9999520572448654,
+          "median_abs_diff": 0.00048769907033480164,
+          "max_abs_diff": 5.102803696405516
+        }
+      }
+    },
+    {
+      "sample": "GSM8779708",
+      "seed": 2024,
+      "n_cells": 13437,
+      "n_genes": 15154,
+      "r_step1_to_py_ksmooth": {
+        "n_genes": 15154,
+        "n_inf_py": 56,
+        "n_inf_r": 56,
+        "n_inf_both": 56,
+        "theta": {
+          "n": 15154,
+          "corr": 0.9999833680499718,
+          "median_abs_diff": 1.471592462784499e-05,
+          "max_abs_diff": 0.01089565664836787
+        },
+        "Intercept": {
+          "n": 15154,
+          "corr": 0.9999998535675608,
+          "median_abs_diff": 1.4282487803107813e-05,
+          "max_abs_diff": 0.00337892545731755
+        },
+        "log_umi": {
+          "n": 15154,
+          "corr": -0.0634130357916328,
+          "median_abs_diff": 3.9968028886505635e-15,
+          "max_abs_diff": 1.5987211554602254e-14
+        }
+      },
+      "r_fit_to_py_residuals": {
+        "n_genes": 15154,
+        "n_cells": 13437,
+        "corr": 1.0,
+        "median_abs_diff": 2.3314683517128287e-15,
+        "max_abs_diff": 6.835421118012164e-12,
+        "residual_variance": {
+          "n": 15154,
+          "corr": 0.9999999999999999,
+          "median_abs_diff": 1.2878587085651816e-14,
+          "max_abs_diff": 6.991740519879386e-12
+        },
+        "hvg_jaccard": 1.0
+      },
+      "r_step1_golden_path": {
+        "model_pars_fit": {
+          "n_genes": 2000,
+          "n_inf_py": 0,
+          "n_inf_r": 0,
+          "n_inf_both": 0,
+          "theta": {
+            "n": 2000,
+            "corr": 0.9999855355083844,
+            "median_abs_diff": 1.7886550909229637e-05,
+            "max_abs_diff": 0.010893640142572165
+          },
+          "Intercept": {
+            "n": 2000,
+            "corr": 0.9999999144034893,
+            "median_abs_diff": 3.851729259940484e-05,
+            "max_abs_diff": 0.003377266990359118
+          },
+          "log_umi": {
+            "n": 2000,
+            "corr": 0.08317864914770316,
+            "median_abs_diff": 3.9968028886505635e-15,
+            "max_abs_diff": 1.4210854715202004e-14
+          }
+        },
+        "gene_attr": {
+          "residual_variance": {
+            "n": 2000,
+            "corr": 0.9999889073127616,
+            "median_abs_diff": 1.647253573960894e-05,
+            "max_abs_diff": 1.039590522433329,
+            "spearman": 0.9999643404910852
+          }
+        },
+        "hvg_jaccard": 1.0,
+        "note": "HVG from R fit \u2192 Py residuals (golden vst returns step1-sized gene_attr only)"
+      },
+      "native_full_vst": {
+        "model_pars_step1": {
+          "n_genes": 2000,
+          "n_inf_py": 139,
+          "n_inf_r": 140,
+          "n_inf_both": 139,
+          "theta": {
+            "n": 2000,
+            "corr": 0.9334790110118742,
+            "median_abs_diff": 1.1358804785643883e-07,
+            "max_abs_diff": Infinity
+          },
+          "Intercept": {
+            "n": 2000,
+            "corr": 0.9999948247875056,
+            "median_abs_diff": 0.0013609072834652736,
+            "max_abs_diff": 0.10255707792250135
+          },
+          "log_umi": {
+            "n": 2000,
+            "corr": NaN,
+            "median_abs_diff": 3.9968028886505635e-15,
+            "max_abs_diff": 3.9968028886505635e-15
+          }
+        },
+        "model_pars_fit": {
+          "n_genes": 15154,
+          "n_inf_py": 56,
+          "n_inf_r": 56,
+          "n_inf_both": 56,
+          "theta": {
+            "n": 15154,
+            "corr": 0.9995125216443734,
+            "median_abs_diff": 0.03493937162541372,
+            "max_abs_diff": 0.06115022065129994
+          },
+          "Intercept": {
+            "n": 15154,
+            "corr": 0.9999899978430703,
+            "median_abs_diff": 0.0057179673509981654,
+            "max_abs_diff": 0.03869504419247516
+          },
+          "log_umi": {
+            "n": 15154,
+            "corr": -0.0634130357916328,
+            "median_abs_diff": 3.9968028886505635e-15,
+            "max_abs_diff": 1.5987211554602254e-14
+          }
+        },
+        "gene_attr": {
+          "residual_variance": {
+            "n": 15154,
+            "corr": 0.9991822581284279,
+            "median_abs_diff": 0.009104062945567037,
+            "max_abs_diff": 19.76433887729553,
+            "spearman": 0.9978096749585776
+          }
+        },
+        "hvg_jaccard": 0.9556714471968709,
+        "residuals": {
+          "n_genes": 15154,
+          "n_cells": 13437,
+          "corr": 0.9997773313027143,
+          "median_abs_diff": 0.0008533792049436467,
+          "max_abs_diff": 8.511268598347655
+        }
+      }
+    },
+    {
+      "sample": "GSM8779709",
+      "seed": 2024,
+      "n_cells": 7787,
+      "n_genes": 13379,
+      "r_step1_to_py_ksmooth": {
+        "n_genes": 13379,
+        "n_inf_py": 5,
+        "n_inf_r": 5,
+        "n_inf_both": 5,
+        "theta": {
+          "n": 13379,
+          "corr": 0.9999595902943771,
+          "median_abs_diff": 0.0009702924285638348,
+          "max_abs_diff": 0.013189756613829429
+        },
+        "Intercept": {
+          "n": 13379,
+          "corr": 0.9999994567698569,
+          "median_abs_diff": 0.00029312984541007836,
+          "max_abs_diff": 0.005905041578051495
+        },
+        "log_umi": {
+          "n": 13379,
+          "corr": 0.013526865402941794,
+          "median_abs_diff": 3.9968028886505635e-15,
+          "max_abs_diff": 1.4210854715202004e-14
+        }
+      },
+      "r_fit_to_py_residuals": {
+        "n_genes": 13379,
+        "n_cells": 7787,
+        "corr": 1.0,
+        "median_abs_diff": 2.0816681711721685e-15,
+        "max_abs_diff": 4.334310688136611e-12,
+        "residual_variance": {
+          "n": 13379,
+          "corr": 1.0,
+          "median_abs_diff": 1.2989609388114332e-14,
+          "max_abs_diff": 6.366462912410498e-12
+        },
+        "hvg_jaccard": 1.0
+      },
+      "r_step1_golden_path": {
+        "model_pars_fit": {
+          "n_genes": 2000,
+          "n_inf_py": 0,
+          "n_inf_r": 0,
+          "n_inf_both": 0,
+          "theta": {
+            "n": 2000,
+            "corr": 0.9999651811335954,
+            "median_abs_diff": 0.0002175083299184033,
+            "max_abs_diff": 0.013189411220382974
+          },
+          "Intercept": {
+            "n": 2000,
+            "corr": 0.9999996829392109,
+            "median_abs_diff": 9.020441208118513e-05,
+            "max_abs_diff": 0.005904331540490304
+          },
+          "log_umi": {
+            "n": 2000,
+            "corr": 0.0769812360165283,
+            "median_abs_diff": 3.9968028886505635e-15,
+            "max_abs_diff": 1.4210854715202004e-14
+          }
+        },
+        "gene_attr": {
+          "residual_variance": {
+            "n": 2000,
+            "corr": 0.999982229620366,
+            "median_abs_diff": 0.00032845052353375204,
+            "max_abs_diff": 2.141832998464679,
+            "spearman": 0.9999480429870107
+          }
+        },
+        "hvg_jaccard": 1.0,
+        "note": "HVG from R fit \u2192 Py residuals (golden vst returns step1-sized gene_attr only)"
+      },
+      "native_full_vst": {
+        "model_pars_step1": {
+          "n_genes": 2000,
+          "n_inf_py": 60,
+          "n_inf_r": 60,
+          "n_inf_both": 60,
+          "theta": {
+            "n": 2000,
+            "corr": 0.9345262505191241,
+            "median_abs_diff": 1.0861555002628087e-07,
+            "max_abs_diff": 3.473669086780842
+          },
+          "Intercept": {
+            "n": 2000,
+            "corr": 0.9999889583725118,
+            "median_abs_diff": 0.0024299561232670186,
+            "max_abs_diff": 0.07937512729221652
+          },
+          "log_umi": {
+            "n": 2000,
+            "corr": NaN,
+            "median_abs_diff": 3.9968028886505635e-15,
+            "max_abs_diff": 3.9968028886505635e-15
+          }
+        },
+        "model_pars_fit": {
+          "n_genes": 13379,
+          "n_inf_py": 5,
+          "n_inf_r": 5,
+          "n_inf_both": 5,
+          "theta": {
+            "n": 13379,
+            "corr": 0.9980717791813066,
+            "median_abs_diff": 0.06557214946684285,
+            "max_abs_diff": 0.10487681007617056
+          },
+          "Intercept": {
+            "n": 13379,
+            "corr": 0.9999912085859003,
+            "median_abs_diff": 0.015873181104435474,
+            "max_abs_diff": 0.07965554071582392
+          },
+          "log_umi": {
+            "n": 13379,
+            "corr": 0.013526865402941794,
+            "median_abs_diff": 3.9968028886505635e-15,
+            "max_abs_diff": 1.4210854715202004e-14
+          }
+        },
+        "gene_attr": {
+          "residual_variance": {
+            "n": 13379,
+            "corr": 0.9994886043205369,
+            "median_abs_diff": 0.030431570162744115,
+            "max_abs_diff": 18.964239515631732,
+            "spearman": 0.9992485243239849
+          }
+        },
+        "hvg_jaccard": 0.9841269841269841,
+        "residuals": {
+          "n_genes": 13379,
+          "n_cells": 7787,
+          "corr": 0.9997688576919018,
+          "median_abs_diff": 0.0016854125735236702,
+          "max_abs_diff": 9.013551717230285
+        }
+      }
+    }
+  ],
+  "randomness": {
+    "seeds": [
+      1448145,
+      1448146,
+      42,
+      123,
+      999,
+      2024
+    ],
+    "ref_seed": 1448145,
+    "r_inter_seed_hvg_jaccard": {
+      "n": 45,
+      "min": 0.869741352446245,
+      "q25": 0.9255455712451861,
+      "median": 0.9442644199611148,
+      "mean": 0.9344131248721622,
+      "q75": 0.953125,
+      "max": 0.9646365422396856
+    },
+    "py_vs_r_ref_hvg_jaccard": {
+      "n": 3,
+      "min": 0.9512195121951219,
+      "q25": 0.965708765998551,
+      "median": 0.9801980198019802,
+      "mean": 0.9711926956673524,
+      "q75": 0.9811792874034677,
+      "max": 0.9821605550049554
+    },
+    "py_median_within_r_seed_range": false,
+    "py_median_within_r_inter_seed_iqr": false,
+    "per_sample": {
+      "GSM8779707": {
+        "py_vs_r_ref_hvg_jaccard": 0.9801980198019802,
+        "r_ref_n_hvg": 3000
+      },
+      "GSM8779708": {
+        "py_vs_r_ref_hvg_jaccard": 0.9512195121951219,
+        "r_ref_n_hvg": 3000
+      },
+      "GSM8779709": {
+        "py_vs_r_ref_hvg_jaccard": 0.9821605550049554,
+        "r_ref_n_hvg": 3000
+      }
+    }
+  },
+  "summary": {
+    "native_hvg_jaccard": {
+      "n": 3,
+      "min": 0.9512195121951219,
+      "q25": 0.965708765998551,
+      "median": 0.9801980198019802,
+      "mean": 0.9711926956673524,
+      "q75": 0.9811792874034677,
+      "max": 0.9821605550049554
+    },
+    "r_step1_golden_hvg_jaccard": {
+      "n": 3,
+      "min": 1.0,
+      "q25": 1.0,
+      "median": 1.0,
+      "mean": 1.0,
+      "q75": 1.0,
+      "max": 1.0
+    },
+    "n_stepwise_runs": 18
+  }
+}

@@ -215,19 +215,28 @@ def fit_nb_offset(
 def mark_suspicious_theta(
     model_pars: pd.DataFrame,
     umi: csr_matrix,
-    gene_index: pd.Index,
+    genes: pd.Index,
 ) -> pd.DataFrame:
-    """Set theta=Inf when MM/MLE ratio is extreme (exclude_poisson pre-regularization)."""
+    """Set theta=Inf when MM/MLE ratio is extreme (sctransform v2 exclude_poisson).
+
+    Mirrors ``get_model_pars`` in R ``vst()``: ``rowMeans`` / ``row_var`` on the full
+    count matrix, then compare method-of-moments theta to the fitted MLE for each
+    step-1 gene in ``model_pars``.
+    """
     model_pars = model_pars.copy()
-    amean = pd.Series(np.asarray(umi.mean(axis=1)).ravel(), index=gene_index)
-    var = pd.Series(row_var_sparse(umi), index=gene_index)
-    predicted = amean**2 / np.maximum(var - amean, 1e-9)
-    actual = model_pars["theta"].to_numpy(dtype=np.float64)
+    amean = pd.Series(np.asarray(umi.mean(axis=1)).ravel(), index=genes)
+    var = pd.Series(row_var_sparse(umi), index=genes)
+    step_genes = model_pars.index.intersection(genes)
+    amean_step = amean.reindex(step_genes)
+    var_step = var.reindex(step_genes)
     with np.errstate(divide="ignore", invalid="ignore"):
-        ratio = predicted.reindex(model_pars.index).to_numpy() / actual
+        predicted = amean_step**2 / (var_step - amean_step)
+        actual = model_pars.loc[step_genes, "theta"].to_numpy(dtype=np.float64)
+        ratio = predicted.to_numpy(dtype=np.float64) / actual
     suspicious = np.isfinite(ratio) & (ratio < 1e-3)
     if suspicious.any():
-        model_pars.loc[suspicious, "theta"] = np.inf
+        flagged = step_genes[suspicious]
+        model_pars.loc[flagged, "theta"] = np.inf
     return model_pars
 
 
