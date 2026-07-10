@@ -199,10 +199,12 @@ def _row_gmean(values: np.ndarray, gmean_eps: float = 1.0) -> np.ndarray:
 
 
 def _row_gmean_sparse(umi: csr_matrix, gmean_eps: float = 1.0) -> np.ndarray:
+    """Per-gene geometric mean (sctransform::row_gmean), genes × cells CSR."""
     out = np.empty(umi.shape[0], dtype=np.float64)
     for i in range(umi.shape[0]):
         row = umi.getrow(i).toarray().ravel()
-        out[i] = _row_gmean(row.reshape(-1, 1), gmean_eps)[0]
+        # One row × n_cells — mean axis=1 matches R rowMeans(log(x + eps)).
+        out[i] = _row_gmean(row.reshape(1, -1), gmean_eps)[0]
     return out
 
 
@@ -1356,13 +1358,14 @@ def vst(
             raise ValueError("genes_step1 has no overlap with genes.")
         genes_log_gmean_step1 = genes_log_gmean.loc[genes_step1]
     else:
-        genes_step1_mask = np.asarray(umi[:, cells.isin(cells_step1)].sum(axis=1)).ravel() >= min_cells
+        genes_step1_mask = (
+            np.asarray((umi[:, cells.isin(cells_step1)] > 0).sum(axis=1)).ravel() >= min_cells
+        )
         genes_step1 = genes[genes_step1_mask]
 
         if exclude_poisson:
-            umi_for_disp = umi[:, cells.isin(cells_step1)]
-            amean = np.asarray(umi_for_disp.mean(axis=1)).ravel()
-            var = np.asarray(umi_for_disp.power(2).mean(axis=1)).ravel() - amean**2
+            amean = np.asarray(umi.mean(axis=1)).ravel()
+            var = np.asarray(umi.power(2).mean(axis=1)).ravel() - amean**2
             overdispersed = genes_step1[
                 (var[genes.get_indexer(genes_step1)] - amean[genes.get_indexer(genes_step1)]) > 0
             ]
@@ -1435,7 +1438,11 @@ def vst(
     else:
         data_step1 = cell_attr.loc[cells_step1]
         regressor_data_step1 = _build_design_matrix(data_step1, model_str)
-        umi_step1 = umi[genes.get_indexer(genes_step1)][:, cells.isin(cells_step1)]
+        cells_step1_idx = cells.get_indexer(cells_step1)
+        if (cells_step1_idx < 0).any():
+            missing = cells_step1[cells_step1_idx < 0]
+            raise ValueError(f"cells_step1 not found in cells: {missing[:5].tolist()}")
+        umi_step1 = umi[genes.get_indexer(genes_step1)][:, cells_step1_idx]
         if method == "poisson":
             model_pars = _fit_poisson(umi_step1, regressor_data_step1, genes_step1)
         elif method in {"nb_offset", "glmGamPoi_offset"}:
@@ -1449,7 +1456,7 @@ def vst(
         else:
             raise ValueError(f"Unsupported VST method: {method}")
         if exclude_poisson:
-            model_pars = mark_suspicious_theta(model_pars, umi_step1, genes_step1)
+            model_pars = mark_suspicious_theta(model_pars, umi, genes)
 
         coef_valid = model_pars.drop(columns=["theta"]).notna().all(axis=1)
         valid = coef_valid & (model_pars["theta"].notna())
@@ -1558,7 +1565,7 @@ def vst(
         vst_out["umi_corrected"] = _correct_counts(vst_out, genes.to_numpy(), bin_size=bin_size)
 
     gene_attr = pd.DataFrame(index=genes)
-    gene_attr["detection_rate"] = genes_cell_count[keep_genes] / umi.shape[1]
+    gene_attr["detection_rate"] = np.asarray((umi >= 0.01).sum(axis=1)).ravel() / umi.shape[1]
     gene_attr["gmean"] = np.power(10, genes_log_gmean)
     umi_mean = np.asarray(umi.mean(axis=1)).ravel()
     gene_attr["amean"] = umi_mean
@@ -1957,9 +1964,10 @@ def run_sctransform(
     )
     scale_data = scale_data.clip(lower=clip_range[0], upper=clip_range[1])
 
-    if not gene_index.equals(full_gene_index):
-        counts = _expand_genes_gbc(counts, gene_index, full_gene_index)
-        data = _expand_genes_gbc(data, gene_index, full_gene_index)
+    count_genes = pd.Index(vst_out["gene_attr"].index)
+    if counts.shape[0] == len(count_genes) and len(count_genes) != len(full_gene_index):
+        counts = _expand_genes_gbc(counts, count_genes, full_gene_index)
+        data = _expand_genes_gbc(data, count_genes, full_gene_index)
 
     variable_features = (
         residual_genes.to_numpy() if residual_features is not None else top_features.to_numpy()

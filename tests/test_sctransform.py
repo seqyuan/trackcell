@@ -266,6 +266,30 @@ def test_glmGamPoi_r_available():
     assert isinstance(glmGamPoi_r_available(), bool)
 
 
+def test_pyglmGamPoi_available():
+    from trackcell.tl._sctransform_v2 import pyglmGamPoi_available
+
+    assert isinstance(pyglmGamPoi_available(), bool)
+
+
+@pytest.mark.skipif(
+    not __import__("trackcell.tl._sctransform_v2", fromlist=["pyglmGamPoi_available"]).pyglmGamPoi_available(),
+    reason="pyglmGamPoi not installed",
+)
+def test_sctransform_vst_flavor_v2_pyglmGamPoi():
+    adata = _make_count_adata(n_cells=80, n_genes=100, seed=29)
+    sctransform(
+        adata,
+        n_top_genes=15,
+        n_cells=40,
+        n_genes=50,
+        vst_flavor="v2",
+        seed=30,
+    )
+    assert adata.uns["sct"]["params"]["vst_flavor"] == "v2"
+    assert np.isfinite(adata.obsm["X_sct"]).all()
+
+
 @pytest.mark.skipif(
     not __import__("trackcell.tl._r_sctransform", fromlist=["glmGamPoi_r_available"]).glmGamPoi_r_available(),
     reason="R glmGamPoi not available",

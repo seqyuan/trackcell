@@ -10,6 +10,14 @@ import pandas as pd
 import pytest
 import scipy.sparse as sps
 
+from .sct_benchmark_data import (
+    BENCHMARK_ROOT,
+    DEFAULT_SAMPLE,
+    load_seurat_parity_with_cell_attr,
+    load_tcl_filtered_adata,
+    load_tcl_filtered_umi,
+    verify_seurat_parity_vs_r,
+)
 from trackcell.tl._r_sctransform import (
     align_r_gene_list,
     align_r_gmean_series,
@@ -18,10 +26,8 @@ from trackcell.tl._r_sctransform import (
     normalize_r_model_pars,
 )
 from trackcell.tl._sctransform import (
-    _as_genes_by_cells,
     _is_outlier,
     _ksmooth,
-    _make_cell_attr,
     _pearson_residual,
     _reg_model_pars,
     _reg_model_pars_pre_ksmooth,
@@ -142,26 +148,11 @@ def test_reg_model_pars_marks_poisson_theta_inf():
 )
 def test_residuals_match_r_model_pars_fit():
     """Pearson residuals from R model_pars_fit should match R vst residuals."""
-    import scanpy as sc
-
-    from trackcell.tl._sctransform import _as_genes_by_cells, _make_cell_attr
-
     sample = "GSM8779707"
     root = Path("/Volumes/process/tmp/tcl_test")
     r_dir = root / "steps/r_sct_stepwise" / sample
     meta = json.loads((r_dir / "meta.json").read_text()) if (r_dir / "meta.json").exists() else {}
-    keep = set((root / "steps/r/01_filter" / f"{sample}_cells.txt").read_text().strip().split("\n"))
-    keep.discard("")
-    adata = sc.read_10x_mtx(root / "data" / sample, gex_only=True, make_unique=True)
-    adata.obs_names = [f"{sample}_{bc}" for bc in adata.obs_names]
-    adata = adata[adata.obs_names.isin(keep)].copy()
-    umi = _as_genes_by_cells(adata.X, adata.var_names, adata.obs_names)
-    genes = pd.Index(adata.var_names)
-    keep_genes = np.asarray((umi >= 0.01).sum(axis=1)).ravel() >= 5
-    umi = umi[keep_genes]
-    genes = genes[keep_genes]
-    cells = pd.Index(adata.obs_names)
-    cell_attr = _make_cell_attr(umi, cells)
+    umi, genes, cells, cell_attr = load_seurat_parity_with_cell_attr(sample)
 
     r_fit = pd.read_csv(r_dir / "model_pars_fit.csv", index_col=0).rename(
         columns={"(Intercept)": "Intercept"}
@@ -202,8 +193,6 @@ def test_residuals_match_r_model_pars_fit():
 )
 def test_load_r_vst_export_and_r_fit_hvg():
     """R model_pars_fit export -> Python residuals should match R HVG (~1.0 Jaccard)."""
-    import scanpy as sc
-
     from trackcell.tl.sctransform import sctransform
 
     sample = "GSM8779707"
@@ -217,12 +206,7 @@ def test_load_r_vst_export_and_r_fit_hvg():
     assert exported.get("genes_log_gmean") is not None
     assert exported.get("genes_log_gmean_step1") is not None
 
-    keep = set((root / "steps/r/01_filter" / f"{sample}_cells.txt").read_text().strip().split("\n"))
-    keep.discard("")
-    adata = sc.read_10x_mtx(root / "data" / sample, gex_only=True, make_unique=True)
-    adata.obs_names = [f"{sample}_{bc}" for bc in adata.obs_names]
-    adata = adata[adata.obs_names.isin(keep)].copy()
-    adata.layers["counts"] = adata.X.copy()
+    adata = load_tcl_filtered_adata(sample)
 
     sctransform(
         adata,
@@ -246,24 +230,13 @@ def test_load_r_vst_export_and_r_fit_hvg():
 )
 def test_reg_model_pars_pre_ksmooth_matches_r_export():
     """Pre-ksmooth outlier/poisson filtering matches R when using R gmean exports."""
-    import scanpy as sc
-
     sample = "GSM8779707"
     root = Path("/Volumes/process/tmp/tcl_test")
     step_dir = root / "steps/r_sct_stepwise" / sample
     dbg_dir = root / "steps/r_sct_reg_debug" / sample
     exported = load_r_vst_export(step_dir)
 
-    keep = set((root / "steps/r/01_filter" / f"{sample}_cells.txt").read_text().strip().split("\n"))
-    keep.discard("")
-    adata = sc.read_10x_mtx(root / "data" / sample, gex_only=True, make_unique=True)
-    adata.obs_names = [f"{sample}_{bc}" for bc in adata.obs_names]
-    adata = adata[adata.obs_names.isin(keep)].copy()
-    umi = _as_genes_by_cells(adata.X, adata.var_names, adata.obs_names)
-    genes = pd.Index(adata.var_names)
-    keep_genes = np.asarray((umi >= 0.01).sum(axis=1)).ravel() >= 5
-    umi = umi[keep_genes]
-    genes = genes[keep_genes]
+    umi, genes, _cells = load_tcl_filtered_umi(sample)
 
     genes_vst = pd.Index(align_r_gene_list(exported["genes_vst"], genes))
     gene_pos = genes.get_indexer(genes_vst)
@@ -297,8 +270,6 @@ def test_reg_model_pars_pre_ksmooth_matches_r_export():
 )
 def test_r_step1_hvg_with_r_gmean_export():
     """R step1 + Python ksmooth/residuals with R gmean exports should beat naive Py gmean."""
-    import scanpy as sc
-
     from trackcell.tl._sctransform import vst
 
     sample = "GSM8779707"
@@ -306,18 +277,7 @@ def test_r_step1_hvg_with_r_gmean_export():
     export_dir = root / "steps/r_sct_stepwise" / sample
     exported = load_r_vst_export(export_dir)
 
-    keep = set((root / "steps/r/01_filter" / f"{sample}_cells.txt").read_text().strip().split("\n"))
-    keep.discard("")
-    adata = sc.read_10x_mtx(root / "data" / sample, gex_only=True, make_unique=True)
-    adata.obs_names = [f"{sample}_{bc}" for bc in adata.obs_names]
-    adata = adata[adata.obs_names.isin(keep)].copy()
-    umi = _as_genes_by_cells(adata.X, adata.var_names, adata.obs_names)
-    genes = pd.Index(adata.var_names)
-    cells = pd.Index(adata.obs_names)
-    keep_genes = np.asarray((umi >= 0.01).sum(axis=1)).ravel() >= 5
-    umi = umi[keep_genes]
-    genes = genes[keep_genes]
-    cell_attr = _make_cell_attr(umi, cells)
+    umi, genes, cells, cell_attr = load_seurat_parity_with_cell_attr(sample)
 
     genes_vst = pd.Index(align_r_gene_list(exported["genes_vst"], genes))
     gene_pos = genes.get_indexer(genes_vst)
@@ -346,3 +306,53 @@ def test_r_step1_hvg_with_r_gmean_export():
     r_hvg = set((export_dir / "hvg_top3000.txt").read_text().strip().split("\n"))
     jaccard = len(py_hvg & r_hvg) / len(py_hvg | r_hvg)
     assert jaccard > 0.75
+
+
+@pytest.mark.skipif(
+    not Path("/Volumes/process/tmp/tcl_test/steps/r_sct_stepwise/GSM8779707/meta.json").exists(),
+    reason="R stepwise export missing",
+)
+def test_seurat_parity_loader_matches_r_meta():
+    """Seurat-parity loader: shape, cells, log_umi, and colSums match R reference."""
+    umi, genes, cells, cell_attr = load_seurat_parity_with_cell_attr(DEFAULT_SAMPLE)
+    report = verify_seurat_parity_vs_r(
+        umi, genes, cells, cell_attr, sample=DEFAULT_SAMPLE, benchmark_root=BENCHMARK_ROOT
+    )
+    assert report["shape_matches_meta"]
+    assert report["cells_match_r"]
+    assert report["log_umi_max_diff"] < 1e-9
+    if "colsums_max_diff_vs_r" in report:
+        assert report["colsums_max_diff_vs_r"] == 0.0
+    assert report.get("gene_names_match_r_reference", True)
+
+
+@pytest.mark.skipif(
+    not Path("/Volumes/process/tmp/tcl_test/steps/r_sct_stepwise/GSM8779707/hvg_top3000.txt").exists(),
+    reason="R HVG export missing",
+)
+def test_native_hvg_jaccard_gap_documented():
+    """Native pyglmGamPoi path HVG parity vs R after Seurat-parity loader + cell-order fix."""
+    from trackcell.tl._sctransform import vst
+
+    sample = DEFAULT_SAMPLE
+    export_dir = BENCHMARK_ROOT / "steps/r_sct_stepwise" / sample
+    exported = load_r_vst_export(export_dir)
+    umi, genes, cells, cell_attr = load_seurat_parity_with_cell_attr(sample)
+
+    out = vst(
+        umi,
+        genes,
+        cells,
+        cell_attr=cell_attr,
+        vst_flavor="v2",
+        cells_step1=pd.Index(exported["cells_step1"]).intersection(cells),
+        genes_step1=pd.Index(align_r_gene_list(exported["genes_step1"], genes)),
+        return_corrected_umi=False,
+        seed=1448145,
+    )
+    py_hvg = set(
+        out["gene_attr"]["residual_variance"].sort_values(ascending=False).index[:3000].astype(str)
+    )
+    r_hvg = set((export_dir / "hvg_top3000.txt").read_text().strip().split("\n"))
+    jaccard = len(py_hvg & r_hvg) / len(py_hvg | r_hvg)
+    assert jaccard > 0.95
