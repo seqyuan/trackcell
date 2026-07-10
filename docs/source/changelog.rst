@@ -1,6 +1,13 @@
 Changelog
 
 
+Version 0.3.42
+--------------
+
+* Fix ``pyproject.toml`` Poetry extras: declare ``pyglmGamPoi`` / ``xgboost`` as
+  optional dependencies and reference bare package names in ``[tool.poetry.extras]``
+  (fixes PyPI release workflow for v0.3.41).
+
 Version 0.3.41
 --------------
 
