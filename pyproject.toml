@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "trackcell"
-version = "0.3.42"
+version = "0.3.43"
 description = "A Python package for processing single-cell and spatial transcriptomics data"
 authors = ["Zan Yuan <yfinddream@gmail.com>"]
 readme = "README.md"
@@ -19,6 +19,7 @@ ipympl = ">=0.9,<1.0"
 h5py = ">=3.0,<4.0"
 annoy = ">=1.17,<2.0"
 pyglmGamPoi = { version = ">=0.2.1,<0.3.0", optional = true }
+rrng = { version = ">=0.1.0,<0.2.0", optional = true }
 xgboost = { version = ">=2.0,<3.0", optional = true }
 
 [tool.poetry.group.dev.dependencies]
@@ -38,7 +39,7 @@ ipython = "^7.0.0"
 [tool.poetry.extras]
 clustering = ["leidenalg", "python-igraph"]
 ml = ["xgboost"]
-sct = ["pyglmGamPoi"]
+sct = ["pyglmGamPoi", "rrng"]
 
 
 [build-system]

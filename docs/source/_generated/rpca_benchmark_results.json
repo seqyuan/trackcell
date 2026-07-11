@@ -1,0 +1,190 @@
+{
+  "status": "ok",
+  "filter": {
+    "min_cells_gene": 100,
+    "min_features": 50
+  },
+  "benchmark_root": "/Volumes/process/tmp/tcl_test",
+  "samples": [
+    "GSM8779707",
+    "GSM8779708",
+    "GSM8779709"
+  ],
+  "seeds": [
+    1448145
+  ],
+  "ref_seed": 1448145,
+  "missing_r_exports": [],
+  "sct_stepwise": [
+    {
+      "seed": 1448145,
+      "reference": "R integration SCTransform (steps/rpca_benchmark/r/seed_*/02_sct)",
+      "per_sample": [
+        {
+          "sample": "GSM8779707",
+          "n_cells": 14724,
+          "n_genes": 15297,
+          "native_hvg_jaccard": 0.9181585677749361,
+          "r_fit_to_py_residual_corr": 0.9936468078477688,
+          "r_fit_to_py_hvg_jaccard": 0.9499512512187195,
+          "r_step1_to_py_hvg_jaccard": 0.9274012206874398,
+          "r_step1_theta_corr": 0.9962794847566049
+        },
+        {
+          "sample": "GSM8779708",
+          "n_cells": 13437,
+          "n_genes": 15154,
+          "native_hvg_jaccard": 0.9132653061224489,
+          "r_fit_to_py_residual_corr": 0.9932293418327935,
+          "r_fit_to_py_hvg_jaccard": 0.95822454308094,
+          "r_step1_to_py_hvg_jaccard": 0.9348597226701064,
+          "r_step1_theta_corr": 0.9993846627956393
+        },
+        {
+          "sample": "GSM8779709",
+          "n_cells": 7787,
+          "n_genes": 13379,
+          "native_hvg_jaccard": 0.9255455712451861,
+          "r_fit_to_py_residual_corr": 0.9905822006270592,
+          "r_fit_to_py_hvg_jaccard": 0.9323671497584541,
+          "r_step1_to_py_hvg_jaccard": 0.9336126329358685,
+          "r_step1_theta_corr": 0.9950037693720314
+        }
+      ],
+      "merged": {
+        "features_jaccard_native_vs_r": 0.9230769230769231,
+        "prep_native_sct_r_features": {
+          "n_cells": 35948,
+          "n_genes_compared": 500,
+          "gene_corr_median": 0.9999218533505769,
+          "gene_corr_mean": 0.9992701659244201
+        }
+      },
+      "summary": {
+        "native_hvg_jaccard_median": 0.9181585677749361,
+        "r_fit_hvg_jaccard_median": 0.9499512512187195,
+        "prep_corr_median_native_sct_r_features": 0.9999218533505769
+      }
+    }
+  ],
+  "stepwise": [
+    {
+      "seed": 1448145,
+      "n_cells": 35948,
+      "batch_sizes": {
+        "GSM8779707": 14724,
+        "GSM8779708": 13437,
+        "GSM8779709": 7787
+      },
+      "steps": {
+        "03_features": {
+          "input": "R Step 02 SCT batch_models",
+          "jaccard": 1.0,
+          "r_n": 2000,
+          "py_n": 2000
+        },
+        "04_prep": {
+          "input": "R Step 02 SCT + R Step 03 features",
+          "n_cells": 35948,
+          "n_genes_compared": 500,
+          "gene_corr_median": 0.9999999999999997,
+          "gene_corr_mean": 0.9999999999999998
+        },
+        "05_anchors": {
+          "input": "R Step 04 prep_residuals",
+          "r_n_anchors": 39124,
+          "py_n_anchors": 39118,
+          "r_n_unique_pairs": 19562,
+          "py_n_unique_pairs": 19559,
+          "local_pair_jaccard": 0.8678857906799083,
+          "local_pair_overlap": 18177,
+          "unique_pair_ratio_py_over_r": 0.9998466414477047
+        },
+        "06_integrated_r_anchors": {
+          "input": "R Step 04 prep + R Step 05 anchors",
+          "n_cells": 35948,
+          "n_genes_compared": 500,
+          "gene_corr_median": 0.9594999395907398,
+          "gene_corr_mean": 0.961279526464782
+        },
+        "06_integrated_py_anchors": {
+          "input": "R Step 04 prep + Python Step 05 anchors",
+          "n_cells": 35948,
+          "n_genes_compared": 500,
+          "gene_corr_median": 0.9593978625157742,
+          "gene_corr_mean": 0.9609224320331936
+        }
+      }
+    }
+  ],
+  "e2e": [
+    {
+      "seed": 1448145,
+      "n_cells": 35948,
+      "sct_hvg_jaccard": {
+        "GSM8779707": 0.9175455417066155,
+        "GSM8779708": 0.9120458891013384,
+        "GSM8779709": 0.949317738791423
+      },
+      "features_jaccard": 0.9286403085824494,
+      "n_shared_features": 1926,
+      "prep": {
+        "n_cells": 35948,
+        "n_genes_compared": 500,
+        "gene_corr_median": 0.9999999999999997,
+        "gene_corr_mean": 0.9999999999999998
+      },
+      "prep_shared_features_only": {
+        "n_cells": 35948,
+        "n_genes_compared": 500,
+        "gene_corr_median": 0.9999999999999997,
+        "gene_corr_mean": 0.9980515058949806
+      },
+      "anchors": {
+        "r_n_anchors": 39124,
+        "py_n_anchors": 39186,
+        "r_n_unique_pairs": 19562,
+        "py_n_unique_pairs": 19593,
+        "local_pair_jaccard": 0.7195871761089152,
+        "local_pair_overlap": 16385,
+        "unique_pair_ratio_py_over_r": 1.0015847050403843
+      },
+      "integrated": {
+        "n_cells": 35948,
+        "n_genes_compared": 500,
+        "gene_corr_median": 0.9588792962638457,
+        "gene_corr_mean": 0.9600045932480176
+      },
+      "integrated_shared_features_only": {
+        "n_cells": 35948,
+        "n_genes_compared": 500,
+        "gene_corr_median": 0.9773527078730289,
+        "gene_corr_mean": 0.9716342782187385
+      }
+    }
+  ],
+  "summary": {
+    "sct_stepwise_ref": {
+      "native_hvg_jaccard_median": 0.9181585677749361,
+      "r_fit_hvg_jaccard_median": 0.9499512512187195,
+      "prep_corr_median_native_sct_r_features": 0.9999218533505769
+    },
+    "stepwise_ref": {
+      "features_jaccard": 1.0,
+      "prep_corr_median": 0.9999999999999997,
+      "anchor_local_jaccard": 0.8678857906799083,
+      "integrate_corr_median_r_anchors": 0.9594999395907398,
+      "integrate_corr_median_py_anchors": 0.9593978625157742
+    },
+    "e2e_ref": {
+      "features_jaccard": 0.9286403085824494,
+      "n_shared_features": 1926,
+      "prep_corr_median": 0.9999999999999997,
+      "prep_shared_corr_median": 0.9999999999999997,
+      "anchor_local_jaccard": 0.7195871761089152,
+      "integrate_corr_median": 0.9588792962638457,
+      "integrate_shared_corr_median": 0.9773527078730289,
+      "sct_hvg_jaccard_median": 0.9175455417066155
+    }
+  }
+}

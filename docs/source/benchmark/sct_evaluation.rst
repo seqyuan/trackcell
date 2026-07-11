@@ -135,6 +135,6 @@ Environment
 What is not covered here
 ------------------------
 
-- **RPCA integration** (anchors, prep, integrate) — separate benchmark doc planned.
+- **RPCA integration** (anchors, prep, integrate) — see :doc:`rpca_evaluation`.
 - **Multi-sample merged SCT** — per-sample ``batch_key`` path tested via unit
   tests; full three-sample merge benchmark is future work.

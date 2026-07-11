@@ -21,8 +21,8 @@ from scipy import optimize
 from scipy.interpolate import interp1d
 from scipy.sparse import csr_matrix, issparse
 from scipy.special import digamma, polygamma
-from scipy.stats import gaussian_kde
-
+from ._r_density import r_density_interp
+from ._r_sample import make_vst_rng, r_sample_available
 from ._sctransform_v2 import (
     LOG10_SLOPE,
     apply_vst_flavor_settings,
@@ -209,20 +209,18 @@ def _row_gmean_sparse(umi: csr_matrix, gmean_eps: float = 1.0) -> np.ndarray:
 
 
 def _dds(genes_log10_gmean: pd.Series, grid_points: int = 512) -> np.ndarray:
-    """Inverse density weights for gene subsampling (R vst: density bw='nrd')."""
+    """
+    Inverse density weights for gene subsampling.
+
+    Matches R ``vst()``: ``density(genes_log_gmean_step1, bw='nrd', adjust=1)``
+    then ``approx(..., xout=genes_log_gmean_step1)`` for sampling weights.
+    """
     values = np.asarray(genes_log10_gmean, dtype=np.float64)
-    n = len(values)
-    if n == 0:
+    if values.size == 0:
         return np.array([], dtype=np.float64)
-    std = float(np.std(values, ddof=1))
-    q75, q25 = np.percentile(values, [75, 25])
-    bw = 0.9 * min(std, (q75 - q25) / 1.34) * np.power(n, -0.2)
-    if not np.isfinite(bw) or bw <= 0:
-        bw = max(std, 1e-6)
-    kde = gaussian_kde(values, bw_method=bw / std if std > 0 else 1.0)
-    density = kde(values)
-    sampling_prob = 1.0 / (density + np.finfo(float).eps)
-    return sampling_prob / sampling_prob.sum()
+    density_at = r_density_interp(values, values, bw="nrd", adjust=1.0, n=grid_points)
+    # R passes unnormalized ``1/(density + eps)`` to ``sample(..., prob=)``.
+    return 1.0 / (density_at + np.finfo(float).eps)
 
 
 @numba.jit(cache=True, forceobj=True, nogil=True)
@@ -1021,11 +1019,13 @@ def get_residuals(
     cell_attr: Optional[pd.DataFrame] = None,
     bin_size: int = 256,
 ) -> pd.DataFrame:
-    """Compute Pearson or deviance residuals for genes using a fitted VST model."""
+    """Compute Pearson or deviance residuals for genes using a fitted VST model.
+
+    By default returns UNCLIPPED residuals (matching R ``sctransform::get_residuals``).
+    Pass ``res_clip_range`` to clip (e.g. for scale.data storage).
+    """
     if residual_type not in RESIDUAL_TYPES - {"none"}:
         raise ValueError(f"Unsupported residual_type: {residual_type}")
-    if res_clip_range is None:
-        res_clip_range = (-np.sqrt(umi.shape[1]), np.sqrt(umi.shape[1]))
 
     regressor_data = _prepare_regressor_data(vst_out, cell_attr)
     model_pars = _combined_model_pars(vst_out)
@@ -1050,11 +1050,13 @@ def get_residuals(
         for i in range(1, max_bin + 1)
     )
     residuals = pd.DataFrame(np.vstack(blocks), index=target_genes, columns=regressor_data.index)
-    return pd.DataFrame(
-        _clip_matrix_values(residuals.to_numpy(), res_clip_range),
-        index=target_genes,
-        columns=regressor_data.index,
-    )
+    if res_clip_range is not None:
+        return pd.DataFrame(
+            _clip_matrix_values(residuals.to_numpy(), res_clip_range),
+            index=target_genes,
+            columns=regressor_data.index,
+        )
+    return residuals
 
 
 def get_residual_var(
@@ -1311,7 +1313,8 @@ def vst(
     if residual_type not in RESIDUAL_TYPES:
         raise ValueError(f"Unsupported residual_type: {residual_type}")
     if res_clip_range is None:
-        res_clip_range = (-np.sqrt(umi.shape[1]), np.sqrt(umi.shape[1]))
+        # Seurat SCTransform default: sct.clip.range = c(-sqrt(ncol/30), sqrt(ncol/30))
+        res_clip_range = (-np.sqrt(umi.shape[1] / 30), np.sqrt(umi.shape[1] / 30))
 
     model_str = _build_model_str(latent_var or ("log_umi",), batch_var)
     cell_attr = _make_cell_attr(
@@ -1339,7 +1342,7 @@ def vst(
             np.log10(np.maximum(_row_gmean_sparse(umi, gmean_eps), 1e-9)),
             index=genes,
         )
-    rng = np.random.default_rng(seed)
+    rng = make_vst_rng(seed)
 
     if cells_step1 is not None:
         cells_step1 = pd.Index(cells_step1).intersection(cells)
@@ -1375,7 +1378,12 @@ def vst(
             genes_log_gmean_step1 = genes_log_gmean.loc[genes_step1]
             sampling_prob = _dds(genes_log_gmean_step1)
             genes_step1 = pd.Index(
-                rng.choice(genes_step1.to_numpy(), size=n_genes, replace=False, p=sampling_prob)
+                rng.choice(
+                    genes_step1.to_numpy(),
+                    size=n_genes,
+                    replace=False,
+                    p=sampling_prob,
+                )
             )
             genes_log_gmean_step1 = genes_log_gmean.loc[genes_step1]
         else:
@@ -1656,7 +1664,8 @@ def run_sctransform(
     if clip_range is None:
         clip_range = (-np.sqrt(umi_gbc.shape[1] / 30), np.sqrt(umi_gbc.shape[1] / 30))
     if res_clip_range is None:
-        res_clip_range = (-np.sqrt(umi_gbc.shape[1]), np.sqrt(umi_gbc.shape[1]))
+        # Seurat SCTransform default: sct.clip.range = c(-sqrt(ncol/30), sqrt(ncol/30))
+        res_clip_range = (-np.sqrt(umi_gbc.shape[1] / 30), np.sqrt(umi_gbc.shape[1] / 30))
 
     if model_use not in SCALE_MODELS:
         raise ValueError(f"model_use must be one of {sorted(SCALE_MODELS)}.")
