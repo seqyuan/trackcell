@@ -48,11 +48,25 @@ Or manually:
 
    pip install leidenalg python-igraph
 
-For multi-sample Harmony batch integration (``integrate='joint'``):
+For multi-sample Harmony batch integration (``integrate='joint'`` in
+:doc:`usage/spatial_clustering`):
 
 .. code-block:: bash
 
    pip install harmonypy
+
+Batch expression integration (SCT + RPCA / Harmony / BBKNN) — see
+:doc:`usage/batch_integration`:
+
+.. code-block:: bash
+
+   pip install annoy              # RPCA anchors (required for integrate_rpca)
+   pip install harmonypy          # SCT + Harmony
+   pip install bbknn                # SCT + BBKNN
+   pip install pyglmGamPoi          # native SCT v2 (or R glmGamPoi via method='r')
+
+``integrate_sct_rpca`` and ``run_sct_integration`` work without ``harmonypy`` /
+``bbknn`` unless you use those downstream methods.
 
 Development Installation
 ------------------------

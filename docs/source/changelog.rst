@@ -1,6 +1,31 @@
 Changelog
 
 
+Version 0.3.43
+--------------
+
+* **SCT + RPCA integration** (Seurat v4 parity first):
+
+  * Split API: ``run_sct_integration``, ``integrate_rpca``, ``sct_prep_matrix``;
+    ``integrate_sct_rpca`` remains a thin wrapper.
+  * Hybrid R step-1 / ``inject_r_scale_data`` path for prep and anchor parity
+    (benchmark integrate corr **~0.96** vs Seurat).
+  * Explicit opt-in memory release: ``release_sct_integration_cache`` and
+    documented manual ``uns`` one-liners (no automatic cache trimming).
+
+* **Performance** (RPCA path):
+
+  * Vectorised / chunked IntegrateData weight construction (Numba).
+  * ``n_trees_weight`` (default 10; use 50 for Seurat parity).
+  * ``integration_dtype='float32'`` default; ``float64`` for parity.
+  * ``sct_batch_n_jobs`` for parallel per-batch SCT.
+
+* **Docs & benchmark**:
+
+  * ``docs/source/usage/batch_integration.rst`` — SCT+RPCA / Harmony / BBKNN.
+  * ``docs/source/benchmark/rpca_evaluation.rst`` + ``scripts/run_rpca_benchmark.py``.
+  * ``trackcell/benchmark/rpca/`` stepwise and E2E RPCA evaluation suite.
+
 Version 0.3.42
 --------------
 

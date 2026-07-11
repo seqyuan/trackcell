@@ -237,6 +237,49 @@ def test_sctransform_batch_key():
     assert adata.uns["sct"]["params"]["sct_method"] == "batch_key"
 
 
+def test_sctransform_batch_key_parallel_matches_serial():
+    adata_serial = _make_count_adata(n_cells=80, n_genes=100, seed=31)
+    adata_parallel = _make_count_adata(n_cells=80, n_genes=100, seed=31)
+    for ad in (adata_serial, adata_parallel):
+        ad.obs["orig.ident"] = np.random.default_rng(31).choice(["A", "B", "C"], ad.n_obs)
+    sctransform(
+        adata_serial,
+        batch_key="orig.ident",
+        n_top_genes=12,
+        n_cells=30,
+        n_genes=40,
+        seed=32,
+        batch_n_jobs=1,
+    )
+    sctransform(
+        adata_parallel,
+        batch_key="orig.ident",
+        n_top_genes=12,
+        n_cells=30,
+        n_genes=40,
+        seed=32,
+        batch_n_jobs=3,
+    )
+    assert set(adata_serial.uns["sct"]["batch_models"]) == set(
+        adata_parallel.uns["sct"]["batch_models"]
+    )
+    assert adata_serial.uns["sct"]["variable_features"] == adata_parallel.uns["sct"]["variable_features"]
+    np.testing.assert_allclose(
+        adata_serial.obsm["X_sct"],
+        adata_parallel.obsm["X_sct"],
+        rtol=1e-5,
+        atol=1e-5,
+    )
+    assert adata_parallel.uns["sct"]["params"]["batch_n_jobs"] == 3
+
+
+def test_sctransform_batch_n_jobs_invalid():
+    adata = _make_count_adata(n_cells=40, n_genes=50, seed=33)
+    adata.obs["orig.ident"] = "A"
+    with pytest.raises(ValueError, match="batch_n_jobs"):
+        sctransform(adata, batch_key="orig.ident", batch_n_jobs=0, n_top_genes=5, n_cells=20, n_genes=20)
+
+
 def test_select_integration_features_batch():
     adata = _make_count_adata(n_cells=80, n_genes=100, seed=25)
     adata.obs["orig.ident"] = np.random.default_rng(25).choice(["A", "B"], adata.n_obs)

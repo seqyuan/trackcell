@@ -13,7 +13,15 @@ from .spatial_cluster import (
     yard_embed,
 )
 from .sctransform import pack_sct_model, sctransform
-from .integration import integrate_sct_rpca, prep_sct_integration, select_integration_features
+from .integration import (
+    integrate_rpca,
+    integrate_sct_rpca,
+    prep_sct_integration,
+    run_sct_integration,
+    release_sct_integration_cache,
+    sct_prep_matrix,
+    select_integration_features,
+)
 from .slice_separation import (
     dbscan_slice_labels,
     distance_to_nearest_centroids,
@@ -30,6 +38,10 @@ __all__ = [
     "pack_sct_model",
     "select_integration_features",
     "prep_sct_integration",
+    "run_sct_integration",
+    "release_sct_integration_cache",
+    "sct_prep_matrix",
+    "integrate_rpca",
     "integrate_sct_rpca",
     "hd_labeldist",
     "multigene_blend",

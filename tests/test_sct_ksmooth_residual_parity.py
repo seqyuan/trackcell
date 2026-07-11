@@ -2,19 +2,25 @@
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
 import pytest
 import scipy.sparse as sps
+from anndata import AnnData
+from scipy.sparse import csr_matrix, issparse
 
+from trackcell.benchmark.sct.data import (
+    BENCHMARK_ROOT as SCT_BENCHMARK_ROOT,
+    REF_SEED,
+    load_benchmark_umi,
+    r_export_dir,
+)
 from .sct_benchmark_data import (
     BENCHMARK_ROOT,
     DEFAULT_SAMPLE,
     load_seurat_parity_with_cell_attr,
-    load_tcl_filtered_adata,
     load_tcl_filtered_umi,
     verify_seurat_parity_vs_r,
 )
@@ -35,6 +41,24 @@ from trackcell.tl._sctransform import (
     bw_sj,
     get_residuals,
 )
+
+
+def _r_vst_res_clip_range(n_cells: int) -> tuple[float, float]:
+    """``sctransform::vst`` default ``res_clip_range = ±sqrt(ncol(umi))``."""
+    bound = float(np.sqrt(n_cells))
+    return (-bound, bound)
+
+
+def _benchmark_r_export_dir(sample: str = DEFAULT_SAMPLE, seed: int = REF_SEED) -> Path:
+    return r_export_dir(sample, seed, benchmark_root=SCT_BENCHMARK_ROOT)
+
+
+def _load_benchmark_adata(sample: str = DEFAULT_SAMPLE) -> AnnData:
+    umi, genes, cells, _ = load_benchmark_umi(sample, benchmark_root=SCT_BENCHMARK_ROOT)
+    x = umi.T.tocsr() if issparse(umi) else csr_matrix(umi.T)
+    adata = AnnData(X=x, obs=pd.DataFrame(index=cells), var=pd.DataFrame(index=genes))
+    adata.layers["counts"] = adata.X.copy()
+    return adata
 
 
 def test_is_outlier_uses_minimum_of_binned_scores():
@@ -143,27 +167,19 @@ def test_reg_model_pars_marks_poisson_theta_inf():
 
 
 @pytest.mark.skipif(
-    not Path("/Volumes/process/tmp/tcl_test/steps/r_sct_stepwise/GSM8779707/model_pars_fit.csv").exists(),
-    reason="R stepwise export missing",
+    not _benchmark_r_export_dir().joinpath("model_pars_fit.csv").exists(),
+    reason="R sct_benchmark export missing",
 )
 def test_residuals_match_r_model_pars_fit():
     """Pearson residuals from R model_pars_fit should match R vst residuals."""
-    sample = "GSM8779707"
-    root = Path("/Volumes/process/tmp/tcl_test")
-    r_dir = root / "steps/r_sct_stepwise" / sample
-    meta = json.loads((r_dir / "meta.json").read_text()) if (r_dir / "meta.json").exists() else {}
-    umi, genes, cells, cell_attr = load_seurat_parity_with_cell_attr(sample)
+    sample = DEFAULT_SAMPLE
+    export_dir = _benchmark_r_export_dir(sample)
+    exported = load_r_vst_export(export_dir)
+    umi, genes, cells, cell_attr = load_benchmark_umi(sample, benchmark_root=SCT_BENCHMARK_ROOT)
+    min_var = float(exported["meta"].get("min_variance", 0.04))
 
-    r_fit = pd.read_csv(r_dir / "model_pars_fit.csv", index_col=0).rename(
-        columns={"(Intercept)": "Intercept"}
-    )
-    r_res = pd.read_csv(r_dir / "residuals.csv", index_col=0)
-    min_var = meta.get("min_variance")
-    if min_var is None:
-        from trackcell.tl._sctransform_v2 import resolve_min_variance
-
-        min_var = resolve_min_variance("umi_median", umi)
-
+    r_fit = normalize_r_model_pars(exported["model_pars_fit"]).reindex(genes)
+    r_res = pd.read_csv(export_dir / "residuals.csv", index_col=0)
     vst_stub = {
         "model_str": "y ~ log_umi",
         "model_pars_fit": r_fit,
@@ -177,6 +193,7 @@ def test_residuals_match_r_model_pars_fit():
         genes=genes,
         umi_genes=genes,
         min_variance=min_var,
+        res_clip_range=_r_vst_res_clip_range(umi.shape[1]),
     )
     shared_genes = py_res.index.intersection(r_res.index)
     shared_cells = py_res.columns.intersection(r_res.columns)
@@ -188,16 +205,15 @@ def test_residuals_match_r_model_pars_fit():
 
 
 @pytest.mark.skipif(
-    not Path("/Volumes/process/tmp/tcl_test/steps/r_sct_stepwise/GSM8779707/model_pars_step1.csv").exists(),
-    reason="R stepwise export missing",
+    not _benchmark_r_export_dir().joinpath("model_pars_step1.csv").exists(),
+    reason="R sct_benchmark export missing",
 )
 def test_load_r_vst_export_and_r_fit_hvg():
     """R model_pars_fit export -> Python residuals should match R HVG (~1.0 Jaccard)."""
     from trackcell.tl.sctransform import sctransform
 
-    sample = "GSM8779707"
-    root = Path("/Volumes/process/tmp/tcl_test")
-    export_dir = root / "steps/r_sct_stepwise" / sample
+    sample = DEFAULT_SAMPLE
+    export_dir = _benchmark_r_export_dir(sample)
     exported = load_r_vst_export(export_dir)
     assert exported["model_pars_step1"] is not None
     assert exported["model_pars_fit"] is not None
@@ -206,7 +222,7 @@ def test_load_r_vst_export_and_r_fit_hvg():
     assert exported.get("genes_log_gmean") is not None
     assert exported.get("genes_log_gmean_step1") is not None
 
-    adata = load_tcl_filtered_adata(sample)
+    adata = _load_benchmark_adata(sample)
 
     sctransform(
         adata,
@@ -215,8 +231,9 @@ def test_load_r_vst_export_and_r_fit_hvg():
         method="r_fit",
         r_vst_export_dir=export_dir,
         vst_flavor="v2",
-        seed=1448145,
+        seed=REF_SEED,
         do_correct_umi=False,
+        res_clip_range=_r_vst_res_clip_range(adata.n_obs),
     )
     py_hvg = set(adata.uns["sct"]["variable_features"])
     r_hvg = set((export_dir / "hvg_top3000.txt").read_text().strip().split("\n"))
@@ -327,17 +344,17 @@ def test_seurat_parity_loader_matches_r_meta():
 
 
 @pytest.mark.skipif(
-    not Path("/Volumes/process/tmp/tcl_test/steps/r_sct_stepwise/GSM8779707/hvg_top3000.txt").exists(),
-    reason="R HVG export missing",
+    not _benchmark_r_export_dir().joinpath("hvg_top3000.txt").exists(),
+    reason="R sct_benchmark HVG export missing",
 )
 def test_native_hvg_jaccard_gap_documented():
-    """Native pyglmGamPoi path HVG parity vs R after Seurat-parity loader + cell-order fix."""
+    """Native pyglmGamPoi path HVG parity vs R sct_benchmark (100 cells/gene QC)."""
     from trackcell.tl._sctransform import vst
 
     sample = DEFAULT_SAMPLE
-    export_dir = BENCHMARK_ROOT / "steps/r_sct_stepwise" / sample
+    export_dir = _benchmark_r_export_dir(sample)
     exported = load_r_vst_export(export_dir)
-    umi, genes, cells, cell_attr = load_seurat_parity_with_cell_attr(sample)
+    umi, genes, cells, cell_attr = load_benchmark_umi(sample, benchmark_root=SCT_BENCHMARK_ROOT)
 
     out = vst(
         umi,
@@ -346,9 +363,9 @@ def test_native_hvg_jaccard_gap_documented():
         cell_attr=cell_attr,
         vst_flavor="v2",
         cells_step1=pd.Index(exported["cells_step1"]).intersection(cells),
-        genes_step1=pd.Index(align_r_gene_list(exported["genes_step1"], genes)),
+        genes_step1=pd.Index(exported["genes_step1"]).intersection(genes),
         return_corrected_umi=False,
-        seed=1448145,
+        seed=REF_SEED,
     )
     py_hvg = set(
         out["gene_attr"]["residual_variance"].sort_values(ascending=False).index[:3000].astype(str)

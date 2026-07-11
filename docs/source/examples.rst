@@ -20,6 +20,7 @@ This section contains example notebooks and links to usage tutorials.
 
 See also the usage tutorials:
 
+* :doc:`usage/batch_integration` — SCT + RPCA / Harmony / BBKNN batch integration
 * :doc:`usage/spatial_clustering` — YardCluster spatial domain clustering
 * :doc:`usage/xenium_slice_separation` — Xenium TMA slice separation and GC colony clustering
 * :doc:`usage/visualization` — multi-gene blending, dual-color, interactive ROI selection

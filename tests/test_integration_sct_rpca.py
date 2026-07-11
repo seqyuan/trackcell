@@ -207,3 +207,137 @@ def test_select_integration_features_xgboost():
     )
     assert len(genes) == 10
     assert len(set(genes)) == 10
+
+
+@pytest.mark.skipif(not annoy_available(), reason="annoy not installed")
+def test_split_sct_and_rpca_integration():
+    """run_sct_integration + integrate_rpca matches integrate_sct_rpca."""
+    adata_combined = _make_batch_adata()
+    adata_split = _make_batch_adata(seed=0)
+
+    sctransform(
+        adata_combined,
+        layer="counts",
+        batch_key="orig.ident",
+        n_top_genes=20,
+        n_cells=30,
+        n_genes=40,
+        seed=1,
+    )
+    out_combined = integrate_sct_rpca(
+        adata_combined,
+        batch_key="orig.ident",
+        n_features=15,
+        dims=10,
+        k_anchor=3,
+        k_weight=20,
+        run_sct=False,
+        copy=True,
+    )
+
+    sctransform(
+        adata_split,
+        layer="counts",
+        batch_key="orig.ident",
+        n_top_genes=20,
+        n_cells=30,
+        n_genes=40,
+        seed=1,
+    )
+    from trackcell.tl.integration import integrate_rpca, run_sct_integration
+
+    run_sct_integration(
+        adata_split,
+        batch_key="orig.ident",
+        n_features=15,
+        run_sct=False,
+    )
+    out_split = integrate_rpca(
+        adata_split,
+        batch_key="orig.ident",
+        dims=10,
+        k_anchor=3,
+        k_weight=20,
+    )
+
+    assert out_split.obsm["X_sct_integrated"].shape == out_combined.obsm["X_sct_integrated"].shape
+    np.testing.assert_allclose(
+        out_split.obsm["X_sct_integrated"],
+        out_combined.obsm["X_sct_integrated"],
+        rtol=1e-5,
+        atol=1e-5,
+    )
+    assert "X_sct_prep" in out_split.obsm
+    assert out_split.uns["sct_prep"].get("integration_ready") is True
+
+
+@pytest.mark.skipif(not annoy_available(), reason="annoy not installed")
+def test_release_sct_integration_cache_then_integrate_rpca():
+    """Explicit cache release must not change RPCA output vs Seurat-parity path."""
+    from trackcell.tl.integration import (
+        integrate_rpca,
+        release_sct_integration_cache,
+        run_sct_integration,
+    )
+
+    adata_ref = _make_batch_adata()
+    adata_release = _make_batch_adata(seed=0)
+
+    for ad in (adata_ref, adata_release):
+        sctransform(
+            ad,
+            layer="counts",
+            batch_key="orig.ident",
+            n_top_genes=20,
+            n_cells=30,
+            n_genes=40,
+            seed=1,
+        )
+
+    run_sct_integration(
+        adata_ref,
+        batch_key="orig.ident",
+        n_features=15,
+        run_sct=False,
+    )
+    out_ref = integrate_rpca(
+        adata_ref,
+        batch_key="orig.ident",
+        dims=10,
+        k_anchor=3,
+        k_weight=20,
+    )
+
+    run_sct_integration(
+        adata_release,
+        batch_key="orig.ident",
+        n_features=15,
+        run_sct=False,
+    )
+    assert all(
+        "scale_data" in entry
+        for entry in adata_release.uns["sct"]["batch_models"].values()
+    )
+    summary = release_sct_integration_cache(adata_release, what="scale_data")
+    assert summary["what"] == "scale_data"
+    assert summary["n_batches"] == 2
+    assert summary["bytes_estimate"] > 0
+    assert all(
+        "scale_data" not in entry
+        for entry in adata_release.uns["sct"]["batch_models"].values()
+    )
+
+    out_release = integrate_rpca(
+        adata_release,
+        batch_key="orig.ident",
+        dims=10,
+        k_anchor=3,
+        k_weight=20,
+    )
+
+    np.testing.assert_allclose(
+        out_release.obsm["X_sct_integrated"],
+        out_ref.obsm["X_sct_integrated"],
+        rtol=1e-5,
+        atol=1e-5,
+    )

@@ -14,8 +14,17 @@ import numpy as np
 import pandas as pd
 import scipy.sparse as sps
 from anndata import AnnData
+from joblib import Parallel, cpu_count, delayed
 
 from ._sctransform import pack_sct_model, run_sctransform
+
+
+def _resolve_batch_n_jobs(batch_n_jobs: int) -> int:
+    if batch_n_jobs == 0:
+        raise ValueError("batch_n_jobs must be -1 (all CPUs) or >= 1.")
+    if batch_n_jobs < 0:
+        return cpu_count()
+    return int(batch_n_jobs)
 
 
 def _serialize_batch_model(
@@ -212,6 +221,141 @@ def _run_sctransform_on_counts(
     )
 
 
+def _fit_sct_batch_job(
+    batch_label: str,
+    counts,
+    var_names: list[str],
+    obs_names: list[str],
+    cell_attr: pd.DataFrame,
+    latent_data: Optional[pd.DataFrame],
+    cells_step1: Optional[Sequence[str]],
+    genes_step1: Optional[Sequence[str]],
+    batch_export: Optional[Union[str, Path]],
+    method: str,
+    clip_range: Optional[tuple[float, float]],
+    common_kwargs: dict[str, Any],
+) -> tuple[str, dict[str, Any], tuple[dict[str, Any], dict[str, Any]]]:
+    """Fit one batch SCT model (picklable worker for ``batch_n_jobs`` > 1)."""
+    n_obs = len(obs_names)
+    mini = AnnData(
+        X=counts,
+        obs=pd.DataFrame(index=obs_names),
+        var=pd.DataFrame(index=var_names),
+    )
+    assay_out, vst_out = _run_sctransform_on_counts(
+        counts,
+        mini,
+        cell_attr=cell_attr,
+        latent_data=latent_data,
+        cells_step1=cells_step1,
+        genes_step1=genes_step1,
+        backend=method,
+        r_vst_export_dir=batch_export,
+        **common_kwargs,
+    )
+    resolved_clip = clip_range or (
+        -np.sqrt(n_obs / 30),
+        np.sqrt(n_obs / 30),
+    )
+    batch_model = _serialize_batch_model(
+        vst_out,
+        resolved_clip,
+        assay_out["variable_features"].tolist(),
+        scale_data=assay_out.get("scale.data"),
+    )
+    return batch_label, batch_model, (assay_out, vst_out)
+
+
+def _run_sct_per_batch(
+    adata: AnnData,
+    *,
+    batch_key: str,
+    layer: Optional[str],
+    batch_n_jobs: int,
+    method: str,
+    subsample_indices: Optional[dict[str, dict[str, Sequence[str]]]],
+    r_vst_exports: Optional[dict[str, Union[str, Path]]],
+    vars_to_regress: Optional[Sequence[str]],
+    clip_range: Optional[tuple[float, float]],
+    common_kwargs: dict[str, Any],
+) -> tuple[dict[str, dict], dict[str, tuple[dict, dict]], set[str]]:
+    batch_labels = adata.obs[batch_key].astype(str)
+    batch_list = batch_labels.unique().tolist()
+    batch_models: dict[str, dict] = {}
+    per_batch: dict[str, tuple[dict, dict]] = {}
+    union_hvg: set[str] = set()
+
+    n_workers = _resolve_batch_n_jobs(batch_n_jobs)
+    use_parallel = n_workers > 1 and len(batch_list) > 1 and method != "r"
+    if use_parallel:
+        n_workers = min(n_workers, len(batch_list))
+        jobs = []
+        for batch_label in batch_list:
+            mask = batch_labels == batch_label
+            sub = adata[mask]
+            counts = sub.layers[layer] if layer is not None else sub.X
+            if sps.issparse(counts):
+                counts = counts.tocsr()
+            batch_subsample = (subsample_indices or {}).get(str(batch_label), {})
+            batch_export = (r_vst_exports or {}).get(str(batch_label)) if r_vst_exports else None
+            latent_data = sub.obs[list(vars_to_regress)].copy() if vars_to_regress else None
+            jobs.append(
+                delayed(_fit_sct_batch_job)(
+                    str(batch_label),
+                    counts,
+                    adata.var_names.to_list(),
+                    sub.obs_names.to_list(),
+                    sub.obs.copy(),
+                    latent_data,
+                    batch_subsample.get("cells_step1"),
+                    batch_subsample.get("genes_step1"),
+                    batch_export,
+                    method,
+                    clip_range,
+                    common_kwargs,
+                )
+            )
+        for batch_label, batch_model, per_batch_entry in Parallel(
+            n_jobs=n_workers, backend="loky"
+        )(jobs):
+            batch_models[batch_label] = batch_model
+            per_batch[batch_label] = per_batch_entry
+            union_hvg.update(per_batch_entry[0]["variable_features"].tolist())
+        return batch_models, per_batch, union_hvg
+
+    for batch_label in batch_list:
+        mask = batch_labels == batch_label
+        sub = adata[mask]
+        counts = sub.layers[layer] if layer is not None else sub.X
+        latent_data = sub.obs[list(vars_to_regress)].copy() if vars_to_regress else None
+        batch_subsample = (subsample_indices or {}).get(str(batch_label), {})
+        batch_export = (r_vst_exports or {}).get(str(batch_label)) if r_vst_exports else None
+        assay_out, vst_out = _run_sctransform_on_counts(
+            counts,
+            sub,
+            cell_attr=sub.obs.copy(),
+            latent_data=latent_data,
+            cells_step1=batch_subsample.get("cells_step1"),
+            genes_step1=batch_subsample.get("genes_step1"),
+            backend=method,
+            r_vst_export_dir=batch_export,
+            **common_kwargs,
+        )
+        resolved_clip = clip_range or (
+            -np.sqrt(sub.n_obs / 30),
+            np.sqrt(sub.n_obs / 30),
+        )
+        batch_models[batch_label] = _serialize_batch_model(
+            vst_out,
+            resolved_clip,
+            assay_out["variable_features"].tolist(),
+            scale_data=assay_out.get("scale.data"),
+        )
+        per_batch[batch_label] = (assay_out, vst_out)
+        union_hvg.update(assay_out["variable_features"].tolist())
+    return batch_models, per_batch, union_hvg
+
+
 def sctransform(
     adata: AnnData,
     *,
@@ -249,6 +393,7 @@ def sctransform(
     r_vst_export_dir: Optional[Union[str, Path]] = None,
     r_vst_exports: Optional[dict[str, Union[str, Path]]] = None,
     method: str = "python",
+    batch_n_jobs: int = 1,
 ) -> Optional[AnnData]:
     """
     Normalize UMI counts with SCTransform (Seurat 4.4.0).
@@ -286,6 +431,11 @@ def sctransform(
     r_vst_exports
         Per-batch export directories when using ``batch_key`` with
         ``method='r_step1'`` or ``method='r_fit'``.
+    batch_n_jobs
+        Parallel workers for per-batch SCT when ``batch_key`` is set.
+        ``1`` runs batches serially (default); ``-1`` uses all CPUs;
+        ``N > 1`` uses at most ``N`` workers (capped by batch count).
+        Ignored for ``method='r'`` (R subprocess stays serial).
     """
     if copy:
         adata = adata.copy()
@@ -363,40 +513,18 @@ def sctransform(
         if reference_sct_model is not None:
             raise ValueError("reference_sct_model is not supported with batch_key.")
         batch_labels = adata.obs[batch_key].astype(str)
-        batch_models: dict[str, dict] = {}
-        per_batch: dict[str, tuple[dict, dict]] = {}
-        union_hvg: set[str] = set()
-
-        for batch_label in batch_labels.unique():
-            mask = batch_labels == batch_label
-            sub = adata[mask]
-            counts = sub.layers[layer] if layer is not None else sub.X
-            latent_data = sub.obs[list(vars_to_regress)].copy() if vars_to_regress else None
-            batch_subsample = (subsample_indices or {}).get(str(batch_label), {})
-            batch_export = (r_vst_exports or {}).get(str(batch_label)) if r_vst_exports else None
-            assay_out, vst_out = _run_sctransform_on_counts(
-                counts,
-                sub,
-                cell_attr=sub.obs.copy(),
-                latent_data=latent_data,
-                cells_step1=batch_subsample.get("cells_step1"),
-                genes_step1=batch_subsample.get("genes_step1"),
-                backend=method,
-                r_vst_export_dir=batch_export,
-                **common_kwargs,
-            )
-            resolved_clip = clip_range or (
-                -np.sqrt(sub.n_obs / 30),
-                np.sqrt(sub.n_obs / 30),
-            )
-            batch_models[batch_label] = _serialize_batch_model(
-                vst_out,
-                resolved_clip,
-                assay_out["variable_features"].tolist(),
-                scale_data=assay_out.get("scale.data"),
-            )
-            per_batch[batch_label] = (assay_out, vst_out)
-            union_hvg.update(assay_out["variable_features"].tolist())
+        batch_models, per_batch, union_hvg = _run_sct_per_batch(
+            adata,
+            batch_key=batch_key,
+            layer=layer,
+            batch_n_jobs=batch_n_jobs,
+            method=method,
+            subsample_indices=subsample_indices,
+            r_vst_exports=r_vst_exports,
+            vars_to_regress=vars_to_regress,
+            clip_range=clip_range,
+            common_kwargs=common_kwargs,
+        )
 
         combined_hvg = sorted(union_hvg)
         if n_top_genes is not None and len(combined_hvg) > n_top_genes:
@@ -464,6 +592,7 @@ def sctransform(
             method=method,
         )
         adata.uns[key_added]["variable_features"] = combined_hvg
+        adata.uns[key_added]["params"]["batch_n_jobs"] = batch_n_jobs
         return None if inplace else adata
 
     counts = adata.layers[layer] if layer is not None else adata.X

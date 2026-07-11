@@ -3,13 +3,14 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from typing import Literal, Optional
 
 import numpy as np
 import pandas as pd
 from scipy.cluster.hierarchy import linkage
 from scipy.spatial.distance import squareform
 
-from .integrate_data import integrate_pair
+from .integrate_data import DEFAULT_WEIGHT_QUERY_CHUNK_SIZE, integrate_pair
 from ._xgboost_integration import integrate_pair_xgb
 
 
@@ -104,6 +105,9 @@ def integrate_batches_sample_tree(
     sd_weight: float = 1.0,
     dims: int = 30,
     n_trees: int = 50,
+    n_trees_weight: Optional[int] = None,
+    weight_query_chunk_size: int = DEFAULT_WEIGHT_QUERY_CHUNK_SIZE,
+    integration_dtype: Literal["float32", "float64"] = "float32",
     preserve_order: bool = False,
     correction_method: str = "seurat",
     xgb_n_delta_pcs: int = 20,
@@ -159,6 +163,9 @@ def integrate_batches_sample_tree(
                 sd_weight=sd_weight,
                 dims=dims,
                 n_trees=n_trees,
+                n_trees_weight=n_trees_weight,
+                weight_query_chunk_size=weight_query_chunk_size,
+                integration_dtype=integration_dtype,
             )
         merged = _IntegrateCluster(
             data=np.vstack([ref_obj.data, corrected_query]),
