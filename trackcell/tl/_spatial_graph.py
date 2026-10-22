@@ -195,6 +195,45 @@ def compute_neighborhood_mean(
     return M
 
 
+def _build_cosphi_directional_weights(
+    coords: np.ndarray,
+    weights: sps.csr_matrix,
+) -> sps.csr_matrix:
+    """Row-normalized directional weights: w_uv * cos(phi_uv) per spatial edge."""
+    coords = np.asarray(coords, dtype=np.float64)
+    weights = weights.tocsr()
+    n_obs = weights.shape[0]
+    rows: list[int] = []
+    cols: list[int] = []
+    data: list[float] = []
+
+    for u in range(n_obs):
+        start, end = weights.indptr[u], weights.indptr[u + 1]
+        if start == end:
+            rows.append(u)
+            cols.append(u)
+            data.append(1.0)
+            continue
+        nbr_cols = weights.indices[start:end]
+        nbr_w = weights.data[start:end]
+
+        dx = coords[nbr_cols, 0] - coords[u, 0]
+        dy = coords[nbr_cols, 1] - coords[u, 1]
+        phi = np.arctan2(dy, dx)
+        dir_w = nbr_w * np.cos(phi)
+        norm = np.abs(dir_w).sum()
+        if norm > 0:
+            dir_w = dir_w / norm
+        else:
+            dir_w = np.full_like(dir_w, 1.0 / len(dir_w))
+
+        rows.extend([u] * len(nbr_cols))
+        cols.extend(nbr_cols.tolist())
+        data.extend(dir_w.tolist())
+
+    return sps.csr_matrix((data, (rows, cols)), shape=(n_obs, n_obs))
+
+
 def compute_neighborhood_gradient_cosphi(
     X: ArrayLike,
     coords: np.ndarray,
@@ -210,34 +249,29 @@ def compute_neighborhood_gradient_cosphi(
 
     where phi_uv is the azimuth of neighbor v in u's local polar frame.
     """
-    coords = np.asarray(coords, dtype=np.float64)
     n_obs = coords.shape[0]
-    X_dense = _as_dense(X)
-    _, n_genes = X_dense.shape
-
     if k_gradient is not None:
         weights = truncate_weights_per_row(weights, k_gradient)
 
-    G = np.zeros((n_obs, n_genes), dtype=np.float64)
-    weights = weights.tocsr()
+    dir_weights = _build_cosphi_directional_weights(coords, weights)
 
-    for u in range(n_obs):
-        start, end = weights.indptr[u], weights.indptr[u + 1]
-        if start == end:
-            continue
-        nbr_cols = weights.indices[start:end]
-        nbr_w = weights.data[start:end]
+    if sps.issparse(X):
+        _, n_genes = X.shape
+        G = np.empty((n_obs, n_genes), dtype=np.float64)
+        for start in range(0, n_genes, chunk_size):
+            end = min(start + chunk_size, n_genes)
+            block = X[:, start:end]
+            if sps.issparse(block):
+                block = block.toarray()
+            G[:, start:end] = dir_weights @ block
+        return G
 
-        dx = coords[nbr_cols, 0] - coords[u, 0]
-        dy = coords[nbr_cols, 1] - coords[u, 1]
-        phi = np.arctan2(dy, dx)
-        dir_w = nbr_w * np.cos(phi)
-        dir_w /= np.abs(dir_w).sum() if np.abs(dir_w).sum() > 0 else 1.0
-
-        for g_start in range(0, n_genes, chunk_size):
-            g_end = min(g_start + chunk_size, n_genes)
-            G[u, g_start:g_end] = dir_w @ X_dense[nbr_cols, g_start:g_end]
-
+    X_dense = np.asarray(X, dtype=np.float64)
+    _, n_genes = X_dense.shape
+    G = np.empty((n_obs, n_genes), dtype=np.float64)
+    for start in range(0, n_genes, chunk_size):
+        end = min(start + chunk_size, n_genes)
+        G[:, start:end] = dir_weights @ X_dense[:, start:end]
     return G
 
 
@@ -362,3 +396,110 @@ def expr_k_neighbors(n_obs: int, k_expr: Optional[int] = None) -> int:
     if n_obs <= 1:
         return 2
     return max(15, int(np.floor(np.log2(n_obs))))
+
+
+def _row_normalize(mat: sps.csr_matrix) -> sps.csr_matrix:
+    """Return a copy of ``mat`` with each row normalized to sum to 1."""
+    mat = mat.tocsr().astype(np.float64)
+    row_sums = np.asarray(mat.sum(axis=1)).ravel()
+    norm = np.divide(1.0, row_sums, out=np.zeros_like(row_sums), where=row_sums > 0)
+    out = mat.copy()
+    for u in range(mat.shape[0]):
+        start, end = out.indptr[u], out.indptr[u + 1]
+        if start < end:
+            out.data[start:end] *= norm[u]
+    return out.tocsr()
+
+
+def compute_neighborhood_multi_hop(
+    X: ArrayLike,
+    weights: sps.csr_matrix,
+    n_layers: int = 3,
+    chunk_size: int = 500,
+) -> np.ndarray:
+    """
+    Concatenated neighborhood means at hops 1..``n_layers``.
+
+    hop_k = W^k @ X, where W is the row-normalized spatial weight matrix and
+    W^k is the k-step transition matrix (W @ W @ ... @ W). This mirrors
+    CellCharter's multi-hop graph-diffusion aggregation, but reuses the
+    Gaussian-weighted graph instead of a binary adjacency.
+
+    Parameters
+    ----------
+    X
+        (n_obs, n_genes) expression matrix (dense or sparse).
+    weights
+        Row-normalized spatial weight matrix.
+    n_layers
+        Number of neighborhood hops to aggregate (1 = plain mean).
+    chunk_size
+        Genes per chunk for memory control.
+
+    Returns
+    -------
+    np.ndarray
+        (n_obs, n_layers * n_genes) concatenated hop means.
+    """
+    n_layers = int(n_layers)
+    if n_layers < 1:
+        raise ValueError("n_layers must be >= 1.")
+    hops: list[np.ndarray] = []
+    wk = weights.tocsr().astype(np.float64)
+    for layer in range(n_layers):
+        hops.append(compute_neighborhood_mean(X, wk, chunk_size=chunk_size))
+        if layer + 1 < n_layers:
+            wk = (wk @ weights.tocsr()).tocsr()
+    return np.hstack(hops).astype(np.float32)
+
+
+def remove_long_links(
+    coords: np.ndarray,
+    weights: sps.csr_matrix,
+    distance_percentile: float = 99.0,
+) -> sps.csr_matrix:
+    """
+    Trim spatial-graph edges longer than a distance percentile (CellCharter-style).
+
+    Edges whose Euclidean length exceeds ``distance_percentile`` of all positive
+    edge distances are dropped, and rows are re-normalized. This prevents kNN
+    edges from bridging across tissue gaps.
+
+    Parameters
+    ----------
+    coords
+        (n_obs, 2) spatial coordinates.
+    weights
+        Row-normalized spatial weight matrix (must share the same ordering as
+        ``coords``).
+    distance_percentile
+        Percentile of positive edge distances used as the cutoff. Default 99.0
+        trims the longest 1% of edges.
+
+    Returns
+    -------
+    scipy.sparse.csr_matrix
+        A new row-normalized weight matrix.
+    """
+    coords = np.asarray(coords, dtype=np.float64)
+    weights = weights.tocsr()
+    coo = weights.tocoo()
+    rows, cols = coo.row, coo.col
+    if rows.size == 0:
+        return weights.copy()
+
+    edge_d = np.linalg.norm(coords[rows] - coords[cols], axis=1)
+    # Self loops carry weight 1.0; genuine edges carry weight < 1 after row norm.
+    is_self = coo.data >= 1.0 - 1e-12
+    real = ~is_self
+    if not np.any(real):
+        return weights.copy()
+
+    threshold = float(np.percentile(edge_d[real], distance_percentile))
+    keep = np.ones_like(coo.data, dtype=bool)
+    keep[real & (edge_d > threshold)] = False
+
+    trimmed = sps.csr_matrix(
+        (coo.data[keep], (rows[keep], cols[keep])), shape=weights.shape
+    )
+    return _row_normalize(trimmed)

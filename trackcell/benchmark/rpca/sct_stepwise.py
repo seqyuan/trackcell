@@ -20,7 +20,7 @@ from trackcell.benchmark.rpca.data import (
     r_export_dir,
 )
 from trackcell.benchmark.rpca.metrics import jaccard, matrix_gene_corr
-from trackcell.tl._r_sctransform import normalize_r_model_pars
+from trackcell.benchmark.sct.r_exports import normalize_r_model_pars
 from trackcell.tl._sctransform import get_residuals, vst
 from trackcell.tl._sctransform_v2 import resolve_min_variance
 from trackcell.tl.integration.prep_sct import prep_sct_integration

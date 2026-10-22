@@ -27,7 +27,7 @@ from trackcell.benchmark.sct.metrics import (
     jaccard,
     summarize_distribution,
 )
-from trackcell.tl._r_sctransform import (
+from trackcell.benchmark.sct.r_exports import (
     align_r_gmean_series,
     align_r_model_pars,
     normalize_r_model_pars,

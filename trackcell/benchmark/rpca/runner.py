@@ -236,7 +236,7 @@ def _run_e2e_native(
     seed: int,
     *,
     benchmark_root: Path = RPCA_BENCHMARK_ROOT,
-    sct_method: str = "auto",
+    v2_backend: str = "python",
 ) -> dict[str, Any]:
     adata = load_merged_adata_native(benchmark_root=benchmark_root)
 
@@ -257,9 +257,7 @@ def _run_e2e_native(
         integration_dtype=INTEGRATION_DTYPE,
         seed=seed,
         sct_seed=seed,
-        sct_method=sct_method,
-        r_vst_export_root=benchmark_root,
-        r_vst_export_seed=seed,
+        sct_v2_backend=v2_backend,
         run_sct=True,
         copy=True,
     )

@@ -5,8 +5,9 @@ Abstract
 --------
 
 **trackcell** implements Seurat-compatible **SCTransform v2** (``vst.flavor='v2'``)
-with native **pyglmGamPoi** offset fitting, kernel-smoothed dispersion
-regularization, and Pearson residual HVG selection. We evaluate parity against
+with a bundled pure-Python NB offset fitter and an explicitly selectable optional
+**pyglmGamPoi** backend, followed by kernel-smoothed dispersion regularization
+and Pearson residual HVG selection. We evaluate parity against
 ``sctransform::vst`` on three GSE288946 10x samples (GSM8779707–709) under
 stringent QC (**≥100 cells per gene**, **≥50 genes per cell**).
 
@@ -29,8 +30,18 @@ SCT v2 is the default normalization for Seurat 4/5 single-sample workflows and
 the front end of **SCT + RPCA** integration. Users need confidence that a Python
 ``AnnData`` pipeline reproduces Seurat HVGs and residuals without an R runtime.
 
-trackcell replaces the R subprocess path with **pyglmGamPoi** while keeping
-Seurat-compatible ``uns['sct']`` batch models for integration.
+Trackcell has no runtime R subprocess path. The default backend is bundled pure
+Python; the historical results below use the explicitly selected
+**pyglmGamPoi** backend. Both retain Seurat-compatible ``uns['sct']`` batch
+models for integration.
+
+Additional data point (AA/A04, 2026-07-25)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+On a second dataset of 3 × 10x samples (27,129 cells, 36,912 genes, no QC
+filtering), the bundled pure Python ``v2_backend='python'`` achieves **SCT HVG
+Jaccard 0.939** vs Seurat R at 1.83× the speed (175s vs 320s). See
+:doc:`rpca_evaluation` for the full integration benchmark.
 
 Benchmark design
 ----------------
@@ -124,7 +135,7 @@ Reproduction
 
 Outputs:
 
-- ``/Volumes/process/tmp/tcl_test/steps/sct_benchmark/r/seed_*/GSM*/``
+- ``<benchmark-root>/steps/sct_benchmark/r/seed_*/GSM*/``
 - ``docs/source/_generated/sct_benchmark_results.json``
 - ``docs/source/_generated/sct_benchmark_table.rst``
 

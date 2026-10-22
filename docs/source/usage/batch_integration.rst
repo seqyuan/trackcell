@@ -194,8 +194,10 @@ Requires ``harmonypy`` (``pip install harmonypy``).
 
 For spatial clustering that already supports Harmony (``tcl.tl.spatial_cluster``),
 see :doc:`spatial_clustering` — that path applies Harmony to **spatial embeddings**,
-not SCT prep residuals. Use the recipe above when integrating **expression** across
-slices before standard scRNA-seq-style analysis.
+not SCT prep residuals. For multi-slice spatial domain discovery, prefer
+``spatial_cluster(..., expression_source='sct_prep')`` after ``run_sct_integration``
+(see :doc:`spatial_clustering`). Use the Harmony recipe below when integrating
+**expression** across slices before standard scRNA-seq-style analysis.
 
 SCT + BBKNN
 -----------
@@ -307,25 +309,23 @@ Performance knobs (RPCA path)
 Benchmark / Seurat parity mode — pass ``n_trees_weight=50``,
 ``integration_dtype='float64'``. See :doc:`../benchmark/rpca_evaluation`.
 
-R export bridge (optional)
---------------------------
+Explicit SCT v2 backend
+-----------------------
 
-When R ``SCTransform`` exports exist (e.g. from
-``scripts/run_rpca_benchmark.py --export-r``), hybrid parity mode injects R
-step-1 subsampling and cached residuals:
+SCT v2 uses the bundled pure-Python NB offset fitter by default. The optional
+``pyglmGamPoi`` backend is used only when explicitly selected:
 
 .. code-block:: python
 
    tcl.tl.integrate_sct_rpca(
        adata,
        batch_key="orig.ident",
-       r_vst_export_root="/path/to/tcl_test",
-       r_vst_export_seed=1448145,
-       inject_r_scale_data=True,
+       sct_v2_backend="pyglmGamPoi",
    )
 
-See :doc:`../benchmark/rpca_evaluation` for measured parity with and without
-R exports.
+If ``pyglmGamPoi`` is not installed, explicit selection raises an error. Trackcell
+does not automatically switch backends, so results remain reproducible across
+environments. Existing R exports are used only by the offline benchmark suite.
 
 Further reading
 ---------------

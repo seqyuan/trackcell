@@ -17,6 +17,7 @@ from trackcell.benchmark.sct.data import (
     load_benchmark_umi,
     r_export_dir,
 )
+from trackcell.tl._sctransform_v2 import pyglmGamPoi_available
 from .sct_benchmark_data import (
     BENCHMARK_ROOT,
     DEFAULT_SAMPLE,
@@ -24,12 +25,13 @@ from .sct_benchmark_data import (
     load_tcl_filtered_umi,
     verify_seurat_parity_vs_r,
 )
-from trackcell.tl._r_sctransform import (
+from trackcell.benchmark.sct.r_exports import (
     align_r_gene_list,
     align_r_gmean_series,
     align_r_model_pars,
     load_r_vst_export,
     normalize_r_model_pars,
+    r_glmgampoi_available,
 )
 from trackcell.tl._sctransform import (
     _is_outlier,
@@ -87,7 +89,7 @@ def test_robust_scale_binned_matches_length():
 
 
 @pytest.mark.skipif(
-    not __import__("trackcell.tl._r_sctransform", fromlist=["glmGamPoi_r_available"]).glmGamPoi_r_available(),
+    not r_glmgampoi_available(),
     reason="R not available for ksmooth reference",
 )
 def test_ksmooth_matches_r_reference():
@@ -204,42 +206,6 @@ def test_residuals_match_r_model_pars_fit():
     assert np.nanmedian(np.abs(py_mat - r_mat)) < 1e-10
 
 
-@pytest.mark.skipif(
-    not _benchmark_r_export_dir().joinpath("model_pars_step1.csv").exists(),
-    reason="R sct_benchmark export missing",
-)
-def test_load_r_vst_export_and_r_fit_hvg():
-    """R model_pars_fit export -> Python residuals should match R HVG (~1.0 Jaccard)."""
-    from trackcell.tl.sctransform import sctransform
-
-    sample = DEFAULT_SAMPLE
-    export_dir = _benchmark_r_export_dir(sample)
-    exported = load_r_vst_export(export_dir)
-    assert exported["model_pars_step1"] is not None
-    assert exported["model_pars_fit"] is not None
-    assert len(exported["cells_step1"]) > 0
-    assert len(exported["genes_step1"]) > 0
-    assert exported.get("genes_log_gmean") is not None
-    assert exported.get("genes_log_gmean_step1") is not None
-
-    adata = _load_benchmark_adata(sample)
-
-    sctransform(
-        adata,
-        layer="counts",
-        n_top_genes=3000,
-        method="r_fit",
-        r_vst_export_dir=export_dir,
-        vst_flavor="v2",
-        seed=REF_SEED,
-        do_correct_umi=False,
-        res_clip_range=_r_vst_res_clip_range(adata.n_obs),
-    )
-    py_hvg = set(adata.uns["sct"]["variable_features"])
-    r_hvg = set((export_dir / "hvg_top3000.txt").read_text().strip().split("\n"))
-    jaccard = len(py_hvg & r_hvg) / len(py_hvg | r_hvg)
-    assert jaccard > 0.99
-
 
 @pytest.mark.skipif(
     not Path("/Volumes/process/tmp/tcl_test/steps/r_sct_reg_debug/GSM8779707/summary.json").exists(),
@@ -344,11 +310,12 @@ def test_seurat_parity_loader_matches_r_meta():
 
 
 @pytest.mark.skipif(
-    not _benchmark_r_export_dir().joinpath("hvg_top3000.txt").exists(),
-    reason="R sct_benchmark HVG export missing",
+    not _benchmark_r_export_dir().joinpath("hvg_top3000.txt").exists()
+    or not pyglmGamPoi_available(),
+    reason="R SCT export or pyglmGamPoi missing",
 )
-def test_native_hvg_jaccard_gap_documented():
-    """Native pyglmGamPoi path HVG parity vs R sct_benchmark (100 cells/gene QC)."""
+def test_pyglm_hvg_jaccard_gap_documented():
+    """Explicit pyglmGamPoi backend HVG parity vs the R SCT benchmark."""
     from trackcell.tl._sctransform import vst
 
     sample = DEFAULT_SAMPLE
@@ -362,6 +329,7 @@ def test_native_hvg_jaccard_gap_documented():
         cells,
         cell_attr=cell_attr,
         vst_flavor="v2",
+        v2_backend="pyglmGamPoi",
         cells_step1=pd.Index(exported["cells_step1"]).intersection(cells),
         genes_step1=pd.Index(exported["genes_step1"]).intersection(genes),
         return_corrected_umi=False,

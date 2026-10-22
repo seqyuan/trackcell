@@ -25,6 +25,10 @@ Or add it to a toctree:
 
 - Keep notebooks focused on a single topic
 - Add markdown cells to explain the code
-- Ensure all outputs are cleared before committing (or set `nbsphinx_execute = 'never'` in conf.py)
+- Keep the executed outputs in the notebook: the docs build uses
+  `nbsphinx_execute = 'never'`, so the committed outputs are what readers see
+- Add a gallery thumbnail to `docs/source/_static/notebooks/` and register it in
+  `nbsphinx_thumbnails` in `conf.py`
+- Run the notebook end-to-end before committing so no cells contain tracebacks
 - Test notebooks locally before adding to documentation
 

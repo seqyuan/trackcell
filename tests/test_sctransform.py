@@ -1,6 +1,7 @@
 """Tests for SCTransform normalization."""
 
 import numpy as np
+import pandas as pd
 import pytest
 import scipy.sparse as sps
 from anndata import AnnData
@@ -202,11 +203,11 @@ def test_sctransform_deviance_residuals():
     assert np.isfinite(adata.obsm["X_sct"]).all()
 
 
-def test_sctransform_vst_flavor_v2():
-    from trackcell.tl._sctransform_v2 import glmGamPoi_offset_available
+def test_sctransform_vst_flavor_v2_uses_python_by_default(monkeypatch):
+    """Default v2 remains pure Python even when pyglmGamPoi is installed."""
+    import trackcell.tl._sctransform_v2 as sct_v2
 
-    if not glmGamPoi_offset_available():
-        pytest.skip("SCT v2 requires pyglmGamPoi or R glmGamPoi")
+    monkeypatch.setattr(sct_v2, "pyglmGamPoi_available", lambda: True)
     adata = _make_count_adata(n_cells=80, n_genes=100, seed=21)
     sctransform(
         adata,
@@ -217,7 +218,70 @@ def test_sctransform_vst_flavor_v2():
         seed=22,
     )
     assert adata.uns["sct"]["params"]["vst_flavor"] == "v2"
+    assert adata.uns["sct"]["params"]["v2_backend"] == "python"
+    assert adata.uns["sct"]["params"]["vst_method"] == "nb_offset"
     assert np.isfinite(adata.obsm["X_sct"]).all()
+
+
+def test_python_v2_offset_handles_multiple_genes():
+    from trackcell.tl._sctransform_v2 import _fit_nb_offset_py
+
+    rng = np.random.default_rng(7)
+    n = 400
+    umi = np.round(np.exp(rng.normal(np.log(3000), 0.4, n)))
+    mu = np.exp(np.log(2e-4) + np.log(umi))
+    y = np.stack(
+        [
+            rng.negative_binomial(1.2, 1.2 / (1.2 + mu)),
+            rng.negative_binomial(2.0, 2.0 / (2.0 + mu)),
+        ]
+    ).astype(float)
+    intercept, theta = _fit_nb_offset_py(y, np.log10(umi))
+    assert intercept.shape == theta.shape == (2,)
+    assert np.isfinite(intercept).all()
+    assert np.all(theta > 0)
+    # R MASS::glm.nb reference for the first generated gene.
+    assert intercept[0] == pytest.approx(-8.707863138517, rel=1e-4)
+    assert theta[0] == pytest.approx(2.215043455562, rel=1e-3)
+
+
+def test_sctransform_rejects_unknown_v2_backend():
+    adata = _make_count_adata(n_cells=20, n_genes=30, seed=22)
+    with pytest.raises(ValueError, match="v2_backend"):
+        sctransform(adata, vst_flavor="v2", v2_backend="auto")
+
+
+def test_explicit_pyglm_backend_requires_dependency(monkeypatch):
+    import trackcell.tl._sctransform_v2 as sct_v2
+
+    monkeypatch.setattr(sct_v2, "pyglmGamPoi_available", lambda: False)
+    adata = _make_count_adata(n_cells=20, n_genes=30, seed=23)
+    with pytest.raises(RuntimeError, match="requires the optional pyglmGamPoi"):
+        sctransform(adata, vst_flavor="v2", v2_backend="pyglmGamPoi")
+
+
+def test_hvg_residual_variance_is_independent_of_scale_data_clip():
+    tight = _make_count_adata(n_cells=50, n_genes=60, seed=24)
+    wide = tight.copy()
+    common = dict(
+        n_top_genes=20,
+        n_cells=30,
+        n_genes=40,
+        vst_flavor="v2",
+        v2_backend="python",
+        seed=25,
+    )
+    sctransform(tight, clip_range=(-1.0, 1.0), **common)
+    sctransform(wide, clip_range=(-40.0, 40.0), **common)
+    tight_attr = pd.DataFrame(tight.uns["sct"]["gene_attr"]).T
+    wide_attr = pd.DataFrame(wide.uns["sct"]["gene_attr"]).T
+    np.testing.assert_allclose(
+        tight_attr["residual_variance"],
+        wide_attr["residual_variance"],
+        rtol=1e-12,
+        atol=1e-12,
+    )
+    assert np.abs(tight.obsm["X_sct"]).max() <= 1.0
 
 
 def test_sctransform_batch_key():
@@ -263,7 +327,9 @@ def test_sctransform_batch_key_parallel_matches_serial():
     assert set(adata_serial.uns["sct"]["batch_models"]) == set(
         adata_parallel.uns["sct"]["batch_models"]
     )
-    assert adata_serial.uns["sct"]["variable_features"] == adata_parallel.uns["sct"]["variable_features"]
+    assert adata_serial.uns["sct"]["variable_features"] == adata_parallel.uns["sct"][
+        "variable_features"
+    ]
     np.testing.assert_allclose(
         adata_serial.obsm["X_sct"],
         adata_parallel.obsm["X_sct"],
@@ -277,7 +343,14 @@ def test_sctransform_batch_n_jobs_invalid():
     adata = _make_count_adata(n_cells=40, n_genes=50, seed=33)
     adata.obs["orig.ident"] = "A"
     with pytest.raises(ValueError, match="batch_n_jobs"):
-        sctransform(adata, batch_key="orig.ident", batch_n_jobs=0, n_top_genes=5, n_cells=20, n_genes=20)
+        sctransform(
+            adata,
+            batch_key="orig.ident",
+            batch_n_jobs=0,
+            n_top_genes=5,
+            n_cells=20,
+            n_genes=20,
+        )
 
 
 def test_select_integration_features_batch():
@@ -302,11 +375,12 @@ def test_select_integration_features_batch():
     assert all(g in adata.var_names for g in features)
 
 
-def test_glmGamPoi_r_available():
-    from trackcell.tl._r_sctransform import glmGamPoi_r_available
+def test_glmGamPoi_r_available_removed():
+    """R bridge removed — shanuz-inspired pure-Python v2 is always available."""
+    import importlib
 
-    # Informational: should be True in conda `st` environments.
-    assert isinstance(glmGamPoi_r_available(), bool)
+    with pytest.raises(ModuleNotFoundError):
+        importlib.import_module("trackcell.tl._r_sctransform")
 
 
 def test_pyglmGamPoi_available():
@@ -316,7 +390,9 @@ def test_pyglmGamPoi_available():
 
 
 @pytest.mark.skipif(
-    not __import__("trackcell.tl._sctransform_v2", fromlist=["pyglmGamPoi_available"]).pyglmGamPoi_available(),
+    not __import__(
+        "trackcell.tl._sctransform_v2", fromlist=["pyglmGamPoi_available"]
+    ).pyglmGamPoi_available(),
     reason="pyglmGamPoi not installed",
 )
 def test_sctransform_vst_flavor_v2_pyglmGamPoi():
@@ -327,28 +403,12 @@ def test_sctransform_vst_flavor_v2_pyglmGamPoi():
         n_cells=40,
         n_genes=50,
         vst_flavor="v2",
+        v2_backend="pyglmGamPoi",
         seed=30,
     )
     assert adata.uns["sct"]["params"]["vst_flavor"] == "v2"
     assert np.isfinite(adata.obsm["X_sct"]).all()
 
-
-@pytest.mark.skipif(
-    not __import__("trackcell.tl._r_sctransform", fromlist=["glmGamPoi_r_available"]).glmGamPoi_r_available(),
-    reason="R glmGamPoi not available",
-)
-def test_sctransform_vst_flavor_v2_glmGamPoi():
-    adata = _make_count_adata(n_cells=80, n_genes=100, seed=27)
-    sctransform(
-        adata,
-        n_top_genes=15,
-        n_cells=40,
-        n_genes=50,
-        vst_flavor="v2",
-        seed=28,
-    )
-    assert adata.uns["sct"]["params"]["vst_flavor"] == "v2"
-    assert np.isfinite(adata.obsm["X_sct"]).all()
 
 
 def test_sctransform_model_use_poisson():
@@ -365,32 +425,6 @@ def test_sctransform_model_use_poisson():
         seed=20,
     )
     assert adata.uns["sct"]["params"]["model_use"] == "poisson"
-    assert np.isfinite(adata.obsm["X_sct"]).all()
-
-
-def test_sctransform_method_r():
-    from trackcell.tl._r_sctransform import vst_r_available
-
-    if not vst_r_available():
-        pytest.skip("R sctransform backend unavailable")
-
-    adata = _make_count_adata(n_cells=200, n_genes=500, seed=33)
-    try:
-        sctransform(
-            adata,
-            n_top_genes=50,
-            n_cells=150,
-            n_genes=200,
-            vst_flavor="v2",
-            seed=42,
-            method="r",
-        )
-    except RuntimeError as exc:
-        if "No variable features" in str(exc):
-            pytest.skip("toy data insufficient for v2 R vst")
-        raise
-    assert adata.uns["sct"]["params"]["method"] == "r"
-    assert adata.uns["sct"]["params"]["sct_method"] == "r.vst"
     assert np.isfinite(adata.obsm["X_sct"]).all()
 
 

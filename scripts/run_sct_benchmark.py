@@ -30,7 +30,7 @@ from trackcell.benchmark.sct import (  # noqa: E402
     write_sct_benchmark_docs,
 )
 
-RSCRIPT = REPO / "trackcell" / "tl" / "rscripts" / "export_sct_benchmark_r.R"
+RSCRIPT = REPO / "trackcell" / "benchmark" / "sct" / "export_sct_benchmark_r.R"
 ATA = Path("/Volumes/data/GOPATH/bin/ata")
 
 

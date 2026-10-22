@@ -15,7 +15,7 @@ from .sct_benchmark_data import (
     load_tcl_filtered_adata,
     load_tcl_filtered_umi,
 )
-from trackcell.tl._r_sctransform import (
+from trackcell.benchmark.sct.r_exports import (
     align_r_gene_list,
     coerce_genes_log_gmean,
     load_r_vst_export,

@@ -9,7 +9,7 @@ import numpy as np
 import pandas as pd
 from anndata import AnnData
 
-from .._r_sctransform import resolve_gene_alias
+from .._gene_utils import resolve_gene_alias
 from ._xgboost_integration import select_integration_features_xgb
 
 

@@ -161,9 +161,9 @@ Remaining gaps
    * - Gap
      - Magnitude
      - Mitigation
-   * - Native SCT HVG vs R (no export)
+   * - Native SCT HVG vs R (historical benchmark)
      - **~0.92** Jaccard
-     - Use ``r_vst_export_root`` + step-1 injection, or accept ~8% HVG drift
+     - Re-run the offline golden benchmark after SCT fitter changes
    * - E2E feature list vs R
      - **0.929** Jaccard
      - Follows HVG drift; 1926/2000 genes shared
@@ -226,16 +226,85 @@ Deployment modes
 
    * - Mode
      - API
-     - Expected parity
-   * - **Hybrid (recommended)**
-     - ``integrate_sct_rpca(..., r_vst_export_root=...)``
-     - Prep **1.0**, integrate **~0.96**
-   * - **Pure Python**
-     - ``integrate_sct_rpca`` without exports
-     - Integrate **~0.89–0.95**; faster, no R dependency
+     - Notes
+   * - **Pure Python (default)**
+     - ``integrate_sct_rpca(..., sct_v2_backend='python')``
+     - No runtime R dependency; deterministic backend selection
+   * - **pyglmGamPoi (optional)**
+     - ``integrate_sct_rpca(..., sct_v2_backend='pyglmGamPoi')``
+     - Requires the optional package; selected explicitly
    * - **SCT + Harmony / BBKNN**
      - ``run_sct_integration`` only
-     - No Seurat RPCA benchmark; see :doc:`../usage/batch_integration`
+     - See :doc:`../usage/batch_integration`
+
+The former hybrid R-export injection mode is retained here only as a historical
+benchmark result. It is no longer exposed by the production API; R artifacts are
+read solely by the offline benchmark suite.
+
+Project AA/A04 benchmark (2026-07-25)
+-------------------------------------
+
+A second, independent dataset confirms the GSE288946 findings:
+
+* **Project**: AA/A04 — 3 × 10x PBMC-like samples
+* **Scale**: 27,129 cells × 36,912 common genes (no QC filtering)
+* **Backend**: pure Python (``v2_backend='python'``, ``n_trees_weight=50``)
+
+.. list-table::
+   :header-rows: 1
+   :widths: 30 18 18 34
+
+   * - Metric
+     - Trackcell / R
+     - GSE288946 ref
+     - Notes
+   * - SCT HVG Jaccard (median)
+     - **0.939**
+     - 0.918
+     - Pure Python backend on 27k cells; no QC filtering
+   * - ``SelectIntegrationFeatures``
+     - **0.933**
+     - 0.929
+     - 1931/2000 genes shared
+   * - ``PrepSCTIntegration``
+     - **0.988**
+     - ~1.0
+     - Gene correlation on 27,129 cells
+   * - Anchor count ratio
+     - **0.989**
+     - ~0.99
+     - 8,004 (Py) vs 8,096 (R)
+   * - SCT runtime (Py vs R)
+     - **175s vs 320s**
+     - —
+     - 1.83× faster
+
+.. list-table::
+   :header-rows: 1
+   :widths: 28 18 24 30
+
+   * - Phase
+     - Trackcell
+     - Seurat R
+     - Notes
+   * - SCT (3 batches)
+     - 174.8 s
+     - 319.8 s
+     - 3 × 3,000 HVG; Python 1.83× faster
+   * - Anchor finding
+     - — (in RPCA)
+     - 35.0 s
+     - Annoy vs exact NN comparison pending
+   * - IntegrateData
+     - — (in RPCA)
+     - 100.0 s
+     - Python total RPCA 1,346.9 s
+   * - **SCT + RPCA total**
+     - **1,521.7 s**
+     - **~455 s**
+     - R faster for RPCA; total includes Python weight construction
+
+Result files: ``<benchmark-root>/SCTRPCAbench/report.json``.
 
 Memory vs parity
 ~~~~~~~~~~~~~~~~
@@ -249,7 +318,7 @@ See :doc:`../usage/batch_integration` for explicit one-liners.
 Regenerate
 ----------
 
-Requires GSE288946 data under ``/Volumes/process/tmp/tcl_test/data/`` and R with
+Requires GSE288946 data under ``<benchmark-root>/data/`` and R with
 Seurat + sctransform (``st`` conda env recommended; needs **glmGamPoi**).
 
 .. code-block:: bash
@@ -274,6 +343,6 @@ Implementation references
 - Integration SCT stepwise: ``trackcell/benchmark/rpca/sct_stepwise.py``
 - Split integration API: ``trackcell/tl/integration/sct_integration.py``,
   ``trackcell/tl/integration/rpca_integration.py``
-- R export: ``trackcell/tl/rscripts/export_rpca_benchmark_r.R``
+- R export: ``trackcell/benchmark/rpca/export_rpca_benchmark_r.R``
 - CLI: ``scripts/run_rpca_benchmark.py``
 - Usage: :doc:`../usage/batch_integration`

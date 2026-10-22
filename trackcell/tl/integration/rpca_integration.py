@@ -179,7 +179,10 @@ def integrate_rpca(
             "preserve_order": preserve_order,
             "normalization.method": "SCT",
             "reduction": "rpca",
-            "sct_method": adata.uns.get(sct_key, {}).get("params", {}).get("method"),
+            "sct_method": adata.uns.get(sct_key, {}).get("params", {}).get("vst_method"),
+            "sct_v2_backend": adata.uns.get(sct_key, {}).get("params", {}).get(
+                "v2_backend"
+            ),
             "xgb_n_delta_pcs": xgb_n_delta_pcs,
             "xgb_n_estimators": xgb_n_estimators,
             "xgb_max_depth": xgb_max_depth,

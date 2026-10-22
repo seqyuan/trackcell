@@ -12,6 +12,16 @@ from .spatial_cluster import (
     yard_cluster,
     yard_embed,
 )
+from ._nhood import (
+    connected_components,
+    diff_nhood_enrichment,
+    nhood_enrichment,
+)
+from ._autores import (
+    select_resolution,
+    sweep_resolutions,
+)
+from ._spatial_graph import remove_long_links
 from .sctransform import pack_sct_model, sctransform
 from .integration import (
     integrate_rpca,
@@ -50,6 +60,12 @@ __all__ = [
     "neighborhood_features",
     "yard_embed",
     "yard_cluster",
+    "connected_components",
+    "nhood_enrichment",
+    "diff_nhood_enrichment",
+    "select_resolution",
+    "sweep_resolutions",
+    "remove_long_links",
     "dbscan_slice_labels",
     "spatial_slice_cluster",
     "spatial_colony_cluster",

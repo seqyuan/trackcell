@@ -6,8 +6,10 @@ import scipy.sparse as sps
 from anndata import AnnData
 
 from trackcell.tl._spatial_graph import (
+    _build_cosphi_directional_weights,
     build_spatial_weights,
     compute_neighborhood_gradient,
+    compute_neighborhood_gradient_cosphi,
     compute_neighborhood_mean,
     mix_embeddings,
 )
@@ -160,3 +162,122 @@ def test_sparse_expression_input():
     adata = _make_ring_adata(n_per_ring=12, n_genes=25)
     adata.X = sps.csr_matrix(adata.X)
     spatial_cluster(adata, mode="celltype", preprocess=False, k_spatial=5, n_pcs=5)
+
+
+def test_auto_mode_computes_neighborhood_features_once(monkeypatch):
+    pytest.importorskip("leidenalg")
+    import importlib
+
+    adata = _make_ring_adata(n_per_ring=25, n_genes=40)
+    calls = {"n": 0}
+    sc_mod = importlib.import_module("trackcell.tl.spatial_cluster")
+    orig = sc_mod.compute_neighborhood_mean
+
+    def counted(X, weights, chunk_size=500):
+        calls["n"] += 1
+        return orig(X, weights, chunk_size=chunk_size)
+
+    monkeypatch.setattr(sc_mod, "compute_neighborhood_mean", counted)
+    sc_mod.spatial_cluster(
+        adata, mode="auto", preprocess=False, k_spatial=8, n_pcs=10, resolution=0.5
+    )
+    assert calls["n"] == 1
+    assert "yardcluster_celltype" in adata.obs
+    assert "yardcluster_domain" in adata.obs
+
+
+def test_expression_source_sct_prep():
+    pytest.importorskip("leidenalg")
+    adata = _make_ring_adata(n_per_ring=20, n_genes=30)
+    n_feat = 15
+    genes = list(adata.var_names[:n_feat])
+    adata.obsm["X_sct_prep"] = adata.X[:, :n_feat].copy()
+    adata.uns["sct_prep"] = {"anchor_features": genes, "batch_key": "ring"}
+
+    with pytest.warns(UserWarning, match="preprocess=True ignored"):
+        spatial_cluster(
+            adata,
+            mode="celltype",
+            expression_source="sct_prep",
+            preprocess=True,
+            k_spatial=6,
+            n_pcs=8,
+            resolution=0.5,
+        )
+
+    assert "yardcluster" in adata.obs
+    assert adata.uns["yardcluster_params"]["expression_source"] == "sct_prep"
+
+
+def test_expression_source_sct_integrated_smoke():
+    pytest.importorskip("leidenalg")
+    adata = _make_ring_adata(n_per_ring=25, n_genes=40)
+    adata.obs["batch"] = ["A"] * 25 + ["B"] * 25
+    n = adata.n_obs
+    g = 20
+    adata.obsm["X_sct_prep"] = np.random.default_rng(0).normal(size=(n, g)).astype(np.float32)
+    adata.obsm["X_sct_integrated"] = np.random.default_rng(1).normal(size=(n, 10)).astype(np.float32)
+    adata.uns["sct_prep"] = {"anchor_features": [f"g{i}" for i in range(g)]}
+
+    spatial_cluster(
+        adata,
+        mode="celltype",
+        batch_key="batch",
+        expression_source="sct_integrated",
+        integrate="bbknn",
+        use_gradient=False,
+        merge_clusters=False,
+        preprocess=False,
+        k_spatial=6,
+        n_pcs=8,
+        resolution=0.5,
+    )
+    assert "yardcluster" in adata.obs
+    assert adata.uns["yardcluster_params"]["expression_source"] == "sct_integrated"
+
+
+def test_cosphi_gradient_matches_directional_matmul():
+    adata = _make_ring_adata(n_per_ring=15, n_genes=25)
+    coords = adata.obsm["spatial"]
+    weights = build_spatial_weights(coords, k=8)
+    X = np.asarray(adata.X, dtype=np.float64)
+    G = compute_neighborhood_gradient_cosphi(X, coords, weights, k_gradient=8, chunk_size=10)
+    dir_w = _build_cosphi_directional_weights(coords, weights)
+    G_ref = dir_w @ X
+    np.testing.assert_allclose(G, G_ref, rtol=1e-5, atol=1e-5)
+
+
+def test_auto_mode_defaults_use_gradient():
+    pytest.importorskip("leidenalg")
+    adata = _make_ring_adata(n_per_ring=20, n_genes=30)
+    spatial_cluster(adata, mode="auto", preprocess=False, k_spatial=6, n_pcs=8, resolution=0.5)
+    params = adata.uns["yardcluster_params"]
+    assert params["use_gradient"] is True
+    assert "yardcluster_features_G" in adata.obsm
+
+
+def test_domain_mode_default_merge_attempted():
+    pytest.importorskip("leidenalg")
+    adata = _make_ring_adata(n_per_ring=15, n_genes=25)
+    spatial_cluster(
+        adata,
+        mode="domain",
+        use_gradient=False,
+        preprocess=False,
+        k_spatial=5,
+        n_pcs=6,
+        resolution=0.5,
+    )
+    cp = adata.uns.get("yardcluster_cluster_params", {})
+    assert cp.get("merge_clusters") is True
+
+
+def test_expression_source_sct_prep_missing_raises():
+    adata = _make_ring_adata(n_per_ring=10, n_genes=10)
+    with pytest.raises(ValueError, match="expression_source='sct_prep'"):
+        spatial_cluster(
+            adata,
+            mode="celltype",
+            expression_source="sct_prep",
+            preprocess=False,
+        )

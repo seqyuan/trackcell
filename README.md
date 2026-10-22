@@ -1,7 +1,7 @@
 # TrackCell
 
 A Python package for processing and visualizing single-cell and spatial transcriptomics data.
-Supports 10x Visium HD (SpaceRanger) and 10x Xenium Analyzer outputs.
+Supports 10x Visium HD (SpaceRanger), 10x Xenium Analyzer and 10x Atera outputs.
 
 ## Installation
 
@@ -126,6 +126,37 @@ print(adata.obs["slice_id"].value_counts())  # S001, S002, ...
 ```
 
 See the DBSCAN Slice Separation section below for the full workflow.
+
+#### Reading Atera Output
+
+```python
+import trackcell as tcl
+
+# Inspect a bundle without loading the matrix (cells/genes/polygons/transcripts)
+tcl.io.atera_info("/path/to/ROI_bundle")
+
+# Auto-detect official Atera 1.x Zarr vs Xenium-compatible preview
+adata = tcl.io.read_atera("/path/to/ROI_bundle")
+
+# var_names are gene symbols; remove negative-control codewords before PCA
+adata = tcl.io.filter_atera_genes(adata)
+
+# Stream the single-molecule point cloud (billions of molecules)
+for chunk in tcl.io.iter_atera_transcripts(
+        "/path/to/ROI_bundle", genes=["NPHS1", "UMOD"], min_qv=20):
+    ...
+
+# Q-score / nuclear fraction / density QC (results stored in adata)
+summary = tcl.io.atera_transcript_qc("/path/to/ROI_bundle", adata=adata)
+tcl.pl.atera_transcript_density(adata)
+tcl.pl.atera_nuclear_fraction(adata, genes=["UMOD", "DDX17"])
+```
+
+`obsm["spatial"]` is in µm (Atera centroids are already µm; do not multiply by
+`pixel_size`). Atera is gene-level: there is no isoform, splice-junction,
+spliced/unspliced or RNA-velocity data. See the
+[Atera documentation](https://trackcell.readthedocs.io/en/latest/usage/atera.html)
+for the full schema and multi-ROI handling.
 
 #### Reading Bin-Level Data (2um/8um/16um)
 

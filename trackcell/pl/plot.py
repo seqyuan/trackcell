@@ -1736,3 +1736,482 @@ def mark_region(
         plt.show()
 
     return rect
+
+
+def _plot_enrichment_heatmap(
+    enrichment: pd.DataFrame,
+    pvalue: Optional[pd.DataFrame] = None,
+    cmap: str = "RdBu_r",
+    title: Optional[str] = None,
+    figsize: Optional[tuple] = None,
+    show: bool = True,
+    ax: Optional[plt.Axes] = None,
+) -> plt.Axes:
+    """Diverging heatmap for an enrichment matrix (values centered at 0)."""
+    values = enrichment.values.astype(float)
+    labels = [str(x) for x in enrichment.index]
+
+    finite = values[np.isfinite(values)]
+    vmax = float(np.nanmax(np.abs(finite))) if finite.size else 1.0
+    if vmax <= 0:
+        vmax = 1.0
+
+    if ax is None:
+        size = figsize or (
+            max(4.0, len(labels) * 0.6),
+            max(4.0, len(labels) * 0.6),
+        )
+        fig, ax = plt.subplots(figsize=size)
+
+    im = ax.imshow(
+        np.nan_to_num(values, nan=0.0),
+        cmap=cmap,
+        vmin=-vmax,
+        vmax=vmax,
+        interpolation="nearest",
+        aspect="auto",
+    )
+
+    ax.set_xticks(range(len(labels)), labels, rotation=45, ha="right")
+    ax.set_yticks(range(len(labels)), labels)
+    ax.tick_params(length=0)
+
+    # Annotate values for small matrices.
+    if len(labels) <= 10:
+        for i in range(len(labels)):
+            for j in range(len(labels)):
+                v = values[i, j]
+                if np.isnan(v):
+                    continue
+                color = "white" if abs(v) > 0.6 * vmax else "black"
+                ax.text(
+                    j, i, f"{v:.2f}", ha="center", va="center", fontsize=8, color=color
+                )
+
+    # Significance stars from a p-value matrix.
+    if pvalue is not None:
+        pv = pvalue.values.astype(float)
+        for i in range(pv.shape[0]):
+            for j in range(pv.shape[1]):
+                p = pv[i, j]
+                if not np.isfinite(p):
+                    continue
+                if p < 0.001:
+                    star = "***"
+                elif p < 0.01:
+                    star = "**"
+                elif p < 0.05:
+                    star = "*"
+                else:
+                    continue
+                color = "white" if abs(values[i, j]) > 0.6 * vmax else "black"
+                ax.text(j, i, star, ha="center", va="bottom", fontsize=8, color=color)
+
+    cb = ax.figure.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
+    cb.set_label("enrichment")
+    if title:
+        ax.set_title(title)
+    if show:
+        plt.show()
+    return ax
+
+
+def nhood_enrichment(
+    adata,
+    cluster_key: str,
+    connectivity_key: str = "spatial_connectivities",
+    cmap: str = "RdBu_r",
+    figsize: Optional[tuple] = None,
+    show: bool = True,
+    ax: Optional[plt.Axes] = None,
+) -> plt.Axes:
+    """
+    Plot the neighborhood-enrichment matrix from :func:`trackcell.tl.nhood_enrichment`.
+
+    Reads ``adata.uns['{cluster_key}_nhood_enrichment']`` (written by the
+    ``tl`` function) and renders a diverging heatmap centered at zero.
+
+    Parameters
+    ----------
+    adata
+        Annotated data object.
+    cluster_key
+        Cluster-label key used when calling ``tl.nhood_enrichment``.
+    connectivity_key
+        Connectivity key used when computing enrichment (only used for title).
+    cmap
+        Colormap for the heatmap.
+    figsize
+        Figure size ``(width, height)``.
+    show
+        Whether to call ``plt.show()``.
+    ax
+        Existing axes to draw on.
+
+    Returns
+    -------
+    The ``matplotlib.axes.Axes`` with the heatmap.
+    """
+    uns_key = f"{cluster_key}_nhood_enrichment"
+    if uns_key not in adata.uns:
+        raise ValueError(
+            f"`adata.uns['{uns_key}']` not found. Run `tcl.tl.nhood_enrichment` first."
+        )
+    result = adata.uns[uns_key]
+    enrichment = result["enrichment"]
+    pvalue = result.get("pvalue")
+    return _plot_enrichment_heatmap(
+        enrichment,
+        pvalue=pvalue,
+        cmap=cmap,
+        title=f"Neighborhood enrichment — {cluster_key}",
+        figsize=figsize,
+        show=show,
+        ax=ax,
+    )
+
+
+def diff_nhood_enrichment(
+    adata,
+    cluster_key: str,
+    condition_key: str,
+    condition_groups: Optional[tuple] = None,
+    cmap: str = "RdBu_r",
+    figsize: Optional[tuple] = None,
+    show: bool = True,
+    ax: Optional[plt.Axes] = None,
+) -> plt.Axes:
+    """
+    Plot differential neighborhood enrichment from
+    :func:`trackcell.tl.diff_nhood_enrichment`.
+
+    Reads ``adata.uns['{cluster_key}_{condition_key}_diff_nhood_enrichment']``
+    and renders the Case−Ctr enrichment difference as a diverging heatmap,
+    annotating permutation p-values with stars when available.
+
+    Parameters
+    ----------
+    adata
+        Annotated data object.
+    cluster_key
+        Cluster-label key used when calling ``tl.diff_nhood_enrichment``.
+    condition_key
+        Condition key used when calling ``tl.diff_nhood_enrichment``.
+    condition_groups
+        The two compared condition values, e.g. ``("Case", "Ctr")``. If
+        ``None``, the first pair found in the stored result is used.
+    cmap, figsize, show, ax
+        See :func:`nhood_enrichment`.
+
+    Returns
+    -------
+    The ``matplotlib.axes.Axes`` with the heatmap.
+    """
+    uns_key = f"{cluster_key}_{condition_key}_diff_nhood_enrichment"
+    if uns_key not in adata.uns:
+        raise ValueError(
+            f"`adata.uns['{uns_key}']` not found. "
+            "Run `tcl.tl.diff_nhood_enrichment` first."
+        )
+    result = adata.uns[uns_key]
+    if condition_groups is None:
+        keys = [k for k in result.keys() if k != "params"]
+        if not keys:
+            raise ValueError("No condition pair found in stored result.")
+        pair_key = keys[0]
+    else:
+        pair_key = f"{condition_groups[0]}_{condition_groups[1]}"
+        if pair_key not in result:
+            raise ValueError(f"Condition pair '{pair_key}' not found in stored result.")
+
+    pair = result[pair_key]
+    return _plot_enrichment_heatmap(
+        pair["enrichment"],
+        pvalue=pair.get("pvalue"),
+        cmap=cmap,
+        title=f"Differential neighborhood enrichment — {pair_key}",
+        figsize=figsize,
+        show=show,
+        ax=ax,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Atera QC / point-cloud plots
+# ---------------------------------------------------------------------------
+def atera_qc_summary(
+    adata,
+    qc=None,
+    figsize: tuple = (11, 8),
+    cmap: str = "viridis",
+    show: bool = True,
+    axes=None,
+):
+    """Plot a 2×2 cell-level QC panel for Atera data.
+
+    Panels: total counts, detected genes, counts-vs-genes, spatial counts.
+    All panels read ``adata.obs`` / ``adata.obsm`` only, so this function can
+    be re-called at any time.
+
+    Parameters
+    ----------
+    adata : AnnData
+        Object returned by :func:`trackcell.io.read_atera`.
+    qc : DataFrame, optional
+        Pre-computed :func:`trackcell.io.atera_cell_qc` result.
+    figsize, cmap, show : optional
+        Plot appearance.
+    axes : array of Axes, optional
+        Existing 2×2 axes.
+
+    Returns
+    -------
+    numpy.ndarray of ``matplotlib.axes.Axes``
+    """
+    from ..io.read_atera import atera_cell_qc
+
+    if qc is None:
+        qc = atera_cell_qc(adata)
+
+    if axes is None:
+        fig, axes = plt.subplots(2, 2, figsize=figsize)
+    else:
+        fig = np.asarray(axes).ravel()[0].figure
+    axes = np.asarray(axes).ravel()
+
+    counts = pd.to_numeric(qc["total_counts"], errors="coerce").to_numpy()
+    genes_col = "n_genes_expression" if "n_genes_expression" in qc else "n_genes"
+    genes = pd.to_numeric(qc[genes_col], errors="coerce").to_numpy()
+
+    ax = axes[0]
+    positive = counts[np.isfinite(counts) & (counts > 0)]
+    if len(positive):
+        ax.hist(np.log10(positive), bins=80, color="#2E5E8C")
+    ax.set_xlabel("log10(total counts)")
+    ax.set_ylabel("cells")
+    ax.set_title("Total counts per cell")
+
+    ax = axes[1]
+    positive = genes[np.isfinite(genes) & (genes > 0)]
+    if len(positive):
+        ax.hist(np.log10(positive), bins=80, color="#4E8A6B")
+    ax.set_xlabel(f"log10({genes_col})")
+    ax.set_ylabel("cells")
+    ax.set_title("Detected genes per cell")
+
+    ax = axes[2]
+    ok = np.isfinite(counts) & np.isfinite(genes) & (counts > 0) & (genes > 0)
+    if ok.sum() > 50_000:
+        rng = np.random.default_rng(0)
+        idx = rng.choice(np.flatnonzero(ok), size=50_000, replace=False)
+    else:
+        idx = np.flatnonzero(ok)
+    ax.scatter(counts[idx], genes[idx], s=1, alpha=0.25, linewidths=0,
+               color="#2E5E8C", rasterized=True)
+    ax.set_xscale("log")
+    ax.set_yscale("log")
+    ax.set_xlabel("total counts")
+    ax.set_ylabel(genes_col)
+    ax.set_title("Counts vs detected genes")
+
+    ax = axes[3]
+    if "spatial" not in adata.obsm:
+        ax.text(0.5, 0.5, "no obsm['spatial']", ha="center", va="center",
+                transform=ax.transAxes)
+        ax.set_axis_off()
+    else:
+        coords = np.asarray(adata.obsm["spatial"])
+        order = np.argsort(counts)  # draw high-count cells on top
+        sc = ax.scatter(
+            coords[order, 0], coords[order, 1], c=counts[order], s=1.5,
+            cmap=cmap, linewidths=0, rasterized=True,
+            vmin=np.nanpercentile(counts, 1), vmax=np.nanpercentile(counts, 99),
+        )
+        ax.set_aspect("equal")
+        ax.invert_yaxis()
+        ax.set_xlabel("x (µm)")
+        ax.set_ylabel("y (µm)")
+        ax.set_title("Spatial total counts")
+        fig.colorbar(sc, ax=ax, fraction=0.046, pad=0.02, label="counts")
+
+    for ax in axes:
+        if ax.axison:
+            ax.spines[["top", "right"]].set_visible(False)
+
+    fig.tight_layout()
+    if show:
+        plt.show()
+    return axes
+
+
+def atera_transcript_density(
+    adata,
+    cmap: str = "magma",
+    min_molecules: int = 0,
+    figsize: tuple = (7, 5),
+    show: bool = True,
+    ax=None,
+):
+    """Plot the transcript density map stored by ``atera_transcript_qc``.
+
+    Requires ``adata.uns['atera']['density']``; run
+    ``tcl.io.atera_transcript_qc(path, adata=adata)`` first.
+
+    Returns
+    -------
+    matplotlib.axes.Axes
+    """
+    density = adata.uns.get("atera", {}).get("density")
+    if density is None:
+        raise ValueError(
+            "No transcript density found. Run "
+            "`tcl.io.atera_transcript_qc(path, adata=adata)` first."
+        )
+    H = np.asarray(density["H"])
+    xe = np.asarray(density["xedges"])
+    ye = np.asarray(density["yedges"])
+
+    if ax is None:
+        _, ax = plt.subplots(figsize=figsize)
+
+    values = np.log10(H.T + 1.0)
+    values = np.ma.masked_where(H.T <= min_molecules, values)
+    im = ax.imshow(
+        values, origin="lower", aspect="equal",
+        extent=[xe[0], xe[-1], ye[0], ye[-1]], cmap=cmap,
+    )
+    ax.set_xlabel("x (µm)")
+    ax.set_ylabel("y (µm)")
+    ax.set_title("Transcript density (log10 molecules / bin)")
+    ax.figure.colorbar(im, ax=ax, fraction=0.046, pad=0.02, label="log10 molecules")
+    ax.spines[["top", "right"]].set_visible(False)
+    if show:
+        plt.show()
+    return ax
+
+
+def atera_nuclear_fraction(
+    adata,
+    genes: Optional[List[str]] = None,
+    bin_um: float = 50.0,
+    cmap: str = "coolwarm",
+    figsize: tuple = (11, 4),
+    show: bool = True,
+    axes=None,
+):
+    """Plot per-cell and spatial nuclear transcript fractions.
+
+    Requires ``adata.obs['nuclear_fraction']`` from
+    ``tcl.io.atera_transcript_qc(path, adata=adata)``.
+
+    Parameters
+    ----------
+    adata : AnnData
+    genes : list of str, optional
+        If given, add a third panel with the per-gene nuclear fraction
+        (``uns['atera']['gene_qc']``).
+    bin_um : float
+        Spatial bin size in µm for the right panel.
+    cmap, figsize, show, axes : optional
+        Plot appearance.
+
+    Returns
+    -------
+    numpy.ndarray of ``matplotlib.axes.Axes``
+    """
+    if "nuclear_fraction" not in adata.obs.columns:
+        raise ValueError(
+            "`adata.obs['nuclear_fraction']` not found. Run "
+            "`tcl.io.atera_transcript_qc(path, adata=adata)` first."
+        )
+    if genes is not None and "gene_qc" not in adata.uns.get("atera", {}):
+        raise ValueError(
+            "`uns['atera']['gene_qc']` not found. Run "
+            "`tcl.io.atera_transcript_qc(path, adata=adata)` first."
+        )
+
+    n_panels = 3 if genes is not None else 2
+    if axes is None:
+        fig, axes = plt.subplots(1, n_panels, figsize=figsize)
+    else:
+        fig = np.asarray(axes).ravel()[0].figure
+    axes = np.asarray(axes).ravel()
+
+    frac = pd.to_numeric(adata.obs["nuclear_fraction"], errors="coerce").to_numpy()
+    finite = np.isfinite(frac)
+
+    ax = axes[0]
+    if finite.any():
+        ax.hist(frac[finite], bins=80, color="#2E5E8C", alpha=0.9)
+        overall = float(np.nanmean(frac))
+        ax.axvline(overall, color="#C0504D", ls="--",
+                   label=f"mean {overall * 100:.1f}%")
+        ax.legend(frameon=False, fontsize=9)
+    ax.set_xlabel("nuclear transcript fraction per cell")
+    ax.set_ylabel("cells")
+    ax.set_title("Nuclear / total transcripts")
+
+    ax = axes[1]
+    if "spatial" not in adata.obsm:
+        ax.text(0.5, 0.5, "no obsm['spatial']", ha="center", va="center",
+                transform=ax.transAxes)
+        ax.set_axis_off()
+    else:
+        coords = np.asarray(adata.obsm["spatial"])
+        weights = adata.obs.get("tx_q20_counts")
+        weights = (np.ones(adata.n_obs) if weights is None
+                   else pd.to_numeric(weights, errors="coerce").to_numpy())
+        ok = finite & np.isfinite(weights) & (weights > 0)
+        if not ok.any():
+            ax.text(0.5, 0.5, "no transcript QC results", ha="center",
+                    va="center", transform=ax.transAxes)
+            ax.set_axis_off()
+            ok = None
+        if ok is not None:
+            xmin, ymin = np.nanmin(coords[ok, 0]), np.nanmin(coords[ok, 1])
+            xmax, ymax = np.nanmax(coords[ok, 0]), np.nanmax(coords[ok, 1])
+            nx = max(int(np.ceil((xmax - xmin) / bin_um)), 1)
+            ny = max(int(np.ceil((ymax - ymin) / bin_um)), 1)
+            xe = np.linspace(xmin, xmin + nx * bin_um, nx + 1)
+            ye = np.linspace(ymin, ymin + ny * bin_um, ny + 1)
+            num, _, _ = np.histogram2d(
+                coords[ok, 0], coords[ok, 1], bins=[xe, ye],
+                weights=(frac * weights)[ok],
+            )
+            den, _, _ = np.histogram2d(
+                coords[ok, 0], coords[ok, 1], bins=[xe, ye], weights=weights[ok],
+            )
+            ratio = np.divide(num, den, out=np.full_like(num, np.nan), where=den > 0)
+            im = ax.imshow(ratio.T, origin="lower", aspect="equal",
+                           extent=[xe[0], xe[-1], ye[0], ye[-1]], cmap=cmap,
+                           vmin=0, vmax=0.85)
+            ax.set_xlabel("x (µm)")
+            ax.set_ylabel("y (µm)")
+            ax.set_title(f"Spatial nuclear fraction\n({bin_um:g} µm bins)")
+            fig.colorbar(im, ax=ax, fraction=0.046, pad=0.02)
+
+    if genes is not None:
+        ax = axes[2]
+        gene_qc = adata.uns["atera"]["gene_qc"].set_index("gene")
+        requested = [g for g in genes if g in gene_qc.index]
+        missing = [g for g in genes if g not in gene_qc.index]
+        if missing:
+            warnings.warn(f"Genes not found in gene QC table: {missing}")
+        if requested:
+            values = gene_qc.loc[requested, "nuclear_fraction"].to_numpy(dtype=float)
+            ax.barh(range(len(requested)), values, color="#2E5E8C")
+            ax.set_yticks(range(len(requested)))
+            ax.set_yticklabels(requested)
+            ax.invert_yaxis()
+        ax.set_xlabel("nuclear fraction")
+        ax.set_xlim(0, 1)
+        ax.set_title("Per-gene nuclear fraction")
+
+    for ax in axes:
+        if ax.axison:
+            ax.spines[["top", "right"]].set_visible(False)
+
+    fig.tight_layout()
+    if show:
+        plt.show()
+    return axes

@@ -23,7 +23,7 @@ import numpy as np
 import pandas as pd
 
 from tests.sct_benchmark_data import BENCHMARK_ROOT, DEFAULT_SAMPLE, load_seurat_parity_with_cell_attr
-from trackcell.tl._r_sctransform import fit_glmGamPoi_offset_r, load_r_vst_export
+from trackcell.benchmark.sct.r_exports import load_r_vst_export
 from trackcell.tl._sctransform import _build_design_matrix, vst
 from trackcell.tl._sctransform_v2 import mark_suspicious_theta
 from pyglmGamPoi.trackcell_compat import fit_offset_model as py_fit
@@ -45,8 +45,7 @@ def main() -> None:
 
     py_raw = py_fit(umi_step1, reg, genes_step1, allow_inf_theta=True)
     py_ms = mark_suspicious_theta(py_raw, umi, genes).reindex(genes_step1)
-    r_raw = fit_glmGamPoi_offset_r(umi_step1, reg, genes_step1, allow_inf_theta=True)
-    r_ms = mark_suspicious_theta(r_raw, umi, genes).reindex(genes_step1)
+    r_ms = mark_suspicious_theta(r_export, umi, genes).reindex(genes_step1)
 
     fin = np.isfinite(py_ms["theta"]) & np.isfinite(r_export["theta"])
     out = vst(

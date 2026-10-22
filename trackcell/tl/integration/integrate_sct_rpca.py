@@ -2,16 +2,13 @@
 
 from __future__ import annotations
 
-from typing import Literal, Optional, Sequence, Union
+from typing import Literal, Optional, Sequence
 
 from anndata import AnnData
-from pathlib import Path
 
 from .integrate_data import DEFAULT_WEIGHT_QUERY_CHUNK_SIZE
 from .rpca_integration import integrate_rpca
-from .sct_integration import resolve_sct_integration_method, run_sct_integration
-
-_resolve_integrate_sct_method = resolve_sct_integration_method
+from .sct_integration import run_sct_integration
 
 
 def integrate_sct_rpca(
@@ -44,14 +41,8 @@ def integrate_sct_rpca(
     run_prep: bool = True,
     require_sct_models: bool = True,
     run_sct: bool | None = None,
-    sct_method: Literal["python", "r", "r_step1", "r_fit", "auto"] = "auto",
-    r_vst_export_root: Optional[Union[str, Path]] = None,
-    r_vst_export_seed: Optional[int] = None,
-    r_vst_export_layout: Literal["auto", "per_batch", "rpca_benchmark"] = "auto",
-    inject_r_step1_subsample: bool = True,
-    inject_r_scale_data: bool = True,
-    prefer_r_step1: bool = False,
     sct_vst_flavor: str | None = "v2",
+    sct_v2_backend: Literal["python", "pyglmGamPoi"] = "python",
     n_sct_hvg: int = 3000,
     sct_seed: int = 1448145,
     sct_batch_n_jobs: int = 1,
@@ -86,14 +77,8 @@ def integrate_sct_rpca(
         run_prep=run_prep,
         require_sct_models=require_sct_models,
         run_sct=run_sct,
-        sct_method=sct_method,
-        r_vst_export_root=r_vst_export_root,
-        r_vst_export_seed=r_vst_export_seed,
-        r_vst_export_layout=r_vst_export_layout,
-        inject_r_step1_subsample=inject_r_step1_subsample,
-        inject_r_scale_data=inject_r_scale_data,
-        prefer_r_step1=prefer_r_step1,
         sct_vst_flavor=sct_vst_flavor,
+        sct_v2_backend=sct_v2_backend,
         n_sct_hvg=n_sct_hvg,
         sct_seed=sct_seed,
         sct_batch_n_jobs=sct_batch_n_jobs,
@@ -135,9 +120,6 @@ def integrate_sct_rpca(
     adata.uns[key_added]["params"]["feature_method"] = (
         feature_method if feature_method is not None else "seurat"
     )
-    adata.uns[key_added]["params"]["r_vst_export_seed"] = r_vst_export_seed
-    adata.uns[key_added]["params"]["inject_r_step1_subsample"] = inject_r_step1_subsample
-    adata.uns[key_added]["params"]["inject_r_scale_data"] = inject_r_scale_data
-    adata.uns[key_added]["params"]["prefer_r_step1"] = prefer_r_step1
+    adata.uns[key_added]["params"]["sct_v2_backend"] = sct_v2_backend
     adata.uns[key_added]["params"]["sct_batch_n_jobs"] = sct_batch_n_jobs
     return adata

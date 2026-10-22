@@ -58,7 +58,6 @@ def test_integrate_sct_rpca_auto_run_sct():
         k_anchor=3,
         k_weight=20,
         run_sct=True,
-        sct_method="python",
         n_sct_hvg=20,
         sct_seed=1,
         copy=True,
@@ -272,6 +271,30 @@ def test_split_sct_and_rpca_integration():
 
 
 @pytest.mark.skipif(not annoy_available(), reason="annoy not installed")
+def test_run_sct_integration_accepts_explicit_anchor_features():
+    adata = _make_batch_adata()
+    sctransform(
+        adata,
+        layer="counts",
+        batch_key="orig.ident",
+        n_top_genes=20,
+        n_cells=30,
+        n_genes=40,
+        seed=1,
+    )
+    from trackcell.tl.integration import run_sct_integration
+
+    features = list(adata.uns["sct"]["variable_features"][:15])
+    run_sct_integration(
+        adata,
+        batch_key="orig.ident",
+        anchor_features=features,
+        run_sct=False,
+    )
+    assert adata.uns["sct_prep"]["params"]["feature_method"] == "seurat"
+    assert adata.uns["sct_prep"]["anchor_features"] == features
+
+
 def test_release_sct_integration_cache_then_integrate_rpca():
     """Explicit cache release must not change RPCA output vs Seurat-parity path."""
     from trackcell.tl.integration import (

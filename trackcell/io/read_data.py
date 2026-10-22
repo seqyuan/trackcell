@@ -495,6 +495,10 @@ def read_xenium_cellseg(
     slice_min_cells: int = 1000,
     slice_start: int = 1,
     slice_prefix: str = "S",
+    build_polygons: bool = True,
+    include_nucleus: bool = True,
+    store_wkt: bool = True,
+    verbose: bool = True,
 ) -> sc.AnnData:
     """
     Read 10x Xenium cell segmentation output and create an AnnData object.
@@ -537,6 +541,15 @@ def read_xenium_cellseg(
         Starting index for slice IDs (S001 when ``slice_start=1``).
     slice_prefix : str, default "S"
         Prefix for slice IDs.
+    build_polygons : bool, default True
+        If False, skip reading ``cell_boundaries.parquet`` entirely (no polygons,
+        no compact boundary arrays, no WKT strings).
+    include_nucleus : bool, default True
+        If False, skip ``nucleus_boundaries.parquet``.
+    store_wkt : bool, default True
+        If True, store WKT strings in ``.obs['geometry']`` for serialization.
+    verbose : bool, default True
+        Print progress messages.
     
     Returns
     -------
@@ -563,6 +576,8 @@ def read_xenium_cellseg(
     
     if sample is None:
         sample = datapath.name
+
+    log = print if verbose else (lambda *args, **kwargs: None)
     
     t_total = time.time()
     
@@ -593,8 +608,8 @@ def read_xenium_cellseg(
     mat = mat_csc.tocsr().T
     del data, indices, indptr, mat_csc
     gc.collect()
-    print(f'[Xenium] Expression matrix: {mat.shape[0]:,} cells × {mat.shape[1]:,} genes '
-          f'({mat.nnz/1e6:.1f}M non-zero) [{time.time()-t0:.1f}s]')
+    log(f'[Xenium] Expression matrix: {mat.shape[0]:,} cells × {mat.shape[1]:,} genes '
+        f'({mat.nnz/1e6:.1f}M non-zero) [{time.time()-t0:.1f}s]')
     
     # ── 2. Read cell metadata ──
     t0 = time.time()
@@ -603,7 +618,7 @@ def read_xenium_cellseg(
         raise FileNotFoundError(f"Cell metadata not found: {cells_path}")
     cells_df = pd.read_parquet(cells_path)
     cells_df = cells_df.set_index('cell_id')
-    print(f'[Xenium] Cell metadata: {len(cells_df):,} cells [{time.time()-t0:.1f}s]')
+    log(f'[Xenium] Cell metadata: {len(cells_df):,} cells [{time.time()-t0:.1f}s]')
     
     # ── 3. Align expression barcodes with cell metadata ──
     t0 = time.time()
@@ -612,8 +627,8 @@ def read_xenium_cellseg(
     
     common_cells = obs_index.intersection(cells_df.index)
     if len(common_cells) != n_cells:
-        print(f'  Warning: {len(common_cells):,}/{n_cells:,} cells matched between '
-              f'expression and metadata')
+        log(f'  Warning: {len(common_cells):,}/{n_cells:,} cells matched between '
+            f'expression and metadata')
     
     # Build row index map for subsetting the matrix
     row_mask = obs_index.isin(common_cells)
@@ -622,7 +637,7 @@ def read_xenium_cellseg(
     
     # Reorder metadata to match expression order
     cells_df = cells_df.loc[common_cells]
-    print(f'[Xenium] Aligned: {len(common_cells):,} cells [{time.time()-t0:.1f}s]')
+    log(f'[Xenium] Aligned: {len(common_cells):,} cells [{time.time()-t0:.1f}s]')
     
     # ── 4. Build AnnData ──
     t0 = time.time()
@@ -647,19 +662,19 @@ def read_xenium_cellseg(
     
     if not sp_sparse.isspmatrix_csr(adata.X):
         adata.X = adata.X.tocsr()
-    print(f'[Xenium] AnnData built: {adata.shape} [{time.time()-t0:.1f}s]')
+    log(f'[Xenium] AnnData built: {adata.shape} [{time.time()-t0:.1f}s]')
     
     # ── 5. Spatial coordinates ──
     t0 = time.time()
     adata.obsm['spatial'] = adata.obs[['x_centroid', 'y_centroid']].values.astype(np.float32)
-    print(f'[Xenium] Spatial coords [{time.time()-t0:.1f}s]')
+    log(f'[Xenium] Spatial coords [{time.time()-t0:.1f}s]')
     
     # ── 6. Cell boundaries → GeoDataFrame polygons + compact arrays ──
     t0 = time.time()
     bd_path = datapath / boundaries_file
-    if bd_path.exists():
+    if build_polygons and bd_path.exists():
         bd_df = pd.read_parquet(bd_path)
-        print(f'  Loaded {len(bd_df):,} boundary vertices [{time.time()-t0:.1f}s]')
+        log(f'  Loaded {len(bd_df):,} boundary vertices [{time.time()-t0:.1f}s]')
         
         t1 = time.time()
         cell_set = set(common_cells)
@@ -701,16 +716,17 @@ def read_xenium_cellseg(
             }
         del bd_df
         gc.collect()
-        print(f'  Boundaries: {len(polygons):,}/{len(common_cells):,} cells '
-              f'({len(polygons)/len(common_cells)*100:.1f}%) '
-              f'[{time.time()-t1:.1f}s]')
+        log(f'  Boundaries: {len(polygons):,}/{len(common_cells):,} cells '
+            f'({len(polygons)/len(common_cells)*100:.1f}%) '
+            f'[{time.time()-t1:.1f}s]')
     else:
-        print(f'  No cell boundary file: {bd_path}')
+        if build_polygons:
+            log(f'  No cell boundary file: {bd_path}')
         polygons = {}
     
     # ── 7. Nucleus boundaries (optional) ──
     nuc_path = datapath / nucleus_boundaries_file
-    if nuc_path.exists():
+    if include_nucleus and nuc_path.exists():
         t0 = time.time()
         nuc_df = pd.read_parquet(nuc_path)
         nuc_grouped = nuc_df.groupby('cell_id', sort=False)
@@ -739,7 +755,7 @@ def read_xenium_cellseg(
             }
         del nuc_df
         gc.collect()
-        print(f'[Xenium] Nucleus boundaries [{time.time()-t0:.1f}s]')
+        log(f'[Xenium] Nucleus boundaries [{time.time()-t0:.1f}s]')
     
     # ── 8. Experiment metadata ──
     exp_path = datapath / experiment_file
@@ -779,14 +795,15 @@ def read_xenium_cellseg(
         adata.uns['spatial'][sample]['geometries'] = gdf
         
         # Store WKT strings in obs for serialization
-        adata.obs['geometry'] = pd.Series(
-            {cid: wkt.dumps(poly) for cid, poly in polygons.items()},
-            name='geometry'
-        )
+        if store_wkt:
+            adata.obs['geometry'] = pd.Series(
+                {cid: wkt.dumps(poly) for cid, poly in polygons.items()},
+                name='geometry'
+            )
         
         n_geo = len(polygons)
-        print(f'[Xenium] Geometries: {n_geo:,}/{len(common_cells):,} cells '
-              f'({n_geo/len(common_cells)*100:.1f}%)')
+        log(f'[Xenium] Geometries: {n_geo:,}/{len(common_cells):,} cells '
+            f'({n_geo/len(common_cells)*100:.1f}%)')
     
     if slice_separate:
         from ..tl.slice_separation import spatial_slice_cluster
@@ -800,10 +817,10 @@ def read_xenium_cellseg(
             slice_prefix=slice_prefix,
         )
         n_slices = adata.uns.get("slice_id_summary", {}).get("n_slices", 0)
-        print(f'[Xenium] Slice separation: {n_slices} slices (eps={slice_eps})')
+        log(f'[Xenium] Slice separation: {n_slices} slices (eps={slice_eps})')
 
     elapsed = time.time() - t_total
-    print(f'[Xenium] Total: read_xenium_cellseg done [{elapsed:.1f}s]')
+    log(f'[Xenium] Total: read_xenium_cellseg done [{elapsed:.1f}s]')
     
     return adata
 

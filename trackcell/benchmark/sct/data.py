@@ -106,6 +106,6 @@ def load_r_export(
     benchmark_root: Path = BENCHMARK_ROOT,
 ) -> dict:
     """Load R benchmark export for one sample × seed."""
-    from trackcell.tl._r_sctransform import load_r_vst_export
+    from trackcell.benchmark.sct.r_exports import load_r_vst_export
 
     return load_r_vst_export(r_export_dir(sample, seed, benchmark_root=benchmark_root))

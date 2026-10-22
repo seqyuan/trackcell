@@ -18,8 +18,17 @@ This section contains example notebooks and links to usage tutorials.
     notebooks/STOmics_mouse_brain_demo
     notebooks/YardCluster_STOmics_demo
 
+.. nbgallery::
+    :caption: Atera (10X)
+    :name: atera-gallery
+    :glob:
+
+    notebooks/Atera_demo
+
 See also the usage tutorials:
 
+* :doc:`usage/atera` — Atera official Zarr, polygon visualization, streaming
+  transcript point cloud, Q-score / nuclear-fraction QC, multi-ROI handling
 * :doc:`usage/batch_integration` — SCT + RPCA / Harmony / BBKNN batch integration
 * :doc:`usage/spatial_clustering` — YardCluster spatial domain clustering
 * :doc:`usage/xenium_slice_separation` — Xenium TMA slice separation and GC colony clustering

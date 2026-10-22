@@ -1,6 +1,75 @@
 Changelog
 
 
+Version 0.3.44
+--------------
+
+* **Atera support** (``trackcell.io.read_atera``):
+
+  * ``read_atera`` auto-detects official (Atera 1.x Zarr) and preview
+    (Xenium-v4 compatible) bundles; ``read_atera_cellseg`` /
+    ``read_atera_preview`` are the explicit entry points.
+  * ``atera_info`` reports cells/genes/polygons/transcripts without loading
+    the matrix.
+  * Unified schema across formats: ``var_names`` are gene symbols,
+    ``var['gene_ids']`` / ``var['feature_types']`` / ``var['is_gene_expression']``,
+    ``obs['barcode']``, ``obsm['spatial']`` in µm, polygons in
+    ``uns['spatial'][sample]``.
+  * ``filter_atera_genes`` removes negative-control codewords before
+    HVG/PCA.
+  * ``iter_atera_transcripts`` / ``read_atera_transcripts`` stream the
+    single-molecule point cloud with ``genes`` / ``region`` / ``min_qv``
+    filters; the gene-range fast path reads only the requested genes.
+  * ``atera_cell_qc`` / ``atera_transcript_qc`` (Q-score, assignment rate,
+    nuclear fraction, per-gene nuclear fraction, density).
+  * ``list_atera_rois`` / ``iter_atera_rois`` / ``concat_atera_rois`` for
+    run directories; offsets are required unless ROIs are already aligned.
+  * ``pl.atera_qc_summary``, ``pl.atera_transcript_density``,
+    ``pl.atera_nuclear_fraction`` read everything from ``adata``.
+  * ``read_xenium_cellseg`` gained ``build_polygons``, ``include_nucleus``,
+    ``store_wkt`` and ``verbose`` (backward compatible).
+  * Documented limits: no isoform, splice-junction, spliced/unspliced or
+    RNA-velocity support; no customer barcodes.
+  * New docs: :doc:`usage/atera`; new tests: ``tests/test_atera.py``.
+
+* **YardCluster CellCharter-inspired extensions**:
+
+  * Multi-hop neighborhood aggregation (``neighborhood_features(n_layers=...)``,
+    ``spatial_cluster(n_layers=...)``).
+  * Automatic Leiden resolution selection by clustering stability
+    (``resolution="auto"``, ``tcl.tl.sweep_resolutions``,
+    ``tcl.tl.select_resolution``).
+  * Gaussian-mixture clustering backend (``yard_cluster(method="gmm")``,
+    BIC-based ``n_clusters`` selection).
+  * Post-analysis tools: ``tcl.tl.connected_components``,
+    ``tcl.tl.nhood_enrichment``, ``tcl.tl.diff_nhood_enrichment``, and
+    ``tcl.tl.remove_long_links``.
+  * Enrichment heatmaps: ``tcl.pl.nhood_enrichment``,
+    ``tcl.pl.diff_nhood_enrichment`` (diverging colormap, p-value stars).
+
+* **SCT runtime backend cleanup**:
+
+  * Remove the R subprocess bridge and the public ``method='r'`` /
+    ``r_vst_export_*`` paths. ``resolve_sct_integration_method`` is gone with
+    ``sct_method``; the backend is selected explicitly via ``sct_v2_backend``.
+  * Add explicit ``v2_backend='python'|'pyglmGamPoi'`` selection. Pure Python is
+    the deterministic default; ``pyglmGamPoi`` is optional and never selected
+    automatically.
+  * Add a vectorized ``MASS::theta.ml``-compatible NB offset fallback and separate
+    the ``sqrt(N)`` HVG-ranking clip from the tighter ``sqrt(N/30)`` stored assay
+    clip.
+  * Move readers and R export scripts into ``trackcell.benchmark`` so offline
+    Seurat parity checks remain available without a runtime R dependency.
+
+* **SCT + RPCA benchmark on project AA/A04** (3 × 10x samples, 27,129 cells):
+
+  * Pure Python ``v2_backend='python'`` vs Seurat R v4 ``SCTransform(vst.flavor='v2')``.
+  * SCT HVG Jaccard median **0.939**, IntegrationFeatures Jaccard **0.933**,
+    PrepSCTIntegration correlation **0.988**, anchor count ratio **0.989**.
+  * Python SCT 1.83× faster (175s vs 320s); RPCA slower due to Numba weight construction.
+  * See :doc:`benchmark/rpca_evaluation` for the full tables and
+    ``<benchmark-root>/SCTRPCAbench/report.json`` for the raw results.
+
 Version 0.3.43
 --------------
 

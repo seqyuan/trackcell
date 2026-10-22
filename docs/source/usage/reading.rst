@@ -76,6 +76,27 @@ for the full workflow.
    print(adata.obs["slice_id"].value_counts())
 
 
+Reading Atera Output
+---------------------
+
+Atera is 10x's new spatial platform.  TrackCell reads both the official
+Atera 1.x Zarr bundle (``cell_feature_matrix.zarr.zip`` + ``cells.zarr.zip``
++ ``transcripts.zarr.zip``) and the Xenium-compatible preview bundle:
+
+.. code-block:: python
+
+   # auto-detect format; obs_names are barcodes, var_names are gene symbols
+   adata = tcl.io.read_atera("/path/to/ROI_bundle")
+
+   # transcript point cloud (streaming, billions of molecules)
+   for chunk in tcl.io.iter_atera_transcripts(
+           "/path/to/ROI_bundle", genes=["NPHS1"], min_qv=20):
+       ...
+
+See :doc:`atera` for the AnnData schema, coordinate conventions, QC helpers,
+multi-ROI handling and the list of unsupported analyses (no isoform /
+splice junction / RNA velocity).
+
 Reading Cell Segmentation Data (Visium HD)
 -------------------------------------------
 

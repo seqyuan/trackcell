@@ -9,7 +9,17 @@
 project = 'trackcell'
 copyright = '2025, Zan Yuan'
 author = 'Zan Yuan'
-release = '0.3.35'
+
+# Read the version from pyproject.toml so the docs never drift from the package.
+import re
+from pathlib import Path
+
+_pyproject = Path(__file__).resolve().parents[2] / 'pyproject.toml'
+_version_match = re.search(
+    r'^version\s*=\s*"([^"]+)"', _pyproject.read_text(encoding='utf-8'), re.MULTILINE
+)
+release = _version_match.group(1) if _version_match else '0.0.0'
+version = '.'.join(release.split('.')[:2])
 
 # -- General configuration ---------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#general-configuration
@@ -130,8 +140,13 @@ autodoc_mock_imports = [
     'h5py',
     'scipy',
     'scipy.sparse',
+    'scipy.sparse.csgraph',
     'scipy.spatial',
+    'scipy.spatial.distance',
     'scipy.cluster',
+    'scipy.cluster.hierarchy',
+    'scipy.interpolate',
+    'scipy.special',
     'scipy.stats',
     'matplotlib',
     'matplotlib.pyplot',
@@ -147,6 +162,10 @@ autodoc_mock_imports = [
     'imageio.v3',
     'sklearn',
     'sklearn.cluster',
+    'sklearn.metrics',
+    'statsmodels',
+    'statsmodels.api',
+    'patsy',
     'leidenalg',
     'igraph',
     'harmonypy',
@@ -177,6 +196,9 @@ nbsphinx_process_signals = False
 # Value: thumbnail image path relative to source directory
 nbsphinx_thumbnails = {
     "notebooks/Colon_Cancer_demo": "_static/notebooks/Colon_Cancer_demo.png",
+    "notebooks/STOmics_mouse_brain_demo": "_static/notebooks/STOmics_mouse_brain_demo.png",
+    "notebooks/YardCluster_STOmics_demo": "_static/notebooks/YardCluster_STOmics_demo.png",
+    "notebooks/Atera_demo": "_static/notebooks/Atera_demo.png",
 }
 
 # Pygments configuration for ipython3 lexer

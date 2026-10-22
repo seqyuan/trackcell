@@ -11,8 +11,8 @@ import pytest
 from trackcell.benchmark.sct.data import BENCHMARK_ROOT, BENCHMARK_SAMPLES, REF_SEED, load_benchmark_umi
 from trackcell.benchmark.sct.metrics import hvg_jaccard
 from trackcell.benchmark.sct.data import load_r_export, r_export_dir
-from trackcell.tl._r_density import r_density_fft
-from trackcell.tl._r_sample import r_sample_available
+from trackcell.tl._density import r_density_fft
+from trackcell.tl._rng import r_sample_available
 from trackcell.tl._sctransform import _dds, _row_gmean_sparse, vst
 
 pytestmark = pytest.mark.skipif(not r_sample_available(), reason="rrng not installed")
@@ -33,7 +33,7 @@ def _genes_step1_pool(umi, genes, cells, cells_step1: pd.Index):
 @pytest.mark.parametrize("sample", BENCHMARK_SAMPLES)
 def test_cells_step1_matches_r_export(sample: str) -> None:
     """R ``sample(colnames, n_cells)`` parity via rrng."""
-    from trackcell.tl._r_sample import _RSampleRNG
+    from trackcell.tl._rng import _RSampleRNG
 
     umi, genes, cells, cell_attr = load_benchmark_umi(sample, benchmark_root=BENCHMARK_ROOT)
     r = load_r_export(sample, REF_SEED, benchmark_root=BENCHMARK_ROOT)
@@ -60,7 +60,7 @@ def test_r_density_fft_matches_r_golden() -> None:
 @pytest.mark.parametrize("sample", BENCHMARK_SAMPLES)
 def test_genes_step1_jaccard_vs_r(sample: str) -> None:
     """Weighted ``genes_step1`` via R FFT density + rrng ``sample()``."""
-    from trackcell.tl._r_sample import _RSampleRNG
+    from trackcell.tl._rng import _RSampleRNG
 
     umi, genes, cells, _ = load_benchmark_umi(sample, benchmark_root=BENCHMARK_ROOT)
     r = load_r_export(sample, REF_SEED, benchmark_root=BENCHMARK_ROOT)

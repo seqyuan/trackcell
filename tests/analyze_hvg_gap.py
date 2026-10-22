@@ -55,7 +55,7 @@ try:
     from .sct_benchmark_data import DEFAULT_SAMPLE, load_seurat_parity_with_cell_attr
 except ImportError:
     from sct_benchmark_data import DEFAULT_SAMPLE, load_seurat_parity_with_cell_attr
-from trackcell.tl._r_sctransform import align_r_gene_list, load_r_vst_export
+from trackcell.benchmark.sct.r_exports import align_r_gene_list, load_r_vst_export
 from trackcell.tl._sctransform import vst
 
 ROOT = Path("/Volumes/process/tmp/tcl_test")

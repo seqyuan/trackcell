@@ -31,7 +31,7 @@ from trackcell.benchmark.rpca import (  # noqa: E402
     write_rpca_benchmark_docs,
 )
 
-RSCRIPT = REPO / "trackcell" / "tl" / "rscripts" / "export_rpca_benchmark_r.R"
+RSCRIPT = REPO / "trackcell" / "benchmark" / "rpca" / "export_rpca_benchmark_r.R"
 ATA = Path("/Volumes/data/GOPATH/bin/ata")
 
 

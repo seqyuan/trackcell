@@ -9,6 +9,7 @@ implementations on real 10x Genomics data.
 
    sct_evaluation
    rpca_evaluation
+   yardcluster_evaluation
 
 Overview
 --------
@@ -24,11 +25,13 @@ Overview
    * - :doc:`rpca_evaluation`
      - SCT + RPCA integration vs Seurat (stepwise + E2E parity tables,
        Python vs R summary, 2026-07-11)
+   * - :doc:`yardcluster_evaluation`
+     - YardCluster synthetic patch benchmark (ARI + spatial coherence)
 
 Regenerate SCT artifacts
 ------------------------
 
-Requires GSE288946 data under ``/Volumes/process/tmp/tcl_test/data/`` and conda env
+Requires GSE288946 data under ``<benchmark-root>/data/`` and conda env
 ``st`` (Seurat + sctransform + glmGamPoi).
 
 .. code-block:: bash
@@ -52,6 +55,8 @@ results (integrate gene corr **~0.959** with hybrid SCT exports).
 
 Quick reference (ref seed 1448145):
 
+GSE288946 dataset (35,948 cells, hybrid SCT exports):
+
 .. list-table::
    :header-rows: 1
    :widths: 32 14 14
@@ -71,6 +76,28 @@ Quick reference (ref seed 1448145):
    * - Integrate gene corr
      - 0.959
      - 0.959
+
+AA/A04 dataset (27,129 cells, pure Python backend, 2026-07-25):
+
+.. list-table::
+   :header-rows: 1
+   :widths: 32 14 14
+
+   * - Metric
+     - Pure Py
+     - Target
+   * - SCT HVG Jaccard
+     - 0.939
+     - ≥0.92
+   * - Features Jaccard
+     - 0.933
+     - ≥0.92
+   * - Prep gene corr
+     - 0.988
+     - ~1.0
+   * - Anchor count ratio
+     - 0.989
+     - ~1.0
 
 Full tables: :doc:`rpca_evaluation`.
 

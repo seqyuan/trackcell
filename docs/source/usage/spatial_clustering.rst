@@ -96,7 +96,20 @@ Clustering modes
    * - ``"auto"``
      - both
      - ``yardcluster_celltype``, ``yardcluster_domain``
-     - Explore both views in one run
+     - Explore both views in one run (gradient on by default)
+
+Mode-aware defaults (``spatial_cluster``)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+When parameters are left at their default ``None``:
+
+* ``use_gradient=None`` → ``True`` for ``mode='domain'`` / ``mode='auto'``,
+  ``False`` for ``mode='celltype'``
+* ``merge_clusters=None`` → DE-guided merge for **domain** clustering only
+  (Space Ranger-style); celltype run skips merge
+
+Override globally with ``use_gradient=False`` or ``merge_clusters=True``, or
+per-mode with ``merge_clusters_celltype`` / ``merge_clusters_domain``.
 
 Step-by-Step (with scanpy)
 --------------------------
@@ -222,6 +235,38 @@ Multi-Sample and Batch Handling
 Spatial neighbors are **never drawn across batches** (different tissue slices have
 incompatible coordinate systems). Expression integration is controlled separately.
 
+SCT + YardCluster (multi-slice, recommended)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+For multiple tissue slices, integrate expression with SCT **before** YardCluster so
+neighborhood features use batch-corrected Pearson residuals instead of raw log-normalized
+counts:
+
+.. code-block:: python
+
+   import trackcell as tcl
+
+   # 1. SCT prep across slices (see :doc:`batch_integration`)
+   tcl.tl.run_sct_integration(
+       adata,
+       batch_key="slice_id",
+       layer="counts",
+       sct_batch_n_jobs=-1,
+   )
+   tcl.tl.release_sct_integration_cache(adata, what="scale_data")
+
+   # 2. YardCluster on SCT anchor residuals
+   tcl.tl.spatial_cluster(
+       adata,
+       batch_key="slice_id",
+       expression_source="sct_prep",
+       mode="auto",
+       integrate="joint",   # optional Harmony on embedding channels
+   )
+
+``expression_source='sct_prep'`` reads ``obsm['X_sct_prep']`` (2000 anchor genes by
+default). Built-in preprocessing is skipped automatically.
+
 .. code-block:: python
 
    # Cluster each sample independently (labels prefixed: "sampleA_0", …)
@@ -248,11 +293,39 @@ incompatible coordinate systems). Expression integration is controlled separatel
    * - ``integrate``
      - Behavior
    * - ``"none"``
-     - Single sample, or pooled without Harmony (default)
+     - Single sample, or pooled without batch correction on the clustering graph (default)
    * - ``"separate"``
      - Per-batch clustering; requires ``batch_key``
    * - ``"joint"``
      - Harmony on identity/context embeddings; requires ``batch_key`` and ``harmonypy``
+   * - ``"bbknn"``
+     - Batch-balanced kNN on the mixed embedding (requires ``batch_key``, ``pip install bbknn``)
+
+Clustering graph (``graph_mode``)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Controls how Leiden builds its neighbor graph on the mixed embedding:
+
+.. code-block:: python
+
+   # Default: expression kNN only
+   tcl.tl.spatial_cluster(adata, graph_mode="expr")
+
+   # Spatial coherence: cluster on the physical neighbor graph
+   tcl.tl.spatial_cluster(adata, mode="domain", graph_mode="spatial")
+
+   # Weighted combination (alpha → more spatial weight)
+   tcl.tl.spatial_cluster(adata, mode="domain", graph_mode="hybrid", hybrid_alpha=0.4)
+
+Platform presets
+~~~~~~~~~~~~~~~~
+
+.. code-block:: python
+
+   tcl.tl.spatial_cluster(adata, platform="sto", mode="auto")
+   # Fills k_spatial / n_pcs / resolution when left as None
+
+   tcl.tl.spatial_cluster(adata, platform="sto", k_spatial=10)  # explicit override
 
 Advanced Options
 ----------------
@@ -328,6 +401,14 @@ Log1p → HVG → Scale before clustering.  Fine-tune or skip:
    # Use a pre-computed layer (e.g. scVI denoised) instead of adata.X
    tcl.tl.spatial_cluster(adata, layer="denoised", preprocess=False, mode="domain")
 
+   # Use SCT prep residuals after run_sct_integration (multi-slice)
+   tcl.tl.spatial_cluster(
+       adata,
+       expression_source="sct_prep",
+       batch_key="slice_id",
+       mode="auto",
+   )
+
    # Use adata.raw.X instead of adata.X
    tcl.tl.spatial_cluster(adata, use_raw=True, mode="celltype")
 
@@ -361,6 +442,102 @@ modified copy:
 .. code-block:: python
 
    result = tcl.tl.spatial_cluster(adata, mode="auto", copy=True)
+
+Automatic Resolution Selection
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Instead of hand-tuning ``resolution``, pass ``resolution="auto"`` (or
+``resolution_celltype``/``resolution_domain``) to select the resolution by
+clustering stability. YardCluster sweeps a resolution grid, runs Leiden several
+times with different seeds, and picks the resolution with the highest mean
+pairwise ARI across runs:
+
+.. code-block:: python
+
+   tcl.tl.spatial_cluster(
+       adata,
+       mode="domain",
+       resolution="auto",
+       n_resolution_runs=5,   # repeats per resolution (default 5)
+   )
+
+   # Standalone sweep / selection
+   sweep = tcl.tl.sweep_resolutions(
+       adata, use_rep="X_yard_mixed", resolutions=[0.2, 0.4, 0.6, 0.8], n_runs=5
+   )
+   best_res, sweep = tcl.tl.select_resolution(adata, use_rep="X_yard_mixed")
+
+The sweep table (``obs``/``uns`` ``yardcluster_resolution_sweep``) records
+``resolution``, ``n_clusters`` and ``stability`` for each candidate.
+
+Multi-Hop Neighborhood Aggregation
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+CellCharter-style multi-hop aggregation expands the context channel from the
+1-hop mean to a concatenation of hop-1..``n_layers`` means (``W^k @ X``), which
+captures larger tissue structures — useful for domain mode:
+
+.. code-block:: python
+
+   tcl.tl.spatial_cluster(adata, mode="domain", n_layers=3)
+   # or stage-by-stage
+   tcl.tl.neighborhood_features(adata, k_spatial=15, n_layers=3)
+
+Gaussian-Mixture Clustering (alternative backend)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Besides Leiden, ``yard_cluster`` can fit a Gaussian mixture (sklearn) on the
+mixed embedding, with soft assignments and BIC-based automatic ``k``:
+
+.. code-block:: python
+
+   tcl.tl.yard_cluster(
+       adata,
+       use_rep="X_yard_mixed",
+       method="gmm",
+       n_clusters=None,   # None -> pick k by BIC; or pass an int
+   )
+
+Topology and Neighborhood Enrichment (post-analysis)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+After clustering, resolve spatially disconnected regions and quantify
+cluster-cluster interactions (CellCharter-style, dependency-free):
+
+.. code-block:: python
+
+   # Split each cluster into connected components of the spatial graph
+   tcl.tl.connected_components(adata, cluster_key="yardcluster_domain", min_cells=250)
+
+   # Observed vs expected (configuration-model) links between clusters
+   tcl.tl.nhood_enrichment(adata, "yardcluster_domain", log_fold_change=True)
+
+   # Differential enrichment between conditions (sample-level permutation p-values)
+   tcl.tl.diff_nhood_enrichment(
+       adata,
+       "yardcluster_domain",
+       "condition",
+       ("Case", "Ctr"),
+       library_key="sample_id",
+       pvalues=True,
+       n_perms=1000,
+   )
+
+   # Visualize the enrichment matrices (diverging heatmaps, stars = p < 0.05)
+   tcl.pl.nhood_enrichment(adata, "yardcluster_domain")
+   tcl.pl.diff_nhood_enrichment(adata, "yardcluster_domain", "condition", ("Case", "Ctr"))
+
+   # Components are obs labels: overlay them on the tissue like any cluster
+   tcl.pl.spatial_cell(adata, color="component", figsize=(10, 10))
+
+Long-edge trimming is also available to prevent kNN edges from bridging tissue
+gaps:
+
+.. code-block:: python
+
+   trimmed = tcl.tl.remove_long_links(
+       adata.obsm["spatial"], adata.obsp["spatial_connectivities"], 99.0
+   )
 
 When to Use YardCluster vs Space Ranger graphclust
 --------------------------------------------------

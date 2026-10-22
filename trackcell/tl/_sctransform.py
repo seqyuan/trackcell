@@ -8,7 +8,6 @@ Reference: Hafemeister & Satija, Genome Biology 2019.
 from __future__ import annotations
 
 import warnings
-from pathlib import Path
 from typing import Any, Optional, Sequence, Union
 
 import numba
@@ -21,13 +20,13 @@ from scipy import optimize
 from scipy.interpolate import interp1d
 from scipy.sparse import csr_matrix, issparse
 from scipy.special import digamma, polygamma
-from ._r_density import r_density_interp
-from ._r_sample import make_vst_rng, r_sample_available
+from ._density import r_density_interp
+from ._gene_utils import align_gene_frame, align_gene_list, normalize_model_pars
+from ._rng import make_vst_rng, r_sample_available
 from ._sctransform_v2 import (
     LOG10_SLOPE,
     apply_vst_flavor_settings,
     build_poisson_gene_tables,
-    fit_nb_offset,
     fit_offset_model,
     mark_suspicious_theta,
     resolve_min_variance,
@@ -1248,6 +1247,7 @@ def vst(
     seed: int = 1448145,
     min_variance: Union[float, str] = -np.inf,
     vst_flavor: Optional[str] = None,
+    v2_backend: str = "python",
     method: str = "poisson",
     exclude_poisson: bool = False,
     cells_step1: Optional[Sequence[str]] = None,
@@ -1293,7 +1293,6 @@ def vst(
     """
     if model_pars_step1 is not None and model_pars_fit_override is not None:
         raise ValueError("Pass only one of model_pars_step1 or model_pars_fit_override.")
-
     if model_pars_step1 is not None and genes_step1 is None:
         genes_step1 = pd.Index(model_pars_step1.index.astype(str))
 
@@ -1303,6 +1302,7 @@ def vst(
         exclude_poisson=exclude_poisson,
         min_variance=min_variance,
         n_cells=n_cells,
+        v2_backend=v2_backend,
     )
     method = flavor["method"]
     exclude_poisson = flavor["exclude_poisson"]
@@ -1313,8 +1313,8 @@ def vst(
     if residual_type not in RESIDUAL_TYPES:
         raise ValueError(f"Unsupported residual_type: {residual_type}")
     if res_clip_range is None:
-        # Seurat SCTransform default: sct.clip.range = c(-sqrt(ncol/30), sqrt(ncol/30))
-        res_clip_range = (-np.sqrt(umi.shape[1] / 30), np.sqrt(umi.shape[1] / 30))
+        # sctransform::vst ranks genes from residuals clipped at +/-sqrt(ncol).
+        res_clip_range = (-np.sqrt(umi.shape[1]), np.sqrt(umi.shape[1]))
 
     model_str = _build_model_str(latent_var or ("log_umi",), batch_var)
     cell_attr = _make_cell_attr(
@@ -1390,10 +1390,7 @@ def vst(
             genes_log_gmean_step1 = genes_log_gmean.loc[genes_step1]
 
     if model_pars_fit_override is not None:
-        from ._r_sctransform import normalize_r_model_pars
-
-        model_pars_fit = normalize_r_model_pars(model_pars_fit_override)
-        model_pars_fit = model_pars_fit.reindex(genes)
+        model_pars_fit = normalize_model_pars(model_pars_fit_override).reindex(genes)
         fit_genes = model_pars_fit.index[model_pars_fit.notna().any(axis=1)]
         keep_mask = np.asarray(genes.isin(fit_genes), dtype=bool)
         genes = genes[keep_mask]
@@ -1401,76 +1398,50 @@ def vst(
         model_pars_fit = model_pars_fit.loc[genes]
         model_pars = None
         outliers = None
-    elif model_pars_step1 is not None:
-        from ._r_sctransform import align_r_gene_list, align_r_model_pars, normalize_r_model_pars
-
-        if cells_step1 is None or genes_step1 is None:
-            raise ValueError(
-                "cells_step1 and genes_step1 are required when model_pars_step1 is set."
-            )
-        genes_step1 = pd.Index(align_r_gene_list(list(genes_step1), genes)).intersection(genes)
-        model_pars = align_r_model_pars(normalize_r_model_pars(model_pars_step1), genes)
-        model_pars = model_pars.reindex(genes_step1.intersection(model_pars.index))
-        model_pars = model_pars.loc[model_pars["theta"].notna()]
-        genes_step1 = model_pars.index
-        if genes_log_gmean_step1 is not None:
-            genes_log_gmean_step1 = genes_log_gmean_step1.reindex(genes_step1)
-            if genes_log_gmean_step1.isna().any():
-                raise ValueError(
-                    "genes_log_gmean_step1 missing values for some step1 genes; "
-                    "pass R-exported genes_log_gmean_step1.csv for parity."
-                )
-        else:
-            genes_log_gmean_step1 = genes_log_gmean.loc[genes_step1]
-        model_pars["theta"] = model_pars["theta"].clip(lower=1e-7)
-        model_pars.loc[~np.isfinite(model_pars["theta"]), "theta"] = np.inf
-        if do_regularize:
-            model_pars_fit, outliers = _reg_model_pars(
-                model_pars,
-                genes_log_gmean_step1,
-                genes_log_gmean,
-                bw_adjust=bw_adjust,
-                theta_regularization=theta_regularization,
-                cell_attr=cell_attr,
-                batch_var=batch_var,
-                cells_step1=cells_step1,
-                genes_step1=genes_step1,
-                umi=umi,
-                gmean_eps=gmean_eps,
-                exclude_poisson=exclude_poisson,
-                fix_slope=fix_slope,
-                genes=genes,
-            )
-        else:
-            model_pars_fit, outliers = model_pars.reindex(genes), None
     else:
-        data_step1 = cell_attr.loc[cells_step1]
-        regressor_data_step1 = _build_design_matrix(data_step1, model_str)
-        cells_step1_idx = cells.get_indexer(cells_step1)
-        if (cells_step1_idx < 0).any():
-            missing = cells_step1[cells_step1_idx < 0]
-            raise ValueError(f"cells_step1 not found in cells: {missing[:5].tolist()}")
-        umi_step1 = umi[genes.get_indexer(genes_step1)][:, cells_step1_idx]
-        if method == "poisson":
-            model_pars = _fit_poisson(umi_step1, regressor_data_step1, genes_step1)
-        elif method in {"nb_offset", "glmGamPoi_offset"}:
-            model_pars = fit_offset_model(
-                method,
-                umi_step1,
-                regressor_data_step1,
-                genes_step1,
-                allow_inf_theta=exclude_poisson,
+        if model_pars_step1 is not None:
+            genes_step1 = pd.Index(
+                align_gene_list(list(genes_step1), genes)
+            ).intersection(genes)
+            model_pars = align_gene_frame(model_pars_step1, genes)
+            model_pars = model_pars.reindex(genes_step1.intersection(model_pars.index))
+            model_pars = model_pars.loc[model_pars["theta"].notna()]
+            genes_step1 = model_pars.index
+            genes_log_gmean_step1 = (
+                genes_log_gmean_step1.reindex(genes_step1)
+                if genes_log_gmean_step1 is not None
+                else genes_log_gmean.loc[genes_step1]
             )
+            if genes_log_gmean_step1.isna().any():
+                raise ValueError("genes_log_gmean_step1 is missing injected step-1 genes.")
         else:
-            raise ValueError(f"Unsupported VST method: {method}")
-        if exclude_poisson:
-            model_pars = mark_suspicious_theta(model_pars, umi, genes)
+            data_step1 = cell_attr.loc[cells_step1]
+            regressor_data_step1 = _build_design_matrix(data_step1, model_str)
+            cells_step1_idx = cells.get_indexer(cells_step1)
+            if (cells_step1_idx < 0).any():
+                missing = cells_step1[cells_step1_idx < 0]
+                raise ValueError(f"cells_step1 not found in cells: {missing[:5].tolist()}")
+            umi_step1 = umi[genes.get_indexer(genes_step1)][:, cells_step1_idx]
+            if method == "poisson":
+                model_pars = _fit_poisson(umi_step1, regressor_data_step1, genes_step1)
+            elif method in {"nb_offset", "glmGamPoi_offset"}:
+                model_pars = fit_offset_model(
+                    method,
+                    umi_step1,
+                    regressor_data_step1,
+                    genes_step1,
+                    allow_inf_theta=exclude_poisson,
+                )
+            else:
+                raise ValueError(f"Unsupported VST method: {method}")
+            if exclude_poisson:
+                model_pars = mark_suspicious_theta(model_pars, umi, genes)
 
         coef_valid = model_pars.drop(columns=["theta"]).notna().all(axis=1)
-        valid = coef_valid & (model_pars["theta"].notna())
+        valid = coef_valid & model_pars["theta"].notna()
         if (~valid).any():
             warnings.warn(
-                f"Dropping {(~valid).sum()} gene(s) with failed Poisson regression.",
+                f"Dropping {(~valid).sum()} gene(s) with failed regression.",
                 stacklevel=2,
             )
             model_pars = model_pars.loc[valid]
@@ -1479,7 +1450,6 @@ def vst(
 
         model_pars["theta"] = model_pars["theta"].clip(lower=1e-7)
         model_pars.loc[~np.isfinite(model_pars["theta"]), "theta"] = np.inf
-
         if do_regularize:
             model_pars_fit, outliers = _reg_model_pars(
                 model_pars,
@@ -1564,6 +1534,7 @@ def vst(
         "arguments": {
             "min_variance": min_variance,
             "vst_flavor": vst_flavor,
+            "v2_backend": v2_backend,
             "method": method,
             "exclude_poisson": exclude_poisson,
         },
@@ -1642,13 +1613,12 @@ def run_sctransform(
     model_use: str = "linear",
     seed: int = 1448145,
     vst_flavor: Optional[str] = None,
+    v2_backend: str = "python",
     method: str = "poisson",
     exclude_poisson: bool = False,
     min_variance: Union[float, str] = -np.inf,
     cells_step1: Optional[Sequence[str]] = None,
     genes_step1: Optional[Sequence[str]] = None,
-    backend: str = "python",
-    r_vst_export_dir: Optional[Union[str, Path]] = None,
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     """
     Run the Seurat SCTransform workflow on a count matrix.
@@ -1664,8 +1634,9 @@ def run_sctransform(
     if clip_range is None:
         clip_range = (-np.sqrt(umi_gbc.shape[1] / 30), np.sqrt(umi_gbc.shape[1] / 30))
     if res_clip_range is None:
-        # Seurat SCTransform default: sct.clip.range = c(-sqrt(ncol/30), sqrt(ncol/30))
+        # Final stored residuals use the tighter SCTransform assay clip.
         res_clip_range = (-np.sqrt(umi_gbc.shape[1] / 30), np.sqrt(umi_gbc.shape[1] / 30))
+    variance_clip_range = (-np.sqrt(umi_gbc.shape[1]), np.sqrt(umi_gbc.shape[1]))
 
     if model_use not in SCALE_MODELS:
         raise ValueError(f"model_use must be one of {sorted(SCALE_MODELS)}.")
@@ -1673,95 +1644,6 @@ def run_sctransform(
         raise ValueError("Custom latent variables are not supported with reference_sct_model.")
 
     sct_method = _resolve_sct_method(reference_sct_model, residual_features, conserve_memory)
-    if backend not in {"python", "r", "r_step1", "r_fit"}:
-        raise ValueError("backend must be 'python', 'r', 'r_step1', or 'r_fit'.")
-    r_export: Optional[dict[str, Any]] = None
-    if backend in {"r_step1", "r_fit"}:
-        if r_vst_export_dir is None:
-            raise ValueError(f"backend='{backend}' requires r_vst_export_dir.")
-        from ._r_sctransform import (
-            align_r_gene_list,
-            align_r_gmean_series,
-            align_r_model_pars,
-            load_r_vst_export,
-            validate_r_vst_export_artifacts,
-        )
-
-        validate_r_vst_export_artifacts(r_vst_export_dir, backend=backend)
-        r_export = load_r_vst_export(r_vst_export_dir)
-        if backend == "r_step1":
-            if r_export.get("genes_log_gmean") is None or r_export.get("genes_log_gmean_step1") is None:
-                raise ValueError(
-                    f"backend='r_step1' requires genes_log_gmean.csv and "
-                    f"genes_log_gmean_step1.csv in {r_vst_export_dir}."
-                )
-        if backend == "r_step1" and r_export.get("genes_vst"):
-            genes_vst = pd.Index(align_r_gene_list(r_export["genes_vst"], gene_index))
-            gene_pos = gene_index.get_indexer(genes_vst)
-            keep = gene_pos >= 0
-            gene_pos = gene_pos[keep]
-            umi_gbc = umi_gbc[gene_pos]
-            gene_index = gene_index[gene_pos]
-        cells_step1 = r_export["cells_step1"]
-        genes_step1 = align_r_gene_list(r_export["genes_step1"], gene_index)
-        if r_export["meta"].get("min_variance") is not None:
-            min_variance = r_export["meta"]["min_variance"]
-        if vst_flavor is None:
-            vst_flavor = "v2"
-        if r_export.get("model_pars_step1") is not None:
-            r_export["model_pars_step1"] = align_r_model_pars(
-                r_export["model_pars_step1"], gene_index
-            )
-        if r_export.get("model_pars_fit") is not None:
-            r_export["model_pars_fit"] = align_r_model_pars(
-                r_export["model_pars_fit"], gene_index
-            )
-        if backend == "r_step1":
-            if r_export.get("genes_log_gmean") is not None:
-                r_export["genes_log_gmean"] = align_r_gmean_series(
-                    r_export["genes_log_gmean"], gene_index
-                )
-            if r_export.get("genes_log_gmean_step1") is not None:
-                r_export["genes_log_gmean_step1"] = align_r_gmean_series(
-                    r_export["genes_log_gmean_step1"], gene_index
-                )
-    if backend == "r":
-        if sct_method != "default":
-            raise ValueError(f"backend='r' does not support sct_method '{sct_method}'.")
-        if vars_to_regress or batch_var or latent_var_nonreg:
-            raise ValueError("backend='r' does not support vars_to_regress, batch_var, or latent_var_nonreg.")
-        if cells_step1 is not None or genes_step1 is not None:
-            raise ValueError(
-                "backend='r' uses R subsampling; do not pass cells_step1/genes_step1."
-            )
-        from ._r_sctransform import run_vst_r, vst_r_available
-
-        if not vst_r_available():
-            raise RuntimeError(
-                "backend='r' requires R with sctransform. Set TRACKCELL_RSCRIPT or install sctransform."
-            )
-        cell_attr_r = _make_cell_attr(
-            umi_gbc,
-            cell_index,
-            cell_attr=cell_attr,
-            latent_var=latent_var,
-        )
-        return run_vst_r(
-            umi_gbc,
-            gene_index,
-            cell_index,
-            cell_attr=cell_attr_r,
-            n_cells=n_cells,
-            n_genes=n_genes,
-            variable_features_n=variable_features_n,
-            variable_features_rv_th=variable_features_rv_th,
-            do_correct_umi=do_correct_umi,
-            return_only_var_genes=return_only_var_genes,
-            clip_range=clip_range,
-            residual_type=residual_type,
-            vst_flavor=vst_flavor,
-            seed=seed,
-        )
 
     return_only_var = return_only_var_genes
     correct_umi = do_correct_umi
@@ -1775,6 +1657,7 @@ def run_sctransform(
         n_cells=n_cells,
         seed=seed,
         vst_flavor=vst_flavor,
+        v2_backend=v2_backend,
         method=method,
         exclude_poisson=exclude_poisson,
         min_variance=min_variance,
@@ -1832,34 +1715,19 @@ def run_sctransform(
             gene_index,
             gene_index,
             residual_type=residual_type,
-            res_clip_range=res_clip_range,
+            res_clip_range=variance_clip_range,
         )
         vst_out["gene_attr"]["residual_variance"] = np.nan
         vst_out["gene_attr"].loc[feature_var.index, "residual_variance"] = feature_var
     else:
-        extra_vst: dict[str, Any] = {}
-        if backend == "r_step1" and r_export is not None:
-            extra_vst["model_pars_step1"] = r_export["model_pars_step1"]
-            if r_export.get("genes_log_gmean") is not None:
-                extra_vst["genes_log_gmean"] = r_export["genes_log_gmean"]
-            if r_export.get("genes_log_gmean_step1") is not None:
-                extra_vst["genes_log_gmean_step1"] = r_export["genes_log_gmean_step1"]
-        elif backend == "r_fit" and r_export is not None:
-            fit = r_export.get("model_pars_fit")
-            if fit is None:
-                raise FileNotFoundError(
-                    f"backend='r_fit' requires model_pars_fit.csv in {r_vst_export_dir}"
-                )
-            extra_vst["model_pars_fit_override"] = fit
         vst_out = vst(
             umi_gbc,
             gene_index,
             cell_index,
             **vst_common,
-            **extra_vst,
             return_corrected_umi=correct_umi and residual_type == "pearson",
             residual_type=residual_type,
-            res_clip_range=res_clip_range,
+            res_clip_range=variance_clip_range,
         )
 
     top_features = _select_top_features(
@@ -1982,6 +1850,7 @@ def run_sctransform(
         residual_genes.to_numpy() if residual_features is not None else top_features.to_numpy()
     )
     vst_out["arguments"] = {
+        **vst_out.get("arguments", {}),
         "sct.method": sct_method,
         "sct.clip.range": clip_range,
         "res_clip_range": res_clip_range,
@@ -1994,6 +1863,5 @@ def run_sctransform(
         "variable_features": variable_features,
         "sct_method": sct_method,
         "vst_method": vst_out.get("arguments", {}).get("method"),
-        "backend": backend,
     }
     return assay_out, vst_out

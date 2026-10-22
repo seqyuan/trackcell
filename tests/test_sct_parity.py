@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 
 from trackcell.benchmark.rpca.data import RPCA_BENCHMARK_ROOT, RPCA_SAMPLES
-from trackcell.tl.integration.sct_parity import (
+from trackcell.benchmark.rpca.sct_exports import (
     load_rpca_subsample_indices,
     materialize_rpca_r_step1_export_dir,
     patch_r_sct_scale_data,
@@ -16,8 +16,8 @@ from trackcell.tl.integration.sct_parity import (
     rpca_exports_support_r_step1,
     rpca_scale_data_available,
     rpca_step1_available,
-    seurat_sct_clip_range,
 )
+from trackcell.tl.integration.sct_parity import seurat_sct_clip_range
 
 RPCA_SEED = 1448145
 

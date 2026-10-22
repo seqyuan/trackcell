@@ -14,7 +14,7 @@ except ImportError:  # pragma: no cover - optional dependency
     RRNG = None  # type: ignore[misc, assignment]
     _RRNG_AVAILABLE = False
 
-from ._r_density import r_density_bw_factor  # noqa: F401 — re-export
+from ._density import r_density_bw_factor  # noqa: F401 — re-export
 
 
 @runtime_checkable

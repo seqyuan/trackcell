@@ -7,7 +7,6 @@ negative binomial regression (Hafemeister & Satija, Genome Biology 2019).
 
 from __future__ import annotations
 
-from pathlib import Path
 from typing import Any, Optional, Sequence, Union
 
 import numpy as np
@@ -78,11 +77,11 @@ def _write_sctransform_results(
     seed: int,
     layer: Optional[str],
     vst_flavor: Optional[str],
+    v2_backend: str,
     save_reference_model: bool,
     reference_sct_model: Optional[dict],
     batch_models: Optional[dict[str, dict]] = None,
     batch_key: Optional[str] = None,
-    method: str = "python",
 ) -> None:
     counts_cxg = assay_out["counts"].T.tocsr()
     data_cxg = assay_out["data"].T.tocsr()
@@ -135,8 +134,8 @@ def _write_sctransform_results(
             "layer": layer,
             "sct_method": assay_out["sct_method"],
             "vst_flavor": vst_flavor,
+            "v2_backend": v2_backend,
             "vst_method": assay_out.get("vst_method"),
-            "method": method,
             "batch_key": batch_key,
         },
         "model_str": vst_out["model_str"],
@@ -175,12 +174,11 @@ def _run_sctransform_on_counts(
     model_use: str,
     seed: int,
     vst_flavor: Optional[str],
+    v2_backend: str,
     cell_attr: Optional[pd.DataFrame] = None,
     latent_data: Optional[pd.DataFrame] = None,
     cells_step1: Optional[Sequence[str]] = None,
     genes_step1: Optional[Sequence[str]] = None,
-    backend: str = "python",
-    r_vst_export_dir: Optional[Union[str, Path]] = None,
 ):
     if sps.issparse(counts):
         counts = counts.tocsr()
@@ -214,10 +212,9 @@ def _run_sctransform_on_counts(
         model_use=model_use,
         seed=seed,
         vst_flavor=vst_flavor,
+        v2_backend=v2_backend,
         cells_step1=cells_step1,
         genes_step1=genes_step1,
-        backend=backend,
-        r_vst_export_dir=r_vst_export_dir,
     )
 
 
@@ -230,8 +227,6 @@ def _fit_sct_batch_job(
     latent_data: Optional[pd.DataFrame],
     cells_step1: Optional[Sequence[str]],
     genes_step1: Optional[Sequence[str]],
-    batch_export: Optional[Union[str, Path]],
-    method: str,
     clip_range: Optional[tuple[float, float]],
     common_kwargs: dict[str, Any],
 ) -> tuple[str, dict[str, Any], tuple[dict[str, Any], dict[str, Any]]]:
@@ -249,8 +244,6 @@ def _fit_sct_batch_job(
         latent_data=latent_data,
         cells_step1=cells_step1,
         genes_step1=genes_step1,
-        backend=method,
-        r_vst_export_dir=batch_export,
         **common_kwargs,
     )
     resolved_clip = clip_range or (
@@ -272,9 +265,7 @@ def _run_sct_per_batch(
     batch_key: str,
     layer: Optional[str],
     batch_n_jobs: int,
-    method: str,
     subsample_indices: Optional[dict[str, dict[str, Sequence[str]]]],
-    r_vst_exports: Optional[dict[str, Union[str, Path]]],
     vars_to_regress: Optional[Sequence[str]],
     clip_range: Optional[tuple[float, float]],
     common_kwargs: dict[str, Any],
@@ -286,7 +277,7 @@ def _run_sct_per_batch(
     union_hvg: set[str] = set()
 
     n_workers = _resolve_batch_n_jobs(batch_n_jobs)
-    use_parallel = n_workers > 1 and len(batch_list) > 1 and method != "r"
+    use_parallel = n_workers > 1 and len(batch_list) > 1
     if use_parallel:
         n_workers = min(n_workers, len(batch_list))
         jobs = []
@@ -297,7 +288,6 @@ def _run_sct_per_batch(
             if sps.issparse(counts):
                 counts = counts.tocsr()
             batch_subsample = (subsample_indices or {}).get(str(batch_label), {})
-            batch_export = (r_vst_exports or {}).get(str(batch_label)) if r_vst_exports else None
             latent_data = sub.obs[list(vars_to_regress)].copy() if vars_to_regress else None
             jobs.append(
                 delayed(_fit_sct_batch_job)(
@@ -309,8 +299,6 @@ def _run_sct_per_batch(
                     latent_data,
                     batch_subsample.get("cells_step1"),
                     batch_subsample.get("genes_step1"),
-                    batch_export,
-                    method,
                     clip_range,
                     common_kwargs,
                 )
@@ -329,7 +317,6 @@ def _run_sct_per_batch(
         counts = sub.layers[layer] if layer is not None else sub.X
         latent_data = sub.obs[list(vars_to_regress)].copy() if vars_to_regress else None
         batch_subsample = (subsample_indices or {}).get(str(batch_label), {})
-        batch_export = (r_vst_exports or {}).get(str(batch_label)) if r_vst_exports else None
         assay_out, vst_out = _run_sctransform_on_counts(
             counts,
             sub,
@@ -337,8 +324,6 @@ def _run_sct_per_batch(
             latent_data=latent_data,
             cells_step1=batch_subsample.get("cells_step1"),
             genes_step1=batch_subsample.get("genes_step1"),
-            backend=method,
-            r_vst_export_dir=batch_export,
             **common_kwargs,
         )
         resolved_clip = clip_range or (
@@ -381,6 +366,7 @@ def sctransform(
     residual_type: str = "pearson",
     model_use: str = "linear",
     vst_flavor: Optional[str] = None,
+    v2_backend: str = "python",
     seed: int = 1448145,
     key_added: str = "sct",
     store_residuals_in: str = "obsm",
@@ -390,13 +376,15 @@ def sctransform(
     cells_step1: Optional[Sequence[str]] = None,
     genes_step1: Optional[Sequence[str]] = None,
     subsample_indices: Optional[dict[str, dict[str, Sequence[str]]]] = None,
-    r_vst_export_dir: Optional[Union[str, Path]] = None,
-    r_vst_exports: Optional[dict[str, Union[str, Path]]] = None,
-    method: str = "python",
     batch_n_jobs: int = 1,
 ) -> Optional[AnnData]:
     """
     Normalize UMI counts with SCTransform (Seurat 4.4.0).
+
+    Uses a pure-Python implementation of the regularized negative-binomial
+    normalization workflow.  ``vst_flavor="v2"`` is supported via a built-in
+    vectorised NB GLM (inspired by shanuz), with optional pyglmGamPoi
+    acceleration when the package is installed.
 
     Parameters
     ----------
@@ -409,60 +397,42 @@ def sctransform(
         Runs independent SCT models per batch (Seurat ``SplitObject`` equivalent)
         and stores them in ``adata.uns[key_added]['batch_models']``.
     vst_flavor
-        When ``"v2"``, use SCT v2 defaults (``glmGamPoi_offset``, ``exclude_poisson``,
-        ``min_variance='umi_median'``, ``n_cells=2000``). Requires pyglmGamPoi or
-        R glmGamPoi; use ``method='r_fit'`` / ``method='r'`` when unavailable.
+        When ``"v2"``, use SCT v2 defaults (fixed depth slope,
+        ``exclude_poisson=True``, ``min_variance='umi_median'``,
+        ``n_cells=2000``).
+    v2_backend
+        Explicit SCT v2 step-1 fitter. ``"python"`` (default) uses the bundled
+        NB offset implementation. ``"pyglmGamPoi"`` uses the optional package
+        and raises when it is not installed. No automatic backend switching.
     batch_var
-        Column in ``adata.obs`` for batch-aware VST fitting within a single object.
-        Do not combine with ``batch_key``.
+        Column in ``adata.obs`` for batch-aware VST fitting within a single
+        object. Do not combine with ``batch_key``.
     cells_step1, genes_step1
-        Fixed cell/gene subsample indices for VST step 1 (Seurat ``vst`` parity).
-        When set, random subsampling is skipped for the provided dimension(s).
+        Fixed cell/gene subsample indices for VST step 1 (Seurat ``vst``
+        parity). When set, random subsampling is skipped for the provided
+        dimension(s).
     subsample_indices
         Per-batch fixed subsample indices when using ``batch_key``. Each entry
         maps a batch label to ``{"cells_step1": [...], "genes_step1": [...]}``.
-    method
-        ``"python"`` (default) native VST; ``"r"`` full R ``sctransform::vst``;
-        ``"r_step1"`` loads R step-1 ``model_pars`` then runs Python ksmooth +
-        residuals; ``"r_fit"`` loads R ``model_pars_fit`` and runs Python
-        residuals only.
-    r_vst_export_dir
-        Directory with R-exported VST intermediates (single-sample mode).
-    r_vst_exports
-        Per-batch export directories when using ``batch_key`` with
-        ``method='r_step1'`` or ``method='r_fit'``.
     batch_n_jobs
         Parallel workers for per-batch SCT when ``batch_key`` is set.
         ``1`` runs batches serially (default); ``-1`` uses all CPUs;
         ``N > 1`` uses at most ``N`` workers (capped by batch count).
-        Ignored for ``method='r'`` (R subprocess stays serial).
     """
     if copy:
         adata = adata.copy()
     elif not inplace:
         raise ValueError("Use copy=True or inplace=True.")
+    if v2_backend not in {"python", "pyglmGamPoi"}:
+        raise ValueError("v2_backend must be 'python' or 'pyglmGamPoi'.")
 
     if batch_key is not None and batch_var is not None:
         raise ValueError("Use batch_key or batch_var, not both.")
     if subsample_indices is not None and batch_key is None:
         raise ValueError("subsample_indices requires batch_key.")
     if (cells_step1 is not None or genes_step1 is not None) and batch_key is not None:
-        raise ValueError("Use subsample_indices with batch_key, not cells_step1/genes_step1.")
-    if method not in {"python", "r", "r_step1", "r_fit"}:
-        raise ValueError("method must be 'python', 'r', 'r_step1', or 'r_fit'.")
-    if method in {"r_step1", "r_fit"} and batch_key is None and r_vst_export_dir is None:
-        raise ValueError(f"method='{method}' requires r_vst_export_dir.")
-    if method in {"r_step1", "r_fit"} and batch_key is not None and not r_vst_exports:
-        raise ValueError(f"method='{method}' with batch_key requires r_vst_exports.")
-    if method == "r" and (
-        subsample_indices is not None or cells_step1 is not None or genes_step1 is not None
-    ):
-        raise ValueError("method='r' does not support cells_step1/genes_step1/subsample_indices.")
-    if method in {"r_step1", "r_fit"} and (
-        cells_step1 is not None or genes_step1 is not None or subsample_indices is not None
-    ):
         raise ValueError(
-            f"method='{method}' uses r_vst_export_dir(s); do not pass cells_step1/genes_step1."
+            "Use subsample_indices with batch_key, not cells_step1/genes_step1."
         )
 
     if layer is not None:
@@ -507,6 +477,7 @@ def sctransform(
         model_use=model_use,
         seed=seed,
         vst_flavor=vst_flavor,
+        v2_backend=v2_backend,
     )
 
     if batch_key is not None:
@@ -518,9 +489,7 @@ def sctransform(
             batch_key=batch_key,
             layer=layer,
             batch_n_jobs=batch_n_jobs,
-            method=method,
             subsample_indices=subsample_indices,
-            r_vst_exports=r_vst_exports,
             vars_to_regress=vars_to_regress,
             clip_range=clip_range,
             common_kwargs=common_kwargs,
@@ -535,17 +504,25 @@ def sctransform(
                     rv = row.get("residual_variance", np.nan)
                     if np.isfinite(rv):
                         rv_scores[gene] = max(rv_scores.get(gene, -np.inf), float(rv))
-            combined_hvg = sorted(rv_scores, key=rv_scores.get, reverse=True)[:n_top_genes]
+            combined_hvg = sorted(
+                rv_scores, key=rv_scores.get, reverse=True
+            )[:n_top_genes]
 
         gene_to_col = {g: i for i, g in enumerate(combined_hvg)}
-        combined_residuals = np.zeros((adata.n_obs, len(combined_hvg)), dtype=np.float32)
+        combined_residuals = np.zeros(
+            (adata.n_obs, len(combined_hvg)), dtype=np.float32
+        )
 
         for batch_label in batch_labels.unique():
             mask = batch_labels == batch_label
             assay_out, _ = per_batch[batch_label]
-            batch_genes = [g for g in combined_hvg if g in assay_out["scale.data"].index]
+            batch_genes = [
+                g for g in combined_hvg if g in assay_out["scale.data"].index
+            ]
             if batch_genes:
-                block = assay_out["scale.data"].loc[batch_genes].T.to_numpy(dtype=np.float32)
+                block = assay_out["scale.data"].loc[batch_genes].T.to_numpy(
+                    dtype=np.float32
+                )
                 cols = [gene_to_col[g] for g in batch_genes]
                 combined_residuals[np.where(mask)[0][:, None], cols] = block
 
@@ -569,8 +546,16 @@ def sctransform(
         _write_sctransform_results(
             adata,
             {
-                "counts": combined_counts.T.tocsr() if sps.issparse(combined_counts) else sps.csr_matrix(combined_counts.T),
-                "data": combined_data.T.tocsr() if sps.issparse(combined_data) else sps.csr_matrix(combined_data.T),
+                "counts": (
+                    combined_counts.T.tocsr()
+                    if sps.issparse(combined_counts)
+                    else sps.csr_matrix(combined_counts.T)
+                ),
+                "data": (
+                    combined_data.T.tocsr()
+                    if sps.issparse(combined_data)
+                    else sps.csr_matrix(combined_data.T)
+                ),
                 "scale.data": scale_data,
                 "variable_features": np.array(combined_hvg),
                 "sct_method": "batch_key",
@@ -583,13 +568,30 @@ def sctransform(
             batch_key=batch_key,
             save_reference_model=False,
             reference_sct_model=None,
-            **{k: common_kwargs[k] for k in (
-                "n_top_genes", "n_cells", "n_genes", "do_correct_umi", "do_center",
-                "do_scale", "clip_range", "res_clip_range", "conserve_memory",
-                "residual_features", "vars_to_regress", "latent_var", "batch_var",
-                "latent_var_nonreg", "residual_type", "model_use", "seed", "vst_flavor",
-            )},
-            method=method,
+            **{
+                k: common_kwargs[k]
+                for k in (
+                    "n_top_genes",
+                    "n_cells",
+                    "n_genes",
+                    "do_correct_umi",
+                    "do_center",
+                    "do_scale",
+                    "clip_range",
+                    "res_clip_range",
+                    "conserve_memory",
+                    "residual_features",
+                    "vars_to_regress",
+                    "latent_var",
+                    "batch_var",
+                    "latent_var_nonreg",
+                    "residual_type",
+                    "model_use",
+                    "seed",
+                    "vst_flavor",
+                    "v2_backend",
+                )
+            },
         )
         adata.uns[key_added]["variable_features"] = combined_hvg
         adata.uns[key_added]["params"]["batch_n_jobs"] = batch_n_jobs
@@ -600,7 +602,9 @@ def sctransform(
     if vars_to_regress:
         missing = [v for v in vars_to_regress if v not in adata.obs.columns]
         if missing:
-            raise ValueError(f"vars_to_regress not found in adata.obs: {missing}")
+            raise ValueError(
+                f"vars_to_regress not found in adata.obs: {missing}"
+            )
         latent_data = adata.obs[list(vars_to_regress)].copy()
 
     assay_out, vst_out = _run_sctransform_on_counts(
@@ -610,8 +614,6 @@ def sctransform(
         latent_data=latent_data,
         cells_step1=cells_step1,
         genes_step1=genes_step1,
-        backend=method,
-        r_vst_export_dir=r_vst_export_dir,
         **common_kwargs,
     )
     _write_sctransform_results(
@@ -624,12 +626,29 @@ def sctransform(
         save_reference_model=save_reference_model,
         reference_sct_model=reference_sct_model,
         batch_key=None,
-        **{k: common_kwargs[k] for k in (
-            "n_top_genes", "n_cells", "n_genes", "do_correct_umi", "do_center",
-            "do_scale", "clip_range", "res_clip_range", "conserve_memory",
-            "residual_features", "vars_to_regress", "latent_var", "batch_var",
-            "latent_var_nonreg", "residual_type", "model_use", "seed", "vst_flavor",
-        )},
-        method=method,
+        **{
+            k: common_kwargs[k]
+            for k in (
+                "n_top_genes",
+                "n_cells",
+                "n_genes",
+                "do_correct_umi",
+                "do_center",
+                "do_scale",
+                "clip_range",
+                "res_clip_range",
+                "conserve_memory",
+                "residual_features",
+                "vars_to_regress",
+                "latent_var",
+                "batch_var",
+                "latent_var_nonreg",
+                "residual_type",
+                "model_use",
+                "seed",
+                "vst_flavor",
+                "v2_backend",
+            )
+        },
     )
     return None if inplace else adata

@@ -63,7 +63,7 @@ Batch expression integration (SCT + RPCA / Harmony / BBKNN) — see
    pip install annoy              # RPCA anchors (required for integrate_rpca)
    pip install harmonypy          # SCT + Harmony
    pip install bbknn                # SCT + BBKNN
-   pip install pyglmGamPoi          # native SCT v2 (or R glmGamPoi via method='r')
+   pip install pyglmGamPoi          # optional SCT v2 backend (explicit selection)
 
 ``integrate_sct_rpca`` and ``run_sct_integration`` work without ``harmonypy`` /
 ``bbknn`` unless you use those downstream methods.

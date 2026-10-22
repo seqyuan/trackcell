@@ -5,7 +5,6 @@ from .prep_sct import prep_sct_integration
 from .rpca_integration import integrate_rpca
 from .sct_integration import (
     release_sct_integration_cache,
-    resolve_sct_integration_method,
     run_sct_integration,
     sct_prep_matrix,
 )
@@ -17,7 +16,6 @@ __all__ = [
     "run_sct_integration",
     "release_sct_integration_cache",
     "sct_prep_matrix",
-    "resolve_sct_integration_method",
     "integrate_rpca",
     "integrate_sct_rpca",
 ]
