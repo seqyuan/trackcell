@@ -76,7 +76,22 @@ class _NumpyRNG:
         replace: bool = False,
         p: Optional[np.ndarray] = None,
     ) -> np.ndarray:
-        return self._rng.choice(np.asarray(items), size=int(size), replace=replace, p=p)
+        items = np.asarray(items)
+        if p is None:
+            return self._rng.choice(items, size=int(size), replace=replace)
+
+        prob = np.asarray(p, dtype=np.float64)
+        if prob.shape[0] != len(items):
+            raise ValueError("p length must match items")
+        if not np.isfinite(prob).all() or (prob < 0).any():
+            raise ValueError("p must contain finite non-negative values")
+        total = prob.sum()
+        if total <= 0:
+            raise ValueError("p must sum to a positive value")
+        # R's sample() normalizes probabilities internally; numpy.Generator
+        # requires a sum of 1 (within tolerance), so normalize explicitly.
+        prob = prob / total
+        return self._rng.choice(items, size=int(size), replace=replace, p=prob)
 
 
 def r_sample_available() -> bool:

@@ -13,8 +13,9 @@ Version 0.3.45
     ``interactive`` extra (``ipympl``); both were previously either mandatory
     or documented as manual installs.
   * Direct dependencies (``anndata``, ``scipy``, ``scikit-learn``,
-    ``statsmodels``, ``patsy``, ``joblib``, ``matplotlib``) are now declared
-    explicitly instead of relying on scanpy transitives.
+    ``statsmodels``, ``patsy``, ``joblib``, ``matplotlib``, ``pyarrow``) are now
+    declared explicitly instead of relying on scanpy transitives.
+    ``pyarrow`` is required to read Xenium / SpaceRanger parquet tables.
   * Added the MIT license (``LICENSE`` + package metadata).
   * Removed the machine-specific ``/Volumes/process/tmp/tcl_test`` benchmark
     path; use ``TRACKCELL_BENCHMARK_ROOT`` (default
@@ -23,6 +24,14 @@ Version 0.3.45
 * **Testing**: added a CI workflow (Python 3.10–3.12) with lint, wheel
   metadata validation, and the fast test suite. Heavy R/Seurat parity tests are
   marked ``slow`` and require external benchmark data.
+
+* **Fixes**:
+
+  * The numpy fallback RNG used when the optional ``rrng`` is not installed now
+    normalizes sampling probabilities like R's ``sample(prob=)``, fixing
+    ``ValueError: probabilities do not sum to 1`` in SCT v2.
+  * Integration tests that require the optional ``annoy`` package are skipped
+    when it is not installed.
 
 * **Performance**: ``_row_gmean_sparse`` is now vectorized (~30x faster on
   realistic sparse matrices, bit-identical results). Removed ineffective

@@ -89,7 +89,7 @@ jobs:
           virtualenvs-in-project: true
 
       - name: Install dependencies
-        run: poetry install --with dev --extras clustering --no-interaction
+        run: poetry install --with dev --extras "clustering integration" --no-interaction
 
       - name: Validate pyproject
         run: poetry check

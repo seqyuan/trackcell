@@ -38,6 +38,7 @@ TrackCell requires Python ``>=3.10,<3.13`` and the following packages
 * shapely >= 2.0.0
 * imageio >= 2.31.0
 * h5py >= 3.0.0
+* pyarrow >= 12.0.0 (parquet tables for Xenium / SpaceRanger)
 * zarr >= 2.18.0, < 3.0.0
 
 Optional Feature Extras

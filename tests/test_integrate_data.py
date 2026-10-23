@@ -11,6 +11,8 @@ from trackcell.tl.integration.integrate_data import (
     integrate_pair,
 )
 
+pytest.importorskip("annoy")
+
 
 def _synthetic_pair(n_ref=200, n_query=500, n_anchors=800, n_feat=50, seed=0):
     rng = np.random.default_rng(seed)
