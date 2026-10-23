@@ -447,7 +447,7 @@ Use with `spatial_cell` for a composite view:
 
 ```python
 # Compute blended colors
-adata = tcl.tl.multigene_blend(
+tcl.tl.multigene_blend(
     adata,
     genes=['EPCAM', 'PECAM1', 'VWF'],
     mode='blend',
@@ -589,12 +589,30 @@ Heavy parity/benchmark tests look for data under `TRACKCELL_BENCHMARK_ROOT`
 
 MIT — see [LICENSE](LICENSE).
 
-## update
-```shell
-git tag v0.3.8
-git push origin v0.3.8
+## Saving geometry-bearing objects
 
-# In GitHub, go to "Releases" → "Draft a new release".
+Use `tcl.io.save_h5ad()` instead of `adata.write_h5ad()` when the object was
+produced by `read_hd_cellseg`, `read_xenium_cellseg`, `read_atera`, or
+`read_sto_cellbin` (their `uns['spatial'][sample]['geometries']` contains
+Shapely polygons that HDF5 cannot store directly):
+
+```python
+import anndata as ad
+import trackcell as tcl
+
+tcl.io.save_h5ad(adata, "sample.h5ad")
+adata = tcl.io.restore_geometries(ad.read_h5ad("sample.h5ad"))
+```
+
+## Release
+
+Releases are created by the `auto-release` GitHub Actions workflow when a
+version tag is pushed. Update `trackcell/__init__.py`, `pyproject.toml`, and
+`docs/source/changelog.rst` first, then:
+
+```shell
+git tag -a v0.3.47 -m "v0.3.47: summary"
+git push origin main && git push origin v0.3.47
 ```
 
 

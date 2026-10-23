@@ -19,6 +19,8 @@ import warnings
 from multiprocessing import Pool, cpu_count
 from functools import partial
 
+from .serialize import GEOMETRY_KEYS, save_h5ad
+
 
 def _bin_half_size_pixels(
     bin_size_um: float,
@@ -341,7 +343,7 @@ def convert_annohdcell_to_trackcell(
     if output_h5ad_path is not None:
         output_h5ad_path = Path(output_h5ad_path)
         print(f"Saving to {output_h5ad_path}")
-        adata_cell.write_h5ad(output_h5ad_path)
+        save_h5ad(adata_cell, output_h5ad_path)
 
     print("Conversion complete!")
     print(f"Output: {adata_cell.n_obs} cells × {adata_cell.n_vars} genes")
@@ -564,15 +566,7 @@ def add_geometries_to_annohdcell_output(
     if output_h5ad_path is not None:
         output_h5ad_path = Path(output_h5ad_path)
         print(f"Saving to {output_h5ad_path}")
-        # Convert GeoDataFrame to regular DataFrame with WKT strings for h5ad serialization
-        gdf_backup = adata_cell.uns["spatial"][sample]["geometries"]
-        adata_cell.uns["spatial"][sample]["geometries"] = pd.DataFrame(
-            {"geometry": gdf_backup.geometry.apply(lambda g: g.wkt)},
-            index=gdf_backup.index
-        )
-        adata_cell.write_h5ad(output_h5ad_path)
-        # Restore GeoDataFrame in memory
-        adata_cell.uns["spatial"][sample]["geometries"] = gdf_backup
+        save_h5ad(adata_cell, output_h5ad_path)
 
     print("Geometry addition complete!")
     print(f"Output: {adata_cell.n_obs} cells × {adata_cell.n_vars} genes with geometries")
@@ -619,24 +613,29 @@ def restore_geometries(adata: sc.AnnData, sample: Optional[str] = None) -> sc.An
             warnings.warn(f"Sample '{s}' not found in adata.uns['spatial']")
             continue
 
-        if "geometries" not in adata.uns["spatial"][s]:
-            continue
+        for geom_key in GEOMETRY_KEYS:
+            if geom_key not in adata.uns["spatial"][s]:
+                continue
 
-        geom_data = adata.uns["spatial"][s]["geometries"]
+            geom_data = adata.uns["spatial"][s][geom_key]
 
-        # Check if it's already a GeoDataFrame
-        if isinstance(geom_data, gpd.GeoDataFrame):
-            continue
+            # Check if it's already a GeoDataFrame
+            if isinstance(geom_data, gpd.GeoDataFrame):
+                continue
 
-        # Convert DataFrame with WKT strings to GeoDataFrame
-        if isinstance(geom_data, pd.DataFrame) and "geometry" in geom_data.columns:
-            geometries = geom_data["geometry"].apply(wkt.loads)
-            gdf = gpd.GeoDataFrame(
-                geometry=geometries,
-                index=geom_data.index
-            )
-            adata.uns["spatial"][s]["geometries"] = gdf
-            print(f"Restored {len(gdf)} geometries for sample '{s}'")
+            # Convert DataFrame with WKT strings to GeoDataFrame
+            if isinstance(geom_data, pd.DataFrame) and "geometry" in geom_data.columns:
+                geometries = geom_data["geometry"].apply(
+                    lambda g: wkt.loads(g) if isinstance(g, str) else g
+                )
+                gdf = gpd.GeoDataFrame(
+                    geometry=geometries,
+                    index=geom_data.index
+                )
+                adata.uns["spatial"][s][geom_key] = gdf
+                print(
+                    f"Restored {len(gdf)} {geom_key} for sample '{s}'"
+                )
 
     return adata
 

@@ -76,6 +76,44 @@ def test_sctransform_copy_returns_new_object():
     assert "X_sct" not in adata.obsm
 
 
+def test_sctransform_copy_with_default_inplace_returns_copy():
+    """copy=True must return the copy even when inplace keeps its default."""
+    adata = _make_count_adata()
+    out = sctransform(
+        adata,
+        n_top_genes=15,
+        n_cells=30,
+        n_genes=40,
+        copy=True,
+    )
+    assert out is not None
+    assert "X_sct" in out.obsm
+    assert "X_sct" not in adata.obsm
+
+
+def test_sctransform_layer_residuals_are_aligned_to_var_names():
+    """Layer residuals must be stored per gene, not by variance rank."""
+    obsm_ad = _make_count_adata(seed=4)
+    layer_ad = _make_count_adata(seed=4)
+    kwargs = dict(n_top_genes=17, n_cells=40, n_genes=50, seed=7)
+
+    sctransform(obsm_ad, store_residuals_in="obsm", **kwargs)
+    sctransform(layer_ad, store_residuals_in="layer", **kwargs)
+
+    features = list(obsm_ad.uns["sct"]["variable_features"])
+    mask = layer_ad.var["sct_highly_variable"].to_numpy()
+    assert mask.sum() == len(features)
+
+    dense = layer_ad.layers["sct_residuals"].toarray()
+    hvg_positions = np.flatnonzero(mask)
+    for gene in features:
+        obsm_col = obsm_ad.obsm["X_sct"][:, features.index(gene)]
+        layer_col = dense[:, layer_ad.var_names.get_loc(gene)]
+        np.testing.assert_allclose(layer_col, obsm_col, rtol=1e-5, atol=1e-5)
+    # Non-HVG columns stay zero.
+    assert np.allclose(dense[:, np.setdiff1d(np.arange(layer_ad.n_vars), hvg_positions)], 0)
+
+
 def test_sctransform_dense_input():
     adata = _make_count_adata(sparse=False)
     sctransform(adata, n_top_genes=10, n_cells=30, n_genes=30)

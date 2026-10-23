@@ -72,3 +72,22 @@ def test_hd_labeldist_hires_requires_scale():
             inplace=False,
             coordinate_system="hires",
         )
+
+
+def test_hd_labeldist_falls_back_to_metadata_pixel_size():
+    """Xenium/Atera store pixel size in uns['spatial'][lib]['metadata']."""
+    adata = _make_labeldist_adata()
+    scalefactors = adata.uns["spatial"]["sample"]["scalefactors"]
+    scalefactors.pop("microns_per_pixel")
+    scalefactors.pop("tissue_hires_scalef", None)
+    adata.uns["spatial"]["sample"]["metadata"] = {"pixel_size": 0.5}
+
+    result = hd_labeldist(
+        adata,
+        groupby="celltype",
+        label="target",
+        inplace=False,
+        coordinate_system="fullres",
+    )
+    np.testing.assert_allclose(result["target_dist"].values, [0.0, 5.0, 10.0])
+    assert result.attrs["params"]["microns_per_pixel"] == 0.5

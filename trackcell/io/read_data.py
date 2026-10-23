@@ -21,6 +21,46 @@ import gc
 import h5py
 from scipy import sparse as sp_sparse
 
+_SAMPLE_DIR_MARKERS = {
+    "outs",
+    "binned_outputs",
+    "segmented_outputs",
+    "filtered_feature_bc_matrix",
+}
+
+
+def _infer_sample_from_path(path: Union[str, Path]) -> str:
+    """Infer a sample name by walking past SpaceRanger layout directories.
+
+    ``.../Cse1/outs/binned_outputs/square_016um`` -> ``Cse1``.
+    """
+    original = Path(path)
+    current = original.resolve()
+    while current.name and (
+        current.name in _SAMPLE_DIR_MARKERS
+        or current.name.startswith("square_")
+    ):
+        parent = current.parent
+        if parent == current:
+            break
+        current = parent
+    return current.name or original.name
+
+
+def _classification_name(value):
+    """Extract a cell-type name from a SpaceRanger classification value.
+
+    Handles a single dict, a list of dicts, or ``None``.
+    """
+    if isinstance(value, dict):
+        return value.get("name")
+    if isinstance(value, (list, tuple)):
+        for item in value:
+            if isinstance(item, dict):
+                return item.get("name")
+    return None
+
+
 def read_hd_bin(
     datapath: Union[str, Path],
     sample: Optional[str] = None,
@@ -97,7 +137,7 @@ def read_hd_bin(
     
     # If sample is not provided, try to infer from path
     if sample is None:
-        sample = datapath.parent.parent.name if datapath.name == "outs" else datapath.name
+        sample = _infer_sample_from_path(datapath)
     
     # Read expression matrix - try H5 first, then directory
     h5_path = datapath / matrix_file_h5
@@ -305,7 +345,7 @@ def read_hd_cellseg(
     
     # If sample is not provided, try to infer from path
     if sample is None:
-        sample = datapath.parent.parent.name
+        sample = _infer_sample_from_path(datapath)
     
     # Read cell segmentations
     # Try the specified file first, then try common alternative names if not found
@@ -411,8 +451,7 @@ def read_hd_cellseg(
             classifications = df['classification']
         df['classification'] = classifications
         adata.obs['classification'] = [
-            item.get('name') if isinstance(item, dict) else None
-            for item in classifications
+            _classification_name(item) for item in classifications
         ]
         adata.uns['classification_colors'] = convert_classification_to_color_dict(df, 'classification')
 
@@ -671,15 +710,17 @@ def read_xenium_cellseg(
     
     # ── 6. Cell boundaries → GeoDataFrame polygons + compact arrays ──
     t0 = time.time()
+    # These maps are also used by the nucleus-boundary block below, which can
+    # run even when cell polygons are skipped (build_polygons=False or a
+    # missing cell_boundaries.parquet).  Keep them defined unconditionally.
+    cell_set = set(common_cells)
+    cell_idx_map = {cid: i for i, cid in enumerate(common_cells)}
     bd_path = datapath / boundaries_file
     if build_polygons and bd_path.exists():
         bd_df = pd.read_parquet(bd_path)
         log(f'  Loaded {len(bd_df):,} boundary vertices [{time.time()-t0:.1f}s]')
         
         t1 = time.time()
-        cell_set = set(common_cells)
-        cell_idx_map = {cid: i for i, cid in enumerate(common_cells)}
-        
         # Single pass: build both compact arrays and polygons
         n_vertices_list, all_vx, all_vy = [], [], []
         cell_to_bd_idx = np.full(len(common_cells), -1, dtype=np.int32)
@@ -967,6 +1008,21 @@ def sync_geometries_after_subset(adata, sample: Optional[str] = None):
             f"Unexpected geometry format in adata.uns['spatial']['{sample}']['geometries']. "
             "Expected GeoDataFrame."
         )
-    
+
+    # Compact boundary arrays are not subset by AnnData.  Their offsets still
+    # refer to the pre-subset row order, so warn instead of leaving callers
+    # with silently misaligned vertices.  Use tl.split_by_slice(), which
+    # reindexes them correctly.
+    for key in ("cell_boundaries", "nucleus_boundaries"):
+        cb = adata.uns.get(key)
+        if isinstance(cb, dict) and "cell_idx" in cb:
+            if len(cb["cell_idx"]) != adata.n_obs:
+                warnings.warn(
+                    f"adata.uns['{key}'] refers to the pre-subset cells "
+                    f"({len(cb['cell_idx'])} vs n_obs={adata.n_obs}); it was not "
+                    "reindexed. Use tcl.tl.split_by_slice() or rebuild the "
+                    "boundaries if you need them after subsetting."
+                )
+
     return adata
 

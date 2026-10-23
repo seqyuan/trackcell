@@ -74,6 +74,15 @@ Quick Start (One Function)
        key_added="yardcluster",
    )
 
+.. warning::
+
+   With ``preprocess=True`` (default) the function **modifies ``adata`` in
+   place**: it normalizes/logs ``adata.X``, selects highly variable genes
+   (subsetting ``adata.var``), and scales the matrix.  Keep a copy of your
+   counts (or use ``copy=True``) if you need the original genes/counts later.
+   HVG selection uses ``seurat_v3`` on raw counts when scikit-misc is
+   installed, otherwise it falls back to ``seurat`` on log-normalized data.
+
 Clustering modes
 ~~~~~~~~~~~~~~~~
 
@@ -124,7 +133,9 @@ how you would combine scanpy preprocessing with trackcell spatial tools:
    # --- scanpy preprocessing ---
    sc.pp.normalize_total(adata, target_sum=1e4)
    sc.pp.log1p(adata)
-   sc.pp.highly_variable_genes(adata, n_top_genes=2000, flavor="seurat_v3")
+   # Use flavor="seurat_v3" on *raw counts* before normalization if you have
+   # scikit-misc installed; on log-normalized data use flavor="seurat".
+   sc.pp.highly_variable_genes(adata, n_top_genes=2000, flavor="seurat")
    adata = adata[:, adata.var.highly_variable].copy()
    sc.pp.scale(adata, max_value=10)
 

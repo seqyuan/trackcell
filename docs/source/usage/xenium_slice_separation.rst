@@ -109,11 +109,19 @@ to continue global numbering across regions:
        adata = tcl.io.read_xenium_cellseg(path, sample=f"{slide_id}_{region}")
        tcl.tl.spatial_slice_cluster(adata, slice_start=next_start)
        next_start += adata.uns["slice_id_summary"]["n_slices"]
-       adata.write_h5ad(f"{slide_id}_{region}.h5ad")
+       # save_h5ad temporarily converts polygon GeoDataFrames to WKT.
+       tcl.io.save_h5ad(adata, f"{slide_id}_{region}.h5ad")
 
    # Per-slice files for downstream DECIPHER / YardCluster
    for sid, sub in tcl.tl.split_by_slice(adata).items():
-       sub.write_h5ad(f"slices/{sid}.h5ad")
+       tcl.io.save_h5ad(sub, f"slices/{sid}.h5ad")
+
+Read a saved file back and restore polygons for plotting with
+:func:`~trackcell.io.restore_geometries`:
+
+.. code-block:: python
+
+   adata = tcl.io.restore_geometries(anndata.read_h5ad("85811.h5ad"))
 
 Visualization
 -------------

@@ -439,9 +439,9 @@ class RegionSelector:
         self._roi_counter += 1
         return f"{self.roi_prefix}_{self._roi_counter}"
 
-    def _save_to_adata(self) -> None:
+    def _save_to_adata(self, key: Optional[str] = None) -> None:
         """Write current ROI labels to ``adata.obs`` (inplace mode)."""
-        key = self.key_added
+        key = key or self.key_added
         if key not in self.adata.obs.columns:
             self.adata.obs[key] = None
             self.adata.obs[key] = self.adata.obs[key].astype(object)
@@ -596,7 +596,7 @@ class RegionSelector:
     def save(self, key_added: Optional[str] = None) -> None:
         """Force-write current ROI labels to ``adata.obs`` (useful with ``inplace=False``)."""
         key = key_added or self.key_added
-        self._save_to_adata()
+        self._save_to_adata(key)
         print(f"Stored {len(self.rois)} ROI(s) in adata.obs['{key}']")
 
     def to_adata(self):

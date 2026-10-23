@@ -139,7 +139,7 @@ def _draw_categorical_edges(
     temp_gdf['_edge_cat'] = edge_vals.values
     
     # Determine categories and colors
-    if pd.api.types.is_categorical_dtype(edge_vals):
+    if isinstance(edge_vals.dtype, pd.CategoricalDtype):
         edge_categories = edge_vals.cat.categories.tolist()
     else:
         edge_categories = sorted(edge_vals.dropna().unique())
@@ -554,7 +554,7 @@ def _plot_squarebin_values(ax, coords, values, square_size, cmap, palette, vmin,
         values_arr = np.asarray(values)
 
     is_categorical = (
-        pd.api.types.is_categorical_dtype(values)
+        isinstance(getattr(values, "dtype", None), pd.CategoricalDtype)
         or pd.api.types.is_object_dtype(values)
         or pd.api.types.is_bool_dtype(values)
     )
@@ -1168,7 +1168,7 @@ def spatial_cell(
         if color_key is not None and is_categorical:
             # Get categories (prioritize Categorical's original order)
 
-            if pd.api.types.is_categorical_dtype(temp_gdf[plot_column]):
+            if isinstance(temp_gdf[plot_column].dtype, pd.CategoricalDtype):
                 # Categorical type: use original order
                 categories = temp_gdf[plot_column].cat.categories.tolist()
             else:
@@ -1252,7 +1252,7 @@ def spatial_cell(
                 # Only set categorical=True if column is not already Categorical type
                 # GeoPandas can automatically detect Categorical columns, so we don't need
                 # to set categorical=True for Categorical columns (as shown in the example)
-                #if not pd.api.types.is_categorical_dtype(temp_gdf[plot_column]):
+                #if not isinstance(temp_gdf[plot_column].dtype, pd.CategoricalDtype):
                 #    plot_kwargs['categorical'] = True
                 
                 # If using custom palette, use custom colormap

@@ -7,7 +7,7 @@ negative binomial regression (Hafemeister & Satija, Genome Biology 2019).
 
 from __future__ import annotations
 
-from typing import Any, Optional, Sequence, Union
+from typing import Any, Optional, Sequence
 
 import numpy as np
 import pandas as pd
@@ -94,14 +94,32 @@ def _write_sctransform_results(
     adata.var[f"{key_added}_highly_variable"] = hvg_mask
 
     if store_residuals_in == "obsm":
+        # Columns follow ``uns[key_added]['variable_features']`` (residual
+        # variance order), NOT ``adata.var_names`` order.  Documentation
+        # points users at ``variable_features`` for column names.
         adata.obsm[f"X_{key_added}"] = np.asarray(
             residuals_gxc.T.to_numpy(), dtype=np.float32
         )
     elif store_residuals_in == "layer":
+        # Layer columns are genes in ``adata.var_names`` order, so the
+        # residual frame (variance order) must be reindexed first.  Writing
+        # residuals_gxc.T directly mislabels every column.
         hvg_indices = np.where(hvg_mask)[0]
-        residual_layer = sps.lil_matrix((adata.n_obs, adata.n_vars), dtype=np.float32)
-        residual_layer[:, hvg_indices] = residuals_gxc.T.to_numpy()
-        adata.layers[f"{key_added}_residuals"] = residual_layer.tocsr()
+        var_order = adata.var_names[hvg_mask]
+        aligned = residuals_gxc.reindex(var_order)
+        if aligned.isna().any().any():
+            missing = aligned.index[aligned.isna().all(axis=1)].tolist()
+            raise ValueError(
+                "Residual features missing from adata.var_names: "
+                f"{missing[:5]}"
+            )
+        values = aligned.T.to_numpy(dtype=np.float32)
+        rows = np.repeat(np.arange(adata.n_obs), values.shape[1])
+        cols = np.tile(hvg_indices, adata.n_obs)
+        adata.layers[f"{key_added}_residuals"] = sps.csr_matrix(
+            (values.ravel(), (rows, cols)),
+            shape=(adata.n_obs, adata.n_vars),
+        )
     else:
         raise ValueError("store_residuals_in must be 'obsm' or 'layer'.")
 
@@ -418,6 +436,21 @@ def sctransform(
         Parallel workers for per-batch SCT when ``batch_key`` is set.
         ``1`` runs batches serially (default); ``-1`` uses all CPUs;
         ``N > 1`` uses at most ``N`` workers (capped by batch count).
+    inplace
+        If ``True`` (default) write results into the input ``adata`` and
+        return ``None``.  ``inplace=False`` requires ``copy=True``.
+    copy
+        If ``True``, run on a deep copy and return it.  The input is left
+        untouched; this also implies a return value even when ``inplace``
+        is left at its default.
+
+    Notes
+    -----
+    ``adata.obsm['X_{key_added}']`` columns follow the order of
+    ``adata.uns[key_added]['variable_features']`` (Seurat residual-variance
+    order), which is **not** the same as ``adata.var_names`` order.  Use
+    ``variable_features`` when mapping columns back to genes.  The layer
+    written by ``store_residuals_in='layer'`` is aligned to ``adata.var_names``.
     """
     if copy:
         adata = adata.copy()
@@ -562,10 +595,10 @@ def sctransform(
             },
             first_vst,
             key_added=key_added,
-            store_residuals_in="obsm",
             layer=layer,
             batch_models=batch_models,
             batch_key=batch_key,
+            store_residuals_in=store_residuals_in,
             save_reference_model=False,
             reference_sct_model=None,
             **{
@@ -595,7 +628,7 @@ def sctransform(
         )
         adata.uns[key_added]["variable_features"] = combined_hvg
         adata.uns[key_added]["params"]["batch_n_jobs"] = batch_n_jobs
-        return None if inplace else adata
+        return adata if (copy or not inplace) else None
 
     counts = adata.layers[layer] if layer is not None else adata.X
     latent_data = None
@@ -651,4 +684,4 @@ def sctransform(
             )
         },
     )
-    return None if inplace else adata
+    return adata if (copy or not inplace) else None

@@ -6,7 +6,7 @@ import numpy as np
 import pandas as pd
 from scipy.spatial import cKDTree
 from scipy.spatial.distance import cdist
-from typing import Optional, Union, List
+from typing import Optional, List
 import warnings
 
 
@@ -54,45 +54,73 @@ def _multigene_facet(
     """Faceted multi-gene subplots, one gene per panel with single-hue colormap."""
     import matplotlib.pyplot as plt
     from matplotlib.colors import LinearSegmentedColormap
-    
+
     n_genes = len(genes)
     nrows = int(np.ceil(n_genes / ncols))
-    
+
     if figsize is None:
         figsize = (5 * ncols, 5 * nrows)
-    
+
     if ax is None:
         fig, axes = plt.subplots(nrows, ncols, figsize=figsize, squeeze=False)
     else:
         axes = np.atleast_2d(np.asarray(ax))
         fig = axes.flat[0].figure
-    
+
     axes_flat = axes.flatten()
-    
-    # Temporarily suppress auto-show in spatial_cell
-    for i, (gene, color) in enumerate(zip(genes, colors)):
-        ax_i = axes_flat[i]
-        # Single-hue colormap: white → gene color
-        gene_cmap = LinearSegmentedColormap.from_list(
-            f'_{gene}', ['#fafafa', color]
-        )
-        
-        # Call spatial_cell with gene expression
-        from trackcell.pl.plot import spatial_cell
-        spatial_cell(
-            adata,
-            color=gene,
-            cmap=gene_cmap,
-            ax=ax_i,
-            show=False,
-            legend=True,
-            edges_width=edges_width,
-            edges_color=edges_color,
-            alpha=alpha,
-            library_id=library_id,
-        )
-        ax_i.set_title(gene, fontsize=12, fontweight='bold')
-    
+    temp_keys: list[str] = []
+
+    try:
+        for i, (gene, color) in enumerate(zip(genes, colors)):
+            ax_i = axes_flat[i]
+            # Single-hue colormap: white → gene color
+            gene_cmap = LinearSegmentedColormap.from_list(
+                f'_{gene}', ['#fafafa', color]
+            )
+
+            # Extract per-cell values (respecting ``layer``) for percentile
+            # clipping.  spatial_cell() reads gene expression from .X, so a
+            # layer requires a temporary obs column.
+            values = adata[:, gene].X
+            if layer is not None:
+                values = adata[:, gene].layers[layer]
+            if hasattr(values, 'toarray'):
+                values = values.toarray()
+            values = np.asarray(values, dtype=float).ravel()
+            finite = values[np.isfinite(values)]
+            if finite.size:
+                vmin = float(np.percentile(finite, vmin_percentile))
+                vmax = float(np.percentile(finite, vmax_percentile))
+            else:
+                vmin, vmax = None, None
+
+            plot_key = gene
+            if layer is not None:
+                plot_key = f'__facet_{gene}'
+                adata.obs[plot_key] = values
+                temp_keys.append(plot_key)
+
+            from trackcell.pl.plot import spatial_cell
+            spatial_cell(
+                adata,
+                color=plot_key,
+                cmap=gene_cmap,
+                vmin=vmin,
+                vmax=vmax,
+                ax=ax_i,
+                show=False,
+                legend=True,
+                edges_width=edges_width,
+                edges_color=edges_color,
+                alpha=alpha,
+                library_id=library_id,
+            )
+            ax_i.set_title(gene, fontsize=12, fontweight='bold')
+    finally:
+        for key in temp_keys:
+            if key in adata.obs.columns:
+                del adata.obs[key]
+
     # Hide unused axes
     for j in range(n_genes, len(axes_flat)):
         axes_flat[j].set_visible(False)
@@ -171,7 +199,7 @@ def multigene_blend(
         Cell edge width for facet plots (default 0.3).
     edges_color : str
         Cell edge color for facet plots (default '#cccccc30').
-    alpha : float
+    alpha_facet : float
         Cell transparency for facet plots (default 0.8).
     show : bool
         Whether to call plt.show() (default True).
@@ -210,7 +238,18 @@ def multigene_blend(
     
     # Default colors
     if colors is None:
-        colors = DEFAULT_GENE_COLORS[:n_genes]
+        if n_genes <= len(DEFAULT_GENE_COLORS):
+            colors = DEFAULT_GENE_COLORS[:n_genes]
+        else:
+            # Extend the palette beyond the 7 hand-picked colours.  A cyclic
+            # qualitative map keeps genes distinguishable for 8-20 genes.
+            from matplotlib import colormaps
+            from matplotlib.colors import to_hex
+
+            cmap = colormaps.get_cmap("tab20" if n_genes <= 20 else "hsv")
+            colors = [
+                to_hex(cmap(i / max(n_genes, 1))) for i in range(n_genes)
+            ]
     elif len(colors) != n_genes:
         raise ValueError(
             f'colors length ({len(colors)}) must match genes length ({n_genes})'
@@ -274,7 +313,6 @@ def multigene_blend(
         rgb = np.power(rgb, gamma)
     
     # ── Convert to hex ──
-    bg_rgb = np.array(_hex_to_rgb(background))
     hex_colors = []
     for i in range(n_cells):
         if total[i, 0] > 0:
@@ -283,9 +321,9 @@ def multigene_blend(
             hex_colors.append(background)
     
     result = pd.Series(hex_colors, index=adata.obs_names, name=key_added)
-    
+
     # ── Store metadata ──
-    adata.uns[f'{key_added}_params'] = {
+    params = {
         'genes': genes,
         'colors': colors,
         'vmin_percentile': vmin_percentile,
@@ -294,15 +332,16 @@ def multigene_blend(
         'background': background,
         'n_unique_colors': result.nunique(),
     }
-    
+    result.attrs.update(params)
     if inplace:
         adata.obs[key_added] = result
+        adata.uns[f'{key_added}_params'] = params
         print(
             f'[multigene_blend] {n_genes} genes → '
             f'{result.nunique():,} unique colors in adata.obs["{key_added}"]'
         )
         return None
-    
+
     return result
 
 
@@ -336,6 +375,13 @@ def _resolve_labeldist_scalefactors(
     resolved_mpp = microns_per_pixel
     if resolved_mpp is None:
         resolved_mpp = scalefactors.get("microns_per_pixel")
+    if resolved_mpp is None:
+        # Xenium / Atera readers store pixel size in metadata (µm / pixel).
+        resolved_mpp = (spatial_meta[library_id].get("metadata") or {}).get(
+            "pixel_size"
+        )
+    if resolved_mpp is None:
+        resolved_mpp = (adata.uns.get("experiment") or {}).get("pixel_size")
     if resolved_mpp is None or not np.isfinite(resolved_mpp) or resolved_mpp <= 0:
         raise ValueError(
             "A positive `microns_per_pixel` is required. Provide it explicitly "

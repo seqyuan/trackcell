@@ -102,7 +102,7 @@ def prep_sct_integration(
     anchor_features: Sequence[str],
     sct_key: str = "sct",
     layer: Optional[str] = None,
-    key_added: str = "sct_integrated",
+    key_added: str = "sct_prep",
 ) -> AnnData:
     """
     Compute Pearson residuals for anchor genes per batch (Seurat ``PrepSCTIntegration``).

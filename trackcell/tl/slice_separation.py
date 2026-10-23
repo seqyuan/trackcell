@@ -262,8 +262,19 @@ def slice_cluster_summary(
     return pd.DataFrame(rows)
 
 
-def _reindex_cell_boundaries(sub: AnnData) -> None:
-    """Rebuild compact cell_boundaries vertex offsets after subsetting."""
+def _reindex_cell_boundaries(sub: AnnData, positions: np.ndarray) -> None:
+    """Rebuild compact cell_boundaries vertex offsets after subsetting.
+
+    Parameters
+    ----------
+    sub
+        Subset AnnData (may be a view).  ``uns['cell_boundaries']`` is
+        rewritten in place.
+    positions
+        Position of each ``sub`` observation in the *original* (pre-subset)
+        AnnData, i.e. ``parent.obs_names.get_indexer(sub.obs_names)``.
+        ``uns['cell_boundaries']['cell_idx']`` is indexed by these values.
+    """
     if "cell_boundaries" not in sub.uns:
         return
     cb = sub.uns["cell_boundaries"]
@@ -273,6 +284,13 @@ def _reindex_cell_boundaries(sub: AnnData) -> None:
     old_vy = cb["vertex_y"]
     desc = cb.get("description", "")
 
+    positions = np.asarray(positions, dtype=np.int64)
+    if positions.shape[0] != sub.n_obs:
+        raise ValueError(
+            "positions must have one entry per observation in `sub` "
+            f"(got {positions.shape[0]} for n_obs={sub.n_obs})."
+        )
+
     new_nv_list: list[int] = []
     new_vx_list: list[np.ndarray] = []
     new_vy_list: list[np.ndarray] = []
@@ -280,9 +298,14 @@ def _reindex_cell_boundaries(sub: AnnData) -> None:
     cum = 0
 
     for i in range(sub.n_obs):
-        start = int(old_idx[i])
+        pos = int(positions[i])
+        if pos < 0:
+            new_cell_idx.append(-1)
+            new_nv_list.append(0)
+            continue
+        start = int(old_idx[pos])
         if start >= 0:
-            nv = int(old_nv[i])
+            nv = int(old_nv[pos])
             new_cell_idx.append(cum)
             new_nv_list.append(nv)
             cum += nv
@@ -341,9 +364,16 @@ def split_by_slice(
         if sid in exclude_set:
             continue
         mask = adata.obs[slice_key] == sid
-        sub = adata[mask].copy() if copy else adata[mask]
+        # Reindexing writes into ``uns``; force a copy so ``copy=False`` views
+        # do not mutate the parent AnnData's boundary arrays.
+        sub = (
+            adata[mask].copy()
+            if (copy or reindex_boundaries)
+            else adata[mask]
+        )
         if reindex_boundaries:
-            _reindex_cell_boundaries(sub)
+            positions = adata.obs_names.get_indexer(sub.obs_names)
+            _reindex_cell_boundaries(sub, positions)
         out[str(sid)] = sub
     return out
 

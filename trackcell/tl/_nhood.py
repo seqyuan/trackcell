@@ -345,9 +345,33 @@ def diff_nhood_enrichment(
     if pvalues and library_key not in adata.obs.columns:
         raise ValueError(f"library_key '{library_key}' not in adata.obs.")
 
-    adj = adata.obsp[connectivity_key].tocsr().astype(np.float64)
-    labels = adata.obs[cluster_key].astype("category")
-    conditions = adata.obs[condition_key].astype("category")
+    conditions_all = adata.obs[condition_key].astype(str)
+    missing_groups = [g for g in condition_groups if g not in set(conditions_all)]
+    if missing_groups:
+        raise ValueError(
+            f"condition_groups not found in adata.obs['{condition_key}']: "
+            f"{missing_groups}. Available: {sorted(set(conditions_all))}"
+        )
+
+    # Restrict both the observed statistic and the permutation null to the two
+    # compared conditions.  Otherwise cells from other conditions silently
+    # join the "0" group during permutations and bias the p-values.
+    keep = conditions_all.isin(list(condition_groups)).to_numpy()
+    adj_full = adata.obsp[connectivity_key].tocsr().astype(np.float64)
+    adj = adj_full[keep][:, keep]
+    labels = (
+        adata.obs.loc[keep, cluster_key]
+        .astype("category")
+        .cat.remove_unused_categories()
+    )
+    conditions = pd.Categorical(
+        conditions_all.to_numpy()[keep], categories=list(condition_groups)
+    )
+    libraries = (
+        adata.obs.loc[keep, library_key].astype(str)
+        if library_key is not None
+        else None
+    )
 
     obs_diff = _diff_enrichment(
         adj, labels, condition_groups, conditions, log_fold_change=log_fold_change
@@ -358,7 +382,6 @@ def diff_nhood_enrichment(
 
     if pvalues:
         rng = np.random.default_rng(random_state)
-        libraries = adata.obs[library_key].astype(str)
         libs1 = libraries[conditions == condition_groups[0]].unique()
         libs2 = libraries[conditions == condition_groups[1]].unique()
         all_libs = np.concatenate([libs1, libs2])

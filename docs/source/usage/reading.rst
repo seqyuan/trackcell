@@ -420,6 +420,23 @@ to trackcell-compatible format with polygon geometries:
 After reading an h5ad that contains WKT geometry strings, restore the
 GeoDataFrame for visualization with :func:`~trackcell.io.restore_geometries`.
 
+Saving geometry-bearing objects
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+AnnData cannot write Shapely polygons directly to HDF5.  Use
+:func:`~trackcell.io.save_h5ad` instead of ``adata.write_h5ad`` for objects
+returned by :func:`~trackcell.io.read_hd_cellseg`,
+:func:`~trackcell.io.read_xenium_cellseg`, :func:`~trackcell.io.read_atera`,
+or :func:`~trackcell.io.read_sto_cellbin`:
+
+.. code-block:: python
+
+   tcl.io.save_h5ad(adata, "sample.h5ad")
+
+   # Read back and restore polygons for plotting
+   import anndata as ad
+   adata = tcl.io.restore_geometries(ad.read_h5ad("sample.h5ad"))
+
 See :doc:`annohdcell_conversion` for the full tutorial with examples,
 parameter details, and troubleshooting.
 

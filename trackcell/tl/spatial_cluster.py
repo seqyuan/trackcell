@@ -370,6 +370,8 @@ def neighborhood_features(
         "gradient_mode": gradient_mode if use_gradient else None,
         "n_layers": n_layers,
         "batch_key": batch_key,
+        "layer": layer,
+        "use_raw": use_raw,
         "expression_source": expression_source,
         "sct_prep_key": sct_prep_key if expression_source in ("sct_prep", "sct_integrated") else None,
         "sct_integrated_key": sct_integrated_key if expression_source == "sct_integrated" else None,
@@ -678,6 +680,13 @@ def yard_cluster(
     adata = adata.copy() if copy else adata
     if use_rep not in adata.obsm:
         raise ValueError(f"`adata.obsm['{use_rep}']` not found.")
+    if method not in ("leiden", "gmm"):
+        raise ValueError(f"Unknown method '{method}'. Choose 'leiden' or 'gmm'.")
+    if neighbors_method not in ("expr", "spatial", "hybrid", "bbknn"):
+        raise ValueError(
+            f"Unknown neighbors_method '{neighbors_method}'. Choose 'expr', "
+            "'spatial', 'hybrid', or 'bbknn'."
+        )
 
     if method == "gmm":
         chosen_k = _gmm_cluster(adata, use_rep, n_clusters, key_added, random_state)
@@ -1058,6 +1067,22 @@ def spatial_cluster(
     """
     adata = adata.copy() if copy else adata
 
+    if mode not in ("celltype", "domain", "auto"):
+        raise ValueError(
+            f"Unknown mode '{mode}'. Choose 'celltype', 'domain', or 'auto'."
+        )
+    if method not in ("leiden", "gmm"):
+        raise ValueError(f"Unknown method '{method}'. Choose 'leiden' or 'gmm'.")
+    if integrate not in ("none", "separate", "joint", "bbknn"):
+        raise ValueError(
+            f"Unknown integrate '{integrate}'. Choose 'none', 'separate', "
+            "'joint', or 'bbknn'."
+        )
+    if graph_mode not in ("expr", "spatial", "hybrid"):
+        raise ValueError(
+            f"Unknown graph_mode '{graph_mode}'. Choose 'expr', 'spatial', or 'hybrid'."
+        )
+
     resolved = resolve_platform_params(
         platform,
         k_spatial=k_spatial,
@@ -1316,25 +1341,57 @@ def _preprocess_for_yardcluster(
     scale_by_batch: bool,
     layer: Optional[str],
 ) -> None:
+    """Normalize/log/select HVGs/scale in place (YardCluster one-shot path).
+
+    HVG selection is computed on raw counts with ``flavor='seurat_v3'`` when
+    scikit-misc is available; otherwise it falls back to ``flavor='seurat'``
+    on log-normalized data.  ``seurat_v3`` must not be run after log1p.
+    """
     if layer is not None:
         warnings.warn(
             "preprocess=True with layer=... uses adata.X for HVG/scale; "
             "set preprocess=False if data is already prepared.",
             stacklevel=3,
         )
-    if "log1p" not in adata.uns:
-        sc.pp.normalize_total(adata, target_sum=1e4)
-        sc.pp.log1p(adata)
-    if adata.n_vars > n_top_genes:
-        if "highly_variable" not in adata.var.columns:
+
+    raw_counts = "log1p" not in adata.uns
+    need_hvg = (
+        adata.n_vars > n_top_genes
+        and "highly_variable" not in adata.var.columns
+    )
+
+    if need_hvg and raw_counts:
+        # Preferred path: HVG on raw counts, before normalize/log.
+        try:
             sc.pp.highly_variable_genes(
                 adata,
                 n_top_genes=n_top_genes,
                 flavor="seurat_v3",
                 batch_key=batch_key if hvg_by_batch else None,
             )
-        if "highly_variable" in adata.var.columns:
-            adata._inplace_subset_var(adata.var["highly_variable"].values)
+        except ImportError:
+            warnings.warn(
+                "scikit-misc is not installed; falling back to "
+                "flavor='seurat' on log-normalized data. Install "
+                "scikit-misc for seurat_v3 HVG selection.",
+                stacklevel=3,
+            )
+
+    if "log1p" not in adata.uns:
+        sc.pp.normalize_total(adata, target_sum=1e4)
+        sc.pp.log1p(adata)
+
+    if need_hvg and "highly_variable" not in adata.var.columns:
+        sc.pp.highly_variable_genes(
+            adata,
+            n_top_genes=n_top_genes,
+            flavor="seurat",
+            batch_key=batch_key if hvg_by_batch else None,
+        )
+
+    if adata.n_vars > n_top_genes and "highly_variable" in adata.var.columns:
+        adata._inplace_subset_var(adata.var["highly_variable"].values)
+
     if scale_by_batch and batch_key is not None:
         for b in adata.obs[batch_key].unique():
             idx = adata.obs[batch_key] == b

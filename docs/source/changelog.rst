@@ -1,6 +1,55 @@
 Changelog
 
 
+Version 0.3.47
+--------------
+
+* **Bug fixes**:
+
+  * ``sctransform(copy=True)`` now returns the modified copy (previously it
+    silently returned ``None`` and discarded the result).
+  * ``store_residuals_in='layer'`` residuals are now aligned to
+    ``adata.var_names`` instead of being written in residual-variance order.
+    The batch path now honours ``store_residuals_in`` as well.
+  * ``read_xenium_cellseg`` no longer raises ``UnboundLocalError`` when
+    ``build_polygons=False`` or when ``cell_boundaries.parquet`` is missing but
+    ``nucleus_boundaries.parquet`` exists.
+  * New :func:`trackcell.io.save_h5ad` / :func:`trackcell.io.flatten_geometries`
+    serialize polygon GeoDataFrames to WKT (``adata.write_h5ad`` fails
+    otherwise); ``restore_geometries`` now also handles
+    ``nucleus_geometries``.
+  * ``split_by_slice`` now reindexes ``uns['cell_boundaries']`` using the
+    original observation positions (previously every slice received the first
+    N cells' vertices).
+  * ``spatial_cluster`` validates ``mode`` / ``method`` / ``integrate`` /
+    ``graph_mode`` (invalid values used to silently do nothing), and its
+    preprocessing no longer requires ``scikit-misc``: ``seurat_v3`` is used on
+    raw counts when available, otherwise it falls back to ``seurat`` on
+    log-normalized data.  ``layer``/``use_raw`` are part of the neighborhood
+    cache key.
+  * ``prep_sct_integration`` now defaults to ``key_added='sct_prep'``, matching
+    ``integrate_rpca`` / ``run_sct_integration``.
+  * ``score_anchors_seurat`` no longer mixes batch1 and batch2 index spaces
+    (shared-neighbour counts were inflated by spurious cross-dataset matches).
+  * ``multigene_blend`` supports more than seven genes without an explicit
+    palette, honours ``layer``/percentile clipping in facet mode, and no
+    longer writes ``uns`` when ``inplace=False``.
+  * ``RegionSelector.save(key_added=...)`` writes the requested column.
+  * ``read_hd_bin``/``read_hd_cellseg`` infer sample names correctly from
+    SpaceRanger layouts; ``read_hd_cellseg`` handles list-valued
+    classifications.
+  * ``hd_labeldist`` falls back to ``metadata['pixel_size']`` / Xenium
+    ``experiment['pixel_size']`` when no scalefactor is available.
+  * STOmics: circular cell diameter from area, ``gene_name_index`` honoured for
+    GEM input, and ``image_path`` supported for GEM input.
+  * ``diff_nhood_enrichment`` restricts the permutation null to the two
+    compared conditions.
+
+* **Tests**: regression coverage for the fixes above (SCT copy/layer order,
+  h5ad geometry round-trip, Xenium boundaries, slice boundary alignment,
+  anchor scoring, multigene blends, ROI saving, preprocessing fallback).
+
+
 Version 0.3.46
 --------------
 

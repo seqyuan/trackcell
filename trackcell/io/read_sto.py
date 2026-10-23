@@ -520,7 +520,8 @@ def read_sto_cellbin(
     # The registered image covers the full chip (typically 26460×26460 px),
     # while cell coordinates are a subset within that field.
     # scalefactor = 1.0: 1 image pixel = 1 GEF coordinate unit.
-    spot_diameter = np.sqrt(np.median(cell['area'])) * 2.0  # approximate
+    # Circular-cell diameter from area (area is in coordinate units²).
+    spot_diameter = 2.0 * np.sqrt(np.median(cell['area']) / np.pi)
 
     adata.uns['spatial'] = {
         sample: {
@@ -659,7 +660,9 @@ def read_sto_bin(
         warnings.warn(
             "Reading large GEM files can be slow. Consider using the GEF (.gef) format."
         )
-        return _read_sto_bin_from_gem(path, bin_size, sample, gene_name_index)
+        return _read_sto_bin_from_gem(
+            path, bin_size, sample, gene_name_index, image_path
+        )
     else:
         raise ValueError(
             f"Unsupported file format: {suf}. Expected .gef, .gem, or .gem.gz"
@@ -822,6 +825,7 @@ def _read_sto_bin_from_gem(
     bin_size: int,
     sample: Optional[str],
     gene_name_index: bool,
+    image_path: Optional[Union[str, Path]] = None,
 ) -> sc.AnnData:
     """Read squarebin data from a GEM text file (plain or gzip)."""
     import gc
@@ -913,7 +917,7 @@ def _read_sto_bin_from_gem(
         index=[f"{x}_{y}" for x, y in zip(bin_x_arr, bin_y_arr)]
     )
     adata = sc.AnnData(X=exp_matrix, obs=obs)
-    adata.var_names = genes
+    adata.var_names = genes if gene_name_index else np.arange(len(genes)).astype(str)
     adata.obs.index.name = 'bin_id'
     adata.obsm['spatial'] = np.column_stack([center_x, center_y])
 
@@ -923,6 +927,19 @@ def _read_sto_bin_from_gem(
             'scalefactors': {'spot_diameter_fullres': float(bin_size)},
         }
     }
+
+    tissue_img = _load_tissue_image(image_path, gef_dir=path.parent)
+    if tissue_img is not None:
+        adata.uns['spatial'][sample]['images'] = {
+            'hires': tissue_img,
+            'lowres': tissue_img,
+        }
+        adata.uns['spatial'][sample]['scalefactors'][
+            'tissue_hires_scalef'
+        ] = 1.0
+        adata.uns['spatial'][sample]['scalefactors'][
+            'tissue_lowres_scalef'
+        ] = 1.0
 
     elapsed = time.time() - t_total
     print(f"[STO bin GEM] Total: {elapsed:.1f}s")
@@ -935,6 +952,9 @@ def _read_sto_bin_from_gem_gz(
     bin_size: int,
     sample: Optional[str],
     gene_name_index: bool,
+    image_path: Optional[Union[str, Path]] = None,
 ) -> sc.AnnData:
     """Read squarebin data from a gzipped GEM file (delegates to GEM reader)."""
-    return _read_sto_bin_from_gem(path, bin_size, sample, gene_name_index)
+    return _read_sto_bin_from_gem(
+        path, bin_size, sample, gene_name_index, image_path
+    )

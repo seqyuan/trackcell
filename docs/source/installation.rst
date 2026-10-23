@@ -86,9 +86,14 @@ The equivalent manual installs are also supported:
    pip install pyglmGamPoi rrng          # sct extra
    pip install xgboost                   # ml extra
    pip install ipympl                    # interactive extra
+   pip install scikit-misc              # optional: seurat_v3 HVG on raw counts
 
 ``integrate_sct_rpca`` and ``run_sct_integration`` work without ``harmonypy`` /
 ``bbknn`` unless you use those downstream methods.
+
+``spatial_cluster(preprocess=True)`` works without ``scikit-misc`` (it falls
+back to ``flavor="seurat"`` on log-normalized data); install it only if you
+want ``seurat_v3`` HVG selection on raw counts.
 
 Development Installation
 ------------------------

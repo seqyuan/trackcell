@@ -88,6 +88,31 @@ def test_split_by_slice():
         assert cb["cell_idx"][0] == 0
 
 
+def test_split_by_slice_reindexes_boundaries_to_the_right_cells():
+    n = 6
+    adata = AnnData(X=np.zeros((n, 1), dtype=np.float32))
+    adata.obs_names = [f"c{i}" for i in range(n)]
+    adata.obs["slice_id"] = ["A", "A", "B", "B", "C", "C"]
+    # Each cell's first vertex x encodes its original row index.
+    adata.uns["cell_boundaries"] = {
+        "vertex_x": (np.arange(n) * 10.0).astype(np.float32),
+        "vertex_y": np.zeros(n, dtype=np.float32),
+        "n_vertices": np.ones(n, dtype=np.int32),
+        "cell_idx": np.arange(n, dtype=np.int32),
+    }
+
+    parts = split_by_slice(adata, reindex_boundaries=True)
+    for sid, sub in parts.items():
+        expected = [float(int(cid[1:]) * 10) for cid in sub.obs_names]
+        assert sub.uns["cell_boundaries"]["vertex_x"].tolist() == expected
+
+    # copy=False must not corrupt the parent boundary array.
+    split_by_slice(adata, copy=False, reindex_boundaries=True)
+    np.testing.assert_array_equal(
+        adata.uns["cell_boundaries"]["cell_idx"], np.arange(n)
+    )
+
+
 def test_write_slice_annotation(tmp_path):
     pytest.importorskip("sklearn")
     adata = _make_tma_adata(n_cores=2, cells_per_core=80)

@@ -20,6 +20,47 @@ def _normalize_anchor_scores(scores: np.ndarray) -> np.ndarray:
     return np.clip(out, 0.0, 1.0)
 
 
+def _raw_anchor_scores(
+    anchors: pd.DataFrame,
+    *,
+    nnab_idx: np.ndarray,
+    nnba_idx: np.ndarray,
+    nnaa_idx: np.ndarray | None,
+    nnbb_idx: np.ndarray | None,
+    n_ref: int,
+    k_score: int,
+) -> np.ndarray:
+    """Un-normalized shared-neighbor counts for each anchor.
+
+    All neighbor indices are mapped into one combined space with
+    ``batch1 = [0, n_ref)`` and ``batch2 = [n_ref, n_ref + n_query)`` so that
+    per-dataset neighbor sets never collide across datasets:
+
+    * cell1 neighbors = batch1 ``nnaa`` + batch2 ``nnab + n_ref``
+    * cell2 neighbors = batch1 ``nnba`` + batch2 ``nnbb + n_ref``
+    """
+    scores = np.zeros(len(anchors), dtype=np.float64)
+    for idx, row in enumerate(anchors.itertuples(index=False)):
+        c1, c2 = int(row.cell1), int(row.cell2)
+        local1 = c1
+        local2 = c2 - n_ref
+
+        nbr_a: set[int] = set()
+        nbr_b: set[int] = set()
+        if nnaa_idx is not None:
+            nbr_a.update(int(x) for x in nnaa_idx[local1, :k_score])
+        nbr_a.update(
+            int(x) + n_ref for x in nnab_idx[local1, :k_score]
+        )
+        nbr_b.update(int(x) for x in nnba_idx[local2, :k_score])
+        if nnbb_idx is not None:
+            nbr_b.update(
+                int(x) + n_ref for x in nnbb_idx[local2, :k_score]
+            )
+        scores[idx] = float(len(nbr_a & nbr_b))
+    return scores
+
+
 def score_anchors_seurat(
     anchors: pd.DataFrame,
     *,
@@ -38,19 +79,15 @@ def score_anchors_seurat(
     if anchors.empty or k_score <= 0:
         return np.ones(len(anchors), dtype=np.float64)
 
-    scores = np.zeros(len(anchors), dtype=np.float64)
-    for idx, row in enumerate(anchors.itertuples(index=False)):
-        c1, c2 = int(row.cell1), int(row.cell2)
-        local1 = c1
-        local2 = c2 - n_ref
-        nbr_a = set(int(x) for x in nnab_idx[local1, :k_score])
-        nbr_b = set(int(x) for x in nnba_idx[local2, :k_score])
-        if nnaa_idx is not None:
-            nbr_a.update(int(x) for x in nnaa_idx[local1, :k_score])
-        if nnbb_idx is not None:
-            nbr_b.update(int(x) + n_ref for x in nnbb_idx[local2, :k_score])
-        nbr_a.update(int(x) + n_ref for x in nnab_idx[local1, :k_score])
-        scores[idx] = float(len(nbr_a & nbr_b))
+    scores = _raw_anchor_scores(
+        anchors,
+        nnab_idx=nnab_idx,
+        nnba_idx=nnba_idx,
+        nnaa_idx=nnaa_idx,
+        nnbb_idx=nnbb_idx,
+        n_ref=n_ref,
+        k_score=k_score,
+    )
     return _normalize_anchor_scores(scores)
 
 
