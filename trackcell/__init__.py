@@ -7,7 +7,7 @@ This package provides tools for:
 - PL: Plotting and visualization tools
 """
 
-__version__ = "0.3.45"
+__version__ = "0.3.46"
 __author__ = "Zan Yuan"
 __email__ = "yfinddream@gmail.com"
 

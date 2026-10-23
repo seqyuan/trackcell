@@ -295,6 +295,7 @@ def test_run_sct_integration_accepts_explicit_anchor_features():
     assert adata.uns["sct_prep"]["anchor_features"] == features
 
 
+@pytest.mark.skipif(not annoy_available(), reason="annoy not installed")
 def test_release_sct_integration_cache_then_integrate_rpca():
     """Explicit cache release must not change RPCA output vs Seurat-parity path."""
     from trackcell.tl.integration import (

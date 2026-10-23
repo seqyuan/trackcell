@@ -1,6 +1,16 @@
 Changelog
 
 
+Version 0.3.46
+--------------
+
+* Pin ``pyarrow`` to ``<22``: pyarrow 22+ no longer works with the
+  NumPy 1.x ABI used by trackcell, which broke ``pd.read_parquet`` for
+  Xenium / SpaceRanger tables on Python 3.11–3.12.
+* Skip the RPCA cache-release test when the optional ``annoy`` package is not
+  installed (it is covered by the CI integration job).
+
+
 Version 0.3.45
 --------------
 
