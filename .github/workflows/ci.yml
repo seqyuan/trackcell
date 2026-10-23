@@ -1,0 +1,83 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Tests (Python ${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.10", "3.11", "3.12"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install Poetry
+        uses: snok/install-poetry@v1
+        with:
+          virtualenvs-create: true
+          virtualenvs-in-project: true
+
+      - name: Cache virtualenv
+        uses: actions/cache@v4
+        with:
+          path: .venv
+          key: venv-${{ runner.os }}-${{ matrix.python-version }}-${{ hashFiles('pyproject.toml') }}
+
+      - name: Validate pyproject
+        run: poetry check
+
+      - name: Install package + dev dependencies
+        run: poetry install --with dev --extras clustering --no-interaction
+
+      - name: Lint (syntax / undefined names)
+        run: |
+          poetry run flake8 trackcell \
+            --count --select=E9,F63,F7,F82 --show-source --statistics
+
+      - name: Build and validate wheel metadata
+        run: |
+          rm -rf dist
+          poetry build
+          python scripts/check_package.py
+
+      - name: Fast tests
+        run: poetry run pytest -m "not slow" -q
+
+  integration:
+    name: Integration extras (Python 3.11)
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install Poetry
+        uses: snok/install-poetry@v1
+        with:
+          virtualenvs-create: true
+          virtualenvs-in-project: true
+
+      - name: Install integration dependencies
+        run: poetry install --with dev --extras "clustering integration" --no-interaction
+
+      - name: Integration tests
+        run: poetry run pytest tests/test_integration_sct_rpca.py tests/test_integrate_data.py -q

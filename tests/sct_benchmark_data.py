@@ -23,8 +23,8 @@ import scanpy as sc
 from scipy.sparse import csr_matrix, issparse
 
 from trackcell.tl._sctransform import _as_genes_by_cells
+from trackcell.benchmark.sct.data import BENCHMARK_ROOT
 
-BENCHMARK_ROOT = Path("/Volumes/process/tmp/tcl_test")
 DEFAULT_SAMPLE = "GSM8779707"
 DEFAULT_VAR_NAMES = "gene_symbols"
 

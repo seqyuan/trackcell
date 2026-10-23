@@ -167,7 +167,7 @@ Split API (reuse prep for Harmony / RPCA)
 SCT + Harmony
 -------------
 
-Requires ``harmonypy`` (``pip install harmonypy``).
+Requires ``harmonypy`` (``pip install "trackcell[integration]"`` or ``pip install harmonypy``).
 
 .. code-block:: python
 
@@ -202,7 +202,7 @@ not SCT prep residuals. For multi-slice spatial domain discovery, prefer
 SCT + BBKNN
 -----------
 
-Requires ``bbknn`` (``pip install bbknn``).
+Requires ``bbknn`` (``pip install "trackcell[integration]"`` or ``pip install bbknn``).
 
 .. code-block:: python
 

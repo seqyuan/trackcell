@@ -3,11 +3,11 @@ TrackCell: A Python package for processing single-cell and spatial transcriptomi
 
 This package provides tools for:
 - IO: Data input/output operations
-- PL: Processing and analysis tools
-- TL: Utility and helper functions
+- TL: Processing and analysis tools
+- PL: Plotting and visualization tools
 """
 
-__version__ = "0.3.44"
+__version__ = "0.3.45"
 __author__ = "Zan Yuan"
 __email__ = "yfinddream@gmail.com"
 

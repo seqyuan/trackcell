@@ -31,6 +31,13 @@ Overview
 Regenerate SCT artifacts
 ------------------------
 
+Benchmark data is read from ``TRACKCELL_BENCHMARK_ROOT`` (default:
+``~/trackcell_benchmark``). Set it before running, e.g.:
+
+.. code-block:: bash
+
+   export TRACKCELL_BENCHMARK_ROOT=/path/to/tcl_test
+
 Requires GSE288946 data under ``<benchmark-root>/data/`` and conda env
 ``st`` (Seurat + sctransform + glmGamPoi).
 

@@ -428,8 +428,8 @@ instead of napari, avoiding Qt event-loop crashes in Jupyter.
 
       %matplotlib widget
 
-   ``ipympl`` is installed with TrackCell.  If your environment lacks it, run
-   ``pip install ipympl``.
+   ``ipympl`` is available via the ``interactive`` extra.  If your environment
+   lacks it, run ``pip install "trackcell[interactive]"`` (or ``pip install ipympl``).
 
 Quick start
 ^^^^^^^^^^^

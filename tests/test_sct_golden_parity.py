@@ -35,6 +35,7 @@ def _load_sample_umi(*, min_cells: int = 5):
     return umi, genes, cells, cell_attr
 
 
+@pytest.mark.slow
 def test_seurat_parity_loader_matches_r_meta():
     """Seurat-parity loader should match R export meta cell/gene counts."""
     import json
@@ -72,6 +73,7 @@ def test_row_gmean_sparse_matches_rowwise_formula(shape):
     not (BENCHMARK_ROOT / "steps/r_sct_stepwise" / SAMPLE / "gene_attr.csv").exists(),
     reason="R stepwise export missing",
 )
+@pytest.mark.slow
 def test_python_genes_log_gmean_matches_r_golden():
     umi, genes, _cells, _cell_attr = _load_sample_umi()
     export = load_r_vst_export(BENCHMARK_ROOT / "steps/r_sct_stepwise" / SAMPLE)
@@ -108,6 +110,7 @@ def test_coerce_genes_log_gmean_keeps_log10_export():
     not (BENCHMARK_ROOT / "steps/r_sct_stepwise" / SAMPLE / "model_pars_step1.csv").exists(),
     reason="R stepwise export missing",
 )
+@pytest.mark.slow
 def test_vst_gmean_golden_improves_step1_intercept_corr():
     """After gmean fix, native py step1 Intercept should track R more closely."""
     umi, genes, cells, cell_attr = _load_sample_umi()
@@ -143,6 +146,7 @@ def test_vst_gmean_golden_improves_step1_intercept_corr():
     not (BENCHMARK_ROOT / "steps/r_sct_stepwise" / SAMPLE / "model_pars_step1.csv").exists(),
     reason="R stepwise export missing",
 )
+@pytest.mark.slow
 def test_native_step1_intercept_tracks_r():
     """Native pyglmGamPoi step1 Intercept should match R glmGamPoi closely."""
     umi, genes, cells, cell_attr = _load_sample_umi()
@@ -172,6 +176,7 @@ def test_native_step1_intercept_tracks_r():
     not (BENCHMARK_ROOT / "steps/r_sct_stepwise" / SAMPLE / "model_pars_step1.csv").exists(),
     reason="R stepwise export missing",
 )
+@pytest.mark.slow
 def test_native_step1_theta_log10_tracks_r():
     """Document pyglmGamPoi theta MLE gap vs R (target >0.75 until pyglmGamPoi fix)."""
     umi, genes, cells, cell_attr = _load_sample_umi()
@@ -203,6 +208,7 @@ def test_native_step1_theta_log10_tracks_r():
     not (BENCHMARK_ROOT / "steps/r_sct_stepwise" / SAMPLE / "model_pars_fit.csv").exists(),
     reason="R stepwise export missing",
 )
+@pytest.mark.slow
 def test_r_step1_model_pars_fit_tracks_r():
     """R step1 + Python ksmooth should match R model_pars_fit (theta is the gate)."""
     umi, genes, cells, cell_attr = _load_sample_umi()
@@ -237,6 +243,7 @@ def test_r_step1_model_pars_fit_tracks_r():
     not (BENCHMARK_ROOT / "steps/r_sct_stepwise" / SAMPLE / "hvg_top3000.txt").exists(),
     reason="R stepwise export missing",
 )
+@pytest.mark.slow
 def test_native_hvg_jaccard_gap_documented():
     """Tier-B native Py HVG stays ~0.55 until step1 model_pars matches R."""
     umi, genes, cells, cell_attr = _load_sample_umi()
@@ -272,6 +279,7 @@ def test_native_hvg_jaccard_gap_documented():
     not (BENCHMARK_ROOT / "steps/r_sct_stepwise" / SAMPLE / "hvg_top3000.txt").exists(),
     reason="R stepwise export missing",
 )
+@pytest.mark.slow
 def test_r_step1_hvg_jaccard_near_r():
     """R step1 golden + Python ksmooth/residuals should recover R HVG list."""
     umi, genes, cells, cell_attr = _load_sample_umi()

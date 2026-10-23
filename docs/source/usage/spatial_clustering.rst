@@ -23,14 +23,13 @@ Install TrackCell and clustering dependencies:
 
 .. code-block:: bash
 
-   pip install trackcell
-   pip install leidenalg python-igraph
+   pip install "trackcell[clustering]"
 
 Optional (multi-sample Harmony integration):
 
 .. code-block:: bash
 
-   pip install harmonypy
+   pip install "trackcell[integration]"
 
 End-to-End Workflow
 -------------------

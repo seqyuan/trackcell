@@ -89,7 +89,10 @@ jobs:
           virtualenvs-in-project: true
 
       - name: Install dependencies
-        run: poetry install --no-root
+        run: poetry install --with dev --extras clustering --no-interaction
+
+      - name: Validate pyproject
+        run: poetry check
 
       - name: Clean previous builds
         run: rm -rf dist/*
@@ -97,15 +100,11 @@ jobs:
       - name: Build package
         run: poetry build
 
-      - name: Verify version consistency
-        run: |
-          PYPROJ_VERSION=$(grep 'version = "' pyproject.toml | head -1 | sed 's/.*"\(.*\)".*/\1/')
-          INIT_VERSION=$(grep '__version__' trackcell/__init__.py | sed 's/.*"\(.*\)".*/\1/')
-          if [ "$PYPROJ_VERSION" != "$INIT_VERSION" ]; then
-            echo "ERROR: pyproject.toml version ($PYPROJ_VERSION) != __init__.py version ($INIT_VERSION)"
-            exit 1
-          fi
-          echo "Versions consistent: $PYPROJ_VERSION"
+      - name: Verify version consistency, extras, and license
+        run: python scripts/check_package.py
+
+      - name: Fast tests
+        run: poetry run pytest -m "not slow" -q
 
       - name: Publish to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1

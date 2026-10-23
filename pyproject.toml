@@ -1,24 +1,45 @@
 [tool.poetry]
 name = "trackcell"
-version = "0.3.44"
+version = "0.3.45"
 description = "A Python package for processing single-cell and spatial transcriptomics data"
 authors = ["Zan Yuan <yfinddream@gmail.com>"]
 readme = "README.md"
+license = "MIT"
 packages = [{include = "trackcell"}]
+
+[tool.poetry.urls]
+Homepage = "https://github.com/seqyuan/trackcell"
+Repository = "https://github.com/seqyuan/trackcell"
+Documentation = "https://trackcell.readthedocs.io/"
 
 [tool.poetry.dependencies]
 python = ">=3.10,<3.13"
+# Core scientific stack (also pulled in by scanpy, declared explicitly
+# because trackcell imports them directly).
 scanpy = ">=1.9,<2.0"
-geopandas = ">=1.1.1,<2.0"
+anndata = ">=0.9,<1.0"
+numpy = ">=1.24,<2.0"
 pandas = ">=2.1,<2.4"
+scipy = ">=1.9,<2.0"
+scikit-learn = ">=1.2,<2.0"
+statsmodels = ">=0.13,<1.0"
+patsy = ">=0.5,<2.0"
+joblib = ">=1.2,<2.0"
+matplotlib = ">=3.6,<4.0"
+numba = ">=0.58,<0.62"
+# Spatial / IO stack.
+geopandas = ">=1.1.1,<2.0"
 shapely = ">=2.0,<3.0"
 imageio = ">=2.31,<3.0"
-numpy = ">=1.24,<2.0"
-numba = ">=0.58,<0.62"
-ipympl = ">=0.9,<1.0"
 h5py = ">=3.0,<4.0"
-annoy = ">=1.17,<2.0"
-zarr = ">=2.18"
+zarr = ">=2.18,<3.0"
+# Optional feature backends (see [tool.poetry.extras] below).
+leidenalg = { version = ">=0.9,<1.0", optional = true }
+python-igraph = { version = ">=0.10,<1.0", optional = true }
+annoy = { version = ">=1.17,<2.0", optional = true }
+harmonypy = { version = ">=0.0.10,<1.0", optional = true }
+bbknn = { version = ">=1.5,<2.0", optional = true }
+ipympl = { version = ">=0.9,<1.0", optional = true }
 pyglmGamPoi = { version = ">=0.2.1,<0.3.0", optional = true }
 rrng = { version = ">=0.1.0,<0.2.0", optional = true }
 xgboost = { version = ">=2.0,<3.0", optional = true }
@@ -35,12 +56,19 @@ pydata-sphinx-theme = "^0.15.0"
 nbsphinx = "^0.9.0"
 sphinx-gallery = "^0.15.0"
 sphinx-autodoc-typehints = "^1.19.0"
-ipython = "^7.0.0"
+ipython = "^8.0.0"
 
 [tool.poetry.extras]
+# Clustering backends used by YardCluster / scanpy Leiden.
 clustering = ["leidenalg", "python-igraph"]
-ml = ["xgboost"]
+# Multi-sample integration backends.
+integration = ["annoy", "harmonypy", "bbknn"]
+# Optional SCT backends.
 sct = ["pyglmGamPoi", "rrng"]
+# XGBoost-enhanced SCT integration.
+ml = ["xgboost"]
+# Interactive ROI selection in Jupyter (matplotlib widgets backend).
+interactive = ["ipympl"]
 
 
 [build-system]
@@ -55,4 +83,12 @@ target-version = ['py310']
 python_version = "3.10"
 warn_return_any = true
 warn_unused_configs = true
-disallow_untyped_defs = true 
+disallow_untyped_defs = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra"
+markers = [
+    "slow: heavy tests that need external R/Seurat benchmark data (minutes)",
+    "parity: golden-vector parity tests against R outputs",
+]

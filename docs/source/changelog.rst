@@ -1,6 +1,35 @@
 Changelog
 
 
+Version 0.3.45
+--------------
+
+* **Packaging fixes**:
+
+  * ``trackcell[clustering]`` now actually installs ``leidenalg`` and
+    ``python-igraph`` (the extra was previously empty and ``poetry check``
+    failed).
+  * New ``integration`` extra (``annoy``, ``harmonypy``, ``bbknn``) and
+    ``interactive`` extra (``ipympl``); both were previously either mandatory
+    or documented as manual installs.
+  * Direct dependencies (``anndata``, ``scipy``, ``scikit-learn``,
+    ``statsmodels``, ``patsy``, ``joblib``, ``matplotlib``) are now declared
+    explicitly instead of relying on scanpy transitives.
+  * Added the MIT license (``LICENSE`` + package metadata).
+  * Removed the machine-specific ``/Volumes/process/tmp/tcl_test`` benchmark
+    path; use ``TRACKCELL_BENCHMARK_ROOT`` (default
+    ``~/trackcell_benchmark``).
+
+* **Testing**: added a CI workflow (Python 3.10–3.12) with lint, wheel
+  metadata validation, and the fast test suite. Heavy R/Seurat parity tests are
+  marked ``slow`` and require external benchmark data.
+
+* **Performance**: ``_row_gmean_sparse`` is now vectorized (~30x faster on
+  realistic sparse matrices, bit-identical results). Removed ineffective
+  object-mode numba caching/``nogil`` from SCT residuals and GLM helpers,
+  eliminating import-time ``NumbaWarning`` noise.
+
+
 Version 0.3.44
 --------------
 

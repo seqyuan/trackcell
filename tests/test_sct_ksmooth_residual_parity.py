@@ -44,6 +44,8 @@ from trackcell.tl._sctransform import (
     get_residuals,
 )
 
+pytestmark = pytest.mark.slow
+
 
 def _r_vst_res_clip_range(n_cells: int) -> tuple[float, float]:
     """``sctransform::vst`` default ``res_clip_range = ±sqrt(ncol(umi))``."""
@@ -208,13 +210,13 @@ def test_residuals_match_r_model_pars_fit():
 
 
 @pytest.mark.skipif(
-    not Path("/Volumes/process/tmp/tcl_test/steps/r_sct_reg_debug/GSM8779707/summary.json").exists(),
+    not (BENCHMARK_ROOT / "steps/r_sct_reg_debug" / "GSM8779707" / "summary.json").exists(),
     reason="R reg_model_pars debug export missing",
 )
 def test_reg_model_pars_pre_ksmooth_matches_r_export():
     """Pre-ksmooth outlier/poisson filtering matches R when using R gmean exports."""
     sample = "GSM8779707"
-    root = Path("/Volumes/process/tmp/tcl_test")
+    root = BENCHMARK_ROOT
     step_dir = root / "steps/r_sct_stepwise" / sample
     dbg_dir = root / "steps/r_sct_reg_debug" / sample
     exported = load_r_vst_export(step_dir)
@@ -248,7 +250,7 @@ def test_reg_model_pars_pre_ksmooth_matches_r_export():
 
 
 @pytest.mark.skipif(
-    not Path("/Volumes/process/tmp/tcl_test/steps/r_sct_stepwise/GSM8779707/genes_log_gmean_step1.csv").exists(),
+    not (BENCHMARK_ROOT / "steps/r_sct_stepwise" / "GSM8779707" / "genes_log_gmean_step1.csv").exists(),
     reason="R gmean export missing",
 )
 def test_r_step1_hvg_with_r_gmean_export():
@@ -256,7 +258,7 @@ def test_r_step1_hvg_with_r_gmean_export():
     from trackcell.tl._sctransform import vst
 
     sample = "GSM8779707"
-    root = Path("/Volumes/process/tmp/tcl_test")
+    root = BENCHMARK_ROOT
     export_dir = root / "steps/r_sct_stepwise" / sample
     exported = load_r_vst_export(export_dir)
 
@@ -292,7 +294,7 @@ def test_r_step1_hvg_with_r_gmean_export():
 
 
 @pytest.mark.skipif(
-    not Path("/Volumes/process/tmp/tcl_test/steps/r_sct_stepwise/GSM8779707/meta.json").exists(),
+    not (BENCHMARK_ROOT / "steps/r_sct_stepwise" / "GSM8779707" / "meta.json").exists(),
     reason="R stepwise export missing",
 )
 def test_seurat_parity_loader_matches_r_meta():

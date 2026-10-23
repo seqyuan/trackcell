@@ -39,7 +39,7 @@
 
 ## Coding Style
 
-- Python ≥ 3.10, < 3.12
+- Python ≥ 3.10, < 3.13
 - 遵循现有代码风格（类型注解、docstring）
 - 新功能需更新 `docs/source/usage/` 下的对应文档
 

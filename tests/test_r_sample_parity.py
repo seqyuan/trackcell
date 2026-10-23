@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import os
+import tempfile
 from pathlib import Path
 
 import numpy as np
@@ -15,7 +17,12 @@ from trackcell.tl._density import r_density_fft
 from trackcell.tl._rng import r_sample_available
 from trackcell.tl._sctransform import _dds, _row_gmean_sparse, vst
 
-pytestmark = pytest.mark.skipif(not r_sample_available(), reason="rrng not installed")
+R_GOLDEN_DIR = Path(os.environ.get("TRACKCELL_R_GOLDEN_DIR", tempfile.gettempdir()))
+
+pytestmark = [
+    pytest.mark.slow,
+    pytest.mark.skipif(not r_sample_available(), reason="rrng not installed"),
+]
 
 
 def _genes_step1_pool(umi, genes, cells, cells_step1: pd.Index):
@@ -46,10 +53,10 @@ def test_cells_step1_matches_r_export(sample: str) -> None:
 
 def test_r_density_fft_matches_r_golden() -> None:
     """FFT ``density.default`` grid matches R (legacy kernel coords)."""
-    gvals_path = Path("/tmp/r_gvals.csv")
-    golden_path = Path("/tmp/r_density_golden.csv")
+    gvals_path = R_GOLDEN_DIR / "r_gvals.csv"
+    golden_path = R_GOLDEN_DIR / "r_density_golden.csv"
     if not gvals_path.exists() or not golden_path.exists():
-        pytest.skip("R golden vectors not exported (/tmp/r_gvals.csv, /tmp/r_density_golden.csv)")
+        pytest.skip(f"R golden vectors not exported ({gvals_path}, {golden_path})")
     gvals = pd.read_csv(gvals_path)["g"].to_numpy()
     golden = pd.read_csv(golden_path)
     _, py_y, py_bw = r_density_fft(gvals, bw="nrd", adjust=1, n=512)

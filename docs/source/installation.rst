@@ -20,50 +20,71 @@ Upgrade to Latest Version
 Dependencies
 ------------
 
-TrackCell requires the following packages:
+TrackCell requires Python ``>=3.10,<3.13`` and the following packages
+(installed automatically via pip):
 
-* Python >= 3.10
 * scanpy >= 1.9.0
-* geopandas >= 1.1.1
+* anndata >= 0.9.0
+* numpy >= 1.24.0, < 2.0
 * pandas >= 2.1.0
+* scipy >= 1.9.0
+* scikit-learn >= 1.2.0
+* statsmodels >= 0.13.0
+* patsy >= 0.5.0
+* joblib >= 1.2.0
+* matplotlib >= 3.6.0
+* numba >= 0.58.0
+* geopandas >= 1.1.1
 * shapely >= 2.0.0
 * imageio >= 2.31.0
-* numpy >= 1.24.0
-* scipy (for spatial distance calculations)
+* h5py >= 3.0.0
+* zarr >= 2.18.0, < 3.0.0
 
-These dependencies are automatically installed when installing TrackCell via pip.
+Optional Feature Extras
+-----------------------
 
-Optional Dependencies (YardCluster)
-------------------------------------
+Some features require additional packages. Install them with the matching
+extra:
 
-Spatial clustering with :doc:`usage/spatial_clustering` additionally requires:
+.. list-table::
+   :header-rows: 1
+
+   * - Extra
+     - Command
+     - Required for
+   * - ``clustering``
+     - ``pip install "trackcell[clustering]"``
+     - YardCluster / scanpy Leiden clustering
+       (``leidenalg``, ``python-igraph``)
+   * - ``integration``
+     - ``pip install "trackcell[integration]"``
+     - SCT + RPCA / Harmony / BBKNN integration
+       (``annoy``, ``harmonypy``, ``bbknn``)
+   * - ``sct``
+     - ``pip install "trackcell[sct]"``
+     - Optional SCT v2 backends (``pyglmGamPoi``, ``rrng``)
+   * - ``ml``
+     - ``pip install "trackcell[ml]"``
+     - XGBoost-enhanced SCT integration (``xgboost``)
+   * - ``interactive``
+     - ``pip install "trackcell[interactive]"``
+     - Interactive ROI selection in Jupyter (``ipympl``)
+
+For example, the common single-cell / spatial clustering setup is:
 
 .. code-block:: bash
 
-   pip install trackcell[clustering]
+   pip install "trackcell[clustering]"
 
-Or manually:
-
-.. code-block:: bash
-
-   pip install leidenalg python-igraph
-
-For multi-sample Harmony batch integration (``integrate='joint'`` in
-:doc:`usage/spatial_clustering`):
+The equivalent manual installs are also supported:
 
 .. code-block:: bash
 
-   pip install harmonypy
-
-Batch expression integration (SCT + RPCA / Harmony / BBKNN) — see
-:doc:`usage/batch_integration`:
-
-.. code-block:: bash
-
-   pip install annoy              # RPCA anchors (required for integrate_rpca)
-   pip install harmonypy          # SCT + Harmony
-   pip install bbknn                # SCT + BBKNN
-   pip install pyglmGamPoi          # optional SCT v2 backend (explicit selection)
+   pip install leidenalg python-igraph   # clustering extra
+   pip install annoy harmonypy bbknn     # integration extra
+   pip install pyglmGamPoi rrng          # sct extra
+   pip install xgboost                   # ml extra
+   pip install ipympl                    # interactive extra
 
 ``integrate_sct_rpca`` and ``run_sct_integration`` work without ``harmonypy`` /
 ``bbknn`` unless you use those downstream methods.
@@ -77,5 +98,14 @@ To install TrackCell in development mode:
 
    git clone https://github.com/seqyuan/trackcell.git
    cd trackcell
-   pip install -e .
+   poetry install --with dev --extras clustering
 
+Run the fast test suite (tests that need external R/Seurat benchmark data are
+marked ``slow`` and skipped by default in CI):
+
+.. code-block:: bash
+
+   poetry run pytest -m "not slow"
+
+Benchmark data for the parity tests is read from ``TRACKCELL_BENCHMARK_ROOT``
+(default: ``~/trackcell_benchmark``).

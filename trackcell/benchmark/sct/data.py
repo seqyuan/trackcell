@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -12,7 +13,20 @@ from scipy.sparse import csr_matrix, issparse
 
 from trackcell.tl._sctransform import _as_genes_by_cells
 
-BENCHMARK_ROOT = Path("/Volumes/process/tmp/tcl_test")
+
+def _default_benchmark_root() -> Path:
+    """Benchmark data root, overridable via ``TRACKCELL_BENCHMARK_ROOT``.
+
+    Kept outside the package so no machine-specific absolute path is shipped
+    to users. Tests/benchmarks are skipped when the directory is absent.
+    """
+    env = os.environ.get("TRACKCELL_BENCHMARK_ROOT")
+    if env:
+        return Path(env).expanduser()
+    return Path.home() / "trackcell_benchmark"
+
+
+BENCHMARK_ROOT = _default_benchmark_root()
 BENCHMARK_SAMPLES = ("GSM8779707", "GSM8779708", "GSM8779709")
 BENCHMARK_SEEDS = (1448145, 1448146, 42, 123, 999, 2024)
 REF_SEED = 1448145

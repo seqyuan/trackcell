@@ -77,6 +77,7 @@ def test_materialize_and_resolve_r_vst_exports(tmp_path: Path):
     assert Path(exports[RPCA_SAMPLES[0]]).is_dir()
 
 
+@pytest.mark.slow
 @pytest.mark.skipif(
     not rpca_scale_data_available(RPCA_BENCHMARK_ROOT, RPCA_SEED, RPCA_SAMPLES),
     reason="RPCA residuals_hvg exports missing",

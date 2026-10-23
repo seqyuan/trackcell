@@ -7,7 +7,18 @@ Supports 10x Visium HD (SpaceRanger), 10x Xenium Analyzer and 10x Atera outputs.
 
 ```bash
 pip install trackcell -i https://pypi.org/simple
-# pip install --upgrade trackcell==0.1.9 -i https://pypi.org/simple
+# Upgrade to the latest release
+pip install --upgrade trackcell -i https://pypi.org/simple
+```
+
+Optional feature extras:
+
+```bash
+pip install "trackcell[clustering]"   # YardCluster / Leiden (leidenalg, python-igraph)
+pip install "trackcell[integration]"  # RPCA anchors + Harmony/BBKNN (annoy, harmonypy, bbknn)
+pip install "trackcell[sct]"          # optional SCT v2 backends (pyglmGamPoi, rrng)
+pip install "trackcell[ml]"           # XGBoost-enhanced SCT integration
+pip install "trackcell[interactive]"  # Jupyter ROI selection (ipympl)
 ```
 
 ## Usage
@@ -559,10 +570,24 @@ tcl.pl.spatial_cell(sub, color="distance_to_nearest_gcc", cmap="Reds")
 
 ## Development
 
+```bash
+git clone https://github.com/seqyuan/trackcell.git
+cd trackcell
+poetry install --with dev --extras clustering
+
+# Fast suite (skips tests that need the external R/Seurat benchmark data)
+poetry run pytest -m "not slow"
+
+# Full suite, including golden-vector parity tests
+TRACKCELL_BENCHMARK_ROOT=/path/to/tcl_test poetry run pytest
+```
+
+Heavy parity/benchmark tests look for data under `TRACKCELL_BENCHMARK_ROOT`
+(default: `~/trackcell_benchmark`) and are skipped when it is absent.
 
 ## License
 
-
+MIT — see [LICENSE](LICENSE).
 
 ## update
 ```shell
