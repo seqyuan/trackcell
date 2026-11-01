@@ -39,19 +39,27 @@ def _fail(message: str, errors: list[str]) -> None:
     print(f"ERROR: {message}")
 
 
-def check_versions(errors: list[str]) -> None:
+def _metadata_field(lines: list[str], field: str) -> str | None:
+    prefix = f"{field}:"
+    for line in lines:
+        if line.startswith(prefix):
+            return line.split(":", 1)[1].strip()
+    return None
+
+
+def check_versions(errors: list[str]) -> str | None:
     pyproject = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
     match = re.search(r'^version\s*=\s*"([^"]+)"', pyproject, re.MULTILINE)
     if not match:
         _fail("could not read version from pyproject.toml", errors)
-        return
+        return None
     pyproject_version = match.group(1)
 
     init = (ROOT / "trackcell" / "__init__.py").read_text(encoding="utf-8")
     init_match = re.search(r'__version__\s*=\s*"([^"]+)"', init)
     if not init_match:
         _fail("could not read __version__ from trackcell/__init__.py", errors)
-        return
+        return None
     init_version = init_match.group(1)
 
     if pyproject_version != init_version:
@@ -63,8 +71,12 @@ def check_versions(errors: list[str]) -> None:
     else:
         print(f"version OK: {pyproject_version}")
 
+    return pyproject_version
 
-def check_wheel(whl: Path, errors: list[str]) -> None:
+
+def check_wheel(
+    whl: Path, errors: list[str], expected_version: str | None = None
+) -> None:
     with zipfile.ZipFile(whl) as archive:
         metadata_name = next(
             (n for n in archive.namelist() if n.endswith("METADATA")), None
@@ -75,6 +87,19 @@ def check_wheel(whl: Path, errors: list[str]) -> None:
         metadata = archive.read(metadata_name).decode("utf-8")
 
     lines = metadata.splitlines()
+
+    wheel_version = _metadata_field(lines, "Version")
+    if expected_version is not None:
+        if wheel_version == expected_version:
+            print(f"wheel version OK: {wheel_version}")
+        else:
+            _fail(
+                f"{whl.name} declares Version {wheel_version!r}, but pyproject.toml "
+                f"says {expected_version!r}. Rebuild with `poetry build` "
+                f"(or remove stale wheels in dist/).",
+                errors,
+            )
+
     provides = {
         line.split(":", 1)[1].strip()
         for line in lines
@@ -108,7 +133,7 @@ def check_wheel(whl: Path, errors: list[str]) -> None:
 
 def main(argv: list[str]) -> int:
     errors: list[str] = []
-    check_versions(errors)
+    source_version = check_versions(errors)
 
     if len(argv) > 1:
         wheels = [Path(argv[1])]
@@ -120,7 +145,7 @@ def main(argv: list[str]) -> int:
         wheels = [max(wheels, key=lambda p: p.stat().st_mtime)]
 
     for wheel in wheels:
-        check_wheel(wheel, errors)
+        check_wheel(wheel, errors, expected_version=source_version)
 
     if errors:
         print(f"\n{len(errors)} packaging check(s) failed.", file=sys.stderr)

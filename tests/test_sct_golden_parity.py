@@ -8,7 +8,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from .sct_benchmark_data import (
+from ._sct_benchmark_data import (
     BENCHMARK_ROOT,
     DEFAULT_SAMPLE,
     load_seurat_parity_with_cell_attr,

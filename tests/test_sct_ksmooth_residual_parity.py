@@ -18,7 +18,7 @@ from trackcell.benchmark.sct.data import (
     r_export_dir,
 )
 from trackcell.tl._sctransform_v2 import pyglmGamPoi_available
-from .sct_benchmark_data import (
+from ._sct_benchmark_data import (
     BENCHMARK_ROOT,
     DEFAULT_SAMPLE,
     load_seurat_parity_with_cell_attr,

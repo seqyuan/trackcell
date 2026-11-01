@@ -50,10 +50,7 @@ import numpy as np
 import pandas as pd
 from scipy.stats import spearmanr
 
-try:
-    from .sct_benchmark_data import DEFAULT_SAMPLE, load_seurat_parity_with_cell_attr
-except ImportError:
-    from sct_benchmark_data import DEFAULT_SAMPLE, load_seurat_parity_with_cell_attr
+from tests._sct_benchmark_data import DEFAULT_SAMPLE, load_seurat_parity_with_cell_attr
 from trackcell.benchmark.sct.data import BENCHMARK_ROOT
 from trackcell.benchmark.sct.r_exports import align_r_gene_list, load_r_vst_export
 from trackcell.tl._sctransform import vst

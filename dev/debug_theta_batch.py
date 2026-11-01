@@ -22,7 +22,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from tests.sct_benchmark_data import BENCHMARK_ROOT, DEFAULT_SAMPLE, load_seurat_parity_with_cell_attr
+from tests._sct_benchmark_data import BENCHMARK_ROOT, DEFAULT_SAMPLE, load_seurat_parity_with_cell_attr
 from trackcell.benchmark.sct.r_exports import load_r_vst_export
 from trackcell.tl._sctransform import _build_design_matrix, vst
 from trackcell.tl._sctransform_v2 import mark_suspicious_theta

@@ -172,3 +172,5 @@ cython_debug/
 Thumbs.db
 ehthumbs.db
 Desktop.ini 
+# Local agent tooling state (may contain credentials)
+.annovibe/
