@@ -1,6 +1,47 @@
 Changelog
 
 
+Version 0.4.0
+-------------
+
+**Behavior change**:
+
+* Library code no longer prints progress to stdout. Readers and
+  ``multigene_blend`` emit ``INFO`` records under the ``trackcell`` logger
+  (silent by default; opt in via :mod:`logging`). Non-fatal data problems
+  (missing tissue image or ``scalefactors_json.json``) now raise
+  ``RuntimeWarning`` via :func:`warnings.warn`. Intentionally displayed report
+  output (``atera_info``, the interactive ROI selector) still prints.  See the
+  *Logging* usage page.
+
+**Added**:
+
+* :func:`trackcell._logging.get_logger` — structured logging bootstrap with a
+  ``NullHandler`` so ``import trackcell`` stays silent.
+* IO test coverage for ``read_hd_bin`` / ``read_hd_cellseg`` / ``read_sto``
+  driven by synthetic but structurally faithful vendor fixtures
+  (``tests/conftest.py``). CI enforces coverage minimums
+  (``read_data`` ≥ 75%, ``read_sto`` ≥ 60%).
+* ``scripts/check_package.py`` now validates the built wheel's ``Version``
+  against the source version, closing the stale-wheel false positive.
+
+**Changed**:
+
+* ``pl.plot`` and ``pl.select`` no longer silently swallow exceptions;
+  optional rendering steps log at ``debug`` and a visible draw failure logs a
+  ``warning``.
+* ``read_data``'s H5-fallback notice is logged at ``INFO``.
+
+**Hygiene**:
+
+* Stop tracking ``.annovibe/im.json`` (contained bot credentials); ignore
+  ``.annovibe/``.
+* Moved benchmark/debug helper scripts out of ``tests/`` into ``dev/``; renamed
+  ``tests/sct_benchmark_data.py`` → ``tests/_sct_benchmark_data.py``.
+* Removed root-level ``test_import.py``; moved ``promotion_article.md`` to
+  ``docs/marketing/``.
+
+
 Version 0.3.47
 --------------
 
