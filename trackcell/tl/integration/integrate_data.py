@@ -2,8 +2,22 @@
 
 Parity with Seurat v4 ``FindWeightsC`` + ``IntegrateDataC``:
 
-* Weight formula: ``1 - exp(-dist * score / (2/sd)^2)``, then column-normalised.
+* Distance -> similarity: ``sim = 1 - d / d_k``, where ``d_k`` is the largest of the
+  ``k`` kNN distances for that row. Seurat does this *before* calling
+  ``FindWeightsC`` (``R/integration.R:3820`` in Seurat 4.4.0::
+
+      distances <- 1 - (distances / distances[, ncol(x = distances)])
+
+  so ``FindWeightsC`` receives similarities, not raw distances.
+* Weight formula: ``1 - exp(-sim * score / (2/sd)^2)``, then column-normalised
+  (Seurat 4.4.0 ``src/integration.cpp:49`` and ``:57-65``).
 * Correction: ``corrected = expr_query - W^T @ integration_matrix`` (matrix multiply).
+
+.. warning::
+   The ``1 - d/d_k`` step is load-bearing. Passing raw Euclidean distances into
+   the weight formula inverts the kernel (near anchors get ~0 weight, far anchors
+   get ~1), because raw distances live on an unbounded scale while ``(2/sd)^2``
+   is a small constant. See :func:`_distance_to_similarity`.
 
 Memory notes (multi-slice / spatial)
 -------------------------------------
@@ -23,9 +37,50 @@ import pandas as pd
 from scipy.sparse import coo_matrix, csr_matrix, diags
 from sklearn.decomposition import PCA
 
+from ..._logging import get_logger
 from ._annoy_nn import nn_helper
 
+logger = get_logger(__name__)
+
 DEFAULT_WEIGHT_QUERY_CHUNK_SIZE = 8192
+
+# Guard for ``d_k`` when a row's farthest neighbour is at distance 0 (all
+# neighbours coincide). Any positive number gives sim=1 for the whole row.
+_MIN_DIST = 1e-12
+
+
+def _distance_to_similarity(dists: np.ndarray) -> np.ndarray:
+    """Convert kNN Euclidean distances to Seurat's ``1 - d/d_k`` similarities.
+
+    Seurat v4 ``IntegrateData`` normalises the kNN distance matrix before
+    handing it to ``FindWeightsC`` (Seurat 4.4.0, ``R/integration.R:3820``)::
+
+        distances <- 1 - (distances / distances[, ncol(x = distances)])
+
+    so that the closest neighbour scores 1 and the ``k``-th scores 0. The
+    weight formula ``1 - exp(-dist * score / (2/sd)^2)`` is monotonically
+    increasing in ``dist``, so skipping this step *inverts* the kernel: the
+    nearest anchor would receive the smallest weight. It also makes the result
+    depend on the arbitrary scale of the embedding (raw distances are unbounded,
+    while the denominator is a small constant), which is why the bug stays
+    invisible on well-separated synthetic data and only degrades real batches.
+
+    Parameters
+    ----------
+    dists
+        ``(n_query, k)`` Euclidean distances, as returned by Annoy/
+        ``nn_helper`` (row-sorted ascending; the per-row maximum is taken rather
+        than the last column so unsorted input cannot silently mis-normalise).
+
+    Returns
+    -------
+    ``(n_query, k)`` float64 similarities in ``[0, 1]``.
+    """
+    dists = np.asarray(dists, dtype=np.float64)
+    if dists.size == 0:
+        return dists
+    d_k = np.maximum(dists.max(axis=1, keepdims=True), _MIN_DIST)
+    return np.clip(1.0 - dists / d_k, 0.0, 1.0)
 
 
 def _group_anchors_by_query_cell(
@@ -103,7 +158,11 @@ def _build_weights_seurat_legacy(
     k_weight: int,
     sd_weight: float,
 ) -> csr_matrix:
-    """Original Python-loop implementation (reference / tests)."""
+    """Original Python-loop implementation (reference / tests).
+
+    ``dists`` must already be Seurat-style similarities in ``[0, 1]``; convert
+    raw kNN distances with :func:`_distance_to_similarity` first.
+    """
     cell_to_anchors: dict[int, list[int]] = {}
     for ai, qc in enumerate(cell2):
         cell_to_anchors.setdefault(int(qc), []).append(ai)
@@ -155,7 +214,11 @@ def _build_weights_seurat(
     sd_weight: float,
     query_chunk_size: int = DEFAULT_WEIGHT_QUERY_CHUNK_SIZE,
 ) -> csr_matrix:
-    """Build anchor×query weight matrix (chunked + Numba, memory-friendly)."""
+    """Build anchor×query weight matrix (chunked + Numba, memory-friendly).
+
+    ``dists`` must already be Seurat-style similarities in ``[0, 1]``; convert
+    raw kNN distances with :func:`_distance_to_similarity` first.
+    """
     cell2 = np.asarray(cell2, dtype=np.int64)
     scores = np.asarray(scores, dtype=np.float64)
     anchor_query_cells = np.asarray(anchor_query_cells, dtype=np.int64)
@@ -195,6 +258,10 @@ def _build_weights_seurat(
     cols = np.concatenate(col_parts)
     data = np.concatenate(data_parts)
     weights_sp = coo_matrix((data, (rows, cols)), shape=(n_anchors, n_query)).tocsr()
+    # Column-normalise, matching Seurat 4.4.0 ``src/integration.cpp:57-65``. Seurat
+    # only takes this branch when ``FindWeightsC(min_dist = 0)``; ``IntegrateData``
+    # always passes 0, so the min-distance alternative branch is not reachable
+    # from the path we mirror.
     col_sums = np.asarray(weights_sp.sum(axis=0)).ravel()
     col_sums[col_sums == 0] = 1.0
     return weights_sp @ diags(1.0 / col_sums, format="csr")
@@ -262,7 +329,17 @@ def integrate_pair(
     if len(anchor_query_cells) == 0:
         return data_query.copy()
 
-    k_nn = min(k_weight, len(anchor_query_cells))
+    n_anchor_cells = len(anchor_query_cells)
+    if n_anchor_cells < k_weight:
+        logger.warning(
+            "integrate_pair: only %d query cell(s) carry anchors but k_weight=%d; "
+            "the weight kernel is narrowed to k=%d. Lower k_weight or loosen the "
+            "anchor filter to keep Seurat parity.",
+            n_anchor_cells,
+            k_weight,
+            n_anchor_cells,
+        )
+    k_nn = min(k_weight, n_anchor_cells)
     anchor_dr = dr_query[anchor_query_cells].astype(np.float32, copy=False)
     dr_query_nn = dr_query.astype(np.float32, copy=False)
     search_k = max(trees_weight * k_nn, trees_weight * 2)
@@ -273,6 +350,9 @@ def integrate_pair(
         n_trees=trees_weight,
         search_k=search_k,
     )
+    # Annoy returns raw Euclidean distances; Seurat's weight kernel expects
+    # ``1 - d/d_k`` similarities. Skipping this inverts the kernel.
+    dists = _distance_to_similarity(dists)
 
     weights = _build_weights_seurat(
         n_anchors=len(cell1),

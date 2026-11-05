@@ -1,6 +1,26 @@
 Changelog
 
 
+Unreleased
+----------
+
+**Fixed**:
+
+* ``tl.integration`` anchor weighting was **inverted**. Seurat's
+  ``IntegrateData`` converts kNN distances to similarities before calling
+  ``FindWeightsC`` (Seurat 4.4.0, ``R/integration.R:3820``:
+  ``distances <- 1 - (distances / distances[, ncol(x = distances)])``);
+  ``integrate_data.integrate_pair`` passed raw Annoy distances into the same
+  formula (``src/integration.cpp:49``), so the *nearest* anchor received the
+  *smallest* weight. Every ``integrate_rpca`` / ``integrate_sct_rpca`` /
+  ``integrate_pair`` run was affected, and no test could catch it because the
+  only integration test compared two copies of the same formula. The
+  conversion now lives in ``_distance_to_similarity`` and is covered by
+  ``tests/test_integrate_data.py::test_weights_decrease_with_distance``.
+* ``integrate_pair`` now emits a ``warning`` when fewer query cells carry
+  anchors than ``k_weight``, instead of silently narrowing the weight kernel.
+
+
 Version 0.4.0
 -------------
 
