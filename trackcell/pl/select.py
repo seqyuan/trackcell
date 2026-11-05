@@ -33,6 +33,10 @@ from matplotlib.widgets import (
 from shapely.geometry import Polygon, Point
 from shapely import wkt
 
+from .._logging import get_logger
+
+logger = get_logger(__name__)
+
 from .plot import (
     spatial_cell,
     spatial_squarebin,
@@ -95,6 +99,7 @@ def _get_geometry(adata, cid: str, geometries, use_wkt: bool):
             return None
         return geometries.loc[cid, "geometry"]
     except Exception:
+        logger.debug("geometry lookup failed", exc_info=True)
         return None
 
 
@@ -426,7 +431,7 @@ class RegionSelector:
             try:
                 sc.remove()
             except Exception:
-                pass
+                logger.debug("failed to remove highlight artist", exc_info=True)
         self._highlight_collections.clear()
         self.fig.canvas.draw_idle()
 
@@ -579,14 +584,14 @@ class RegionSelector:
             try:
                 patch.remove()
             except Exception:
-                pass
+                logger.debug("failed to remove ROI patch", exc_info=True)
         # remove last highlight
         if self._highlight_collections:
             sc = self._highlight_collections.pop()
             try:
                 sc.remove()
             except Exception:
-                pass
+                logger.debug("failed to remove highlight artist", exc_info=True)
         if self.inplace:
             self._save_to_adata()
         self._update_title()
@@ -623,7 +628,7 @@ class RegionSelector:
             try:
                 patch.remove()
             except Exception:
-                pass
+                logger.debug("failed to remove ROI patch", exc_info=True)
         self.patches.clear()
         self._clear_highlights()
         self._roi_counter = 0

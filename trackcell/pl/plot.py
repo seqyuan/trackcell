@@ -17,6 +17,10 @@ from matplotlib.cm import ScalarMappable
 from typing import Optional, Union, List, Dict
 import warnings
 
+from .._logging import get_logger
+
+logger = get_logger(__name__)
+
 try:
     import geopandas as gpd
     from shapely import wkt
@@ -175,7 +179,7 @@ def _draw_categorical_edges(
                 ax=ax, color=cat_color, linewidth=linewidth, alpha=alpha
             )
         except Exception:
-            pass
+            logger.debug("failed to draw category boundaries", exc_info=True)
     
     # Edge legend
     if legend and n_cats <= 30:
@@ -212,6 +216,7 @@ def _is_hex_color_series(series: pd.Series) -> bool:
             for v in sample
         )
     except Exception:
+        logger.debug("hex-color probe failed", exc_info=True)
         return False
 
 
@@ -248,7 +253,8 @@ def _plot_raw_hex_colors(
                 try:
                     group.plot(**plot_kw)
                 except Exception:
-                    pass
+                    logger.warning("failed to draw geometry group after aspect fallback",
+                                   exc_info=True)
             else:
                 pass
 
@@ -297,6 +303,7 @@ def _has_valid_geometry_bounds(geom) -> bool:
         bounds = geom.bounds
         return all(np.isfinite(bounds)) and bounds[2] > bounds[0] and bounds[3] > bounds[1]
     except Exception:
+        logger.debug("geometry bounds probe failed", exc_info=True)
         return False
 
 
@@ -304,6 +311,7 @@ def _bounds_are_finite(bounds) -> bool:
     try:
         return all(np.isfinite(bounds)) and bounds[2] > bounds[0] and bounds[3] > bounds[1]
     except Exception:
+        logger.debug("bounds finiteness probe failed", exc_info=True)
         return False
 
 
@@ -315,7 +323,7 @@ def _filter_gdf_to_valid_bounds(temp_gdf: gpd.GeoDataFrame) -> tuple[gpd.GeoData
         if _bounds_are_finite(temp_gdf.total_bounds):
             return temp_gdf, False
     except Exception:
-        pass
+        logger.debug("finite-bounds precheck failed", exc_info=True)
 
     valid_mask = temp_gdf.geometry.apply(_has_valid_geometry_bounds)
     return temp_gdf.loc[valid_mask].copy(), bool((~valid_mask).any())
@@ -487,7 +495,7 @@ def _infer_square_size(adata, library_id, coords, binsize=None):
             if np.isfinite(size) and size > 0:
                 return size
         except Exception:
-            pass
+            logger.debug("marker size computation failed; using default", exc_info=True)
 
     if coords is not None and len(coords) > 1:
         diffs = []
