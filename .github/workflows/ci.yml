@@ -50,6 +50,10 @@ jobs:
           poetry run flake8 trackcell \
             --count --select=E9,F63,F7,F82 --show-source --statistics
 
+      - name: Type check (scoped strict modules)
+        run: |
+          poetry run mypy trackcell/_logging.py trackcell/io/serialize.py
+
       - name: Build and validate wheel metadata
         run: |
           rm -rf dist

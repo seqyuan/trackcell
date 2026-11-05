@@ -30,7 +30,7 @@ def _to_wkt_frame(obj: Any) -> Any:
     if not isinstance(obj, gpd.GeoDataFrame):
         return obj
 
-    values = []
+    values: list[Any] = []
     for geom in obj.geometry:
         if geom is None:
             values.append(None)
@@ -80,7 +80,7 @@ def flatten_geometries(
     out = adata if inplace else adata.copy()
     for sid in _spatial_samples(out, sample):
         info = out.uns["spatial"][sid]
-        if not isinstance(info, Mapping):
+        if not isinstance(info, dict):
             continue
         for key in GEOMETRY_KEYS:
             if key in info:
@@ -131,7 +131,7 @@ def save_h5ad(
 
     for sid in _spatial_samples(adata, None):
         info = adata.uns["spatial"][sid]
-        if not isinstance(info, Mapping):
+        if not isinstance(info, dict):
             continue
         for key in GEOMETRY_KEYS:
             obj = info.get(key)
