@@ -1,0 +1,71 @@
+name: Bug report
+description: Report a reproducible problem with TrackCell
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the report. Because many TrackCell bugs are tied to the
+        numpy/pyarrow/scanpy versions in the environment, please fill in the
+        version fields below — they are usually the fastest path to a fix.
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: A clear description of the bug, including the full traceback.
+      placeholder: I called read_hd_bin(...) and got ...
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Minimal reproduction
+      description: The smallest runnable snippet that reproduces the problem.
+      render: python
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected vs actual behavior
+    validations:
+      required: true
+  - type: input
+    id: trackcell-version
+    attributes:
+      label: trackcell version
+      description: "Output of `python -c \"import trackcell; print(trackcell.__version__)\"`"
+      placeholder: 0.4.0
+    validations:
+      required: true
+  - type: textarea
+    id: env
+    attributes:
+      label: Environment
+      description: Python version and key package versions.
+      value: |
+        - OS:
+        - Python:
+        - numpy:
+        - scanpy:
+        - anndata:
+        - pyarrow:
+        - numba:
+      render: markdown
+    validations:
+      required: true
+  - type: dropdown
+    id: data-type
+    attributes:
+      label: Data / reader involved
+      multiple: true
+      options:
+        - Visium HD bin (read_hd_bin)
+        - Visium HD cell segmentation (read_hd_cellseg)
+        - Xenium (read_xenium_cellseg)
+        - Atera (read_atera)
+        - STOmics (read_sto_cellbin / read_sto_bin)
+        - Clustering (spatial_cluster / YardCluster)
+        - Integration (SCT + RPCA / Harmony / BBKNN)
+        - Plotting (pl.*)
+        - Other

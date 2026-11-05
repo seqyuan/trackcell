@@ -1,0 +1,33 @@
+name: Feature request
+description: Suggest a new capability or improvement
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: use-case
+    attributes:
+      label: Use case
+      description: What analysis or workflow are you trying to do?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: API sketch, behavior, or example of what you'd like.
+    validations:
+      required: true
+  - type: textarea
+    id: scale
+    attributes:
+      label: Data scale / platform
+      description: |
+        Roughly how many cells / bins and which platform (Visium HD, Xenium,
+        Atera, STOmics)? TrackCell streams million-cell data, so scale matters.
+    validations:
+      required: false
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+    validations:
+      required: false
