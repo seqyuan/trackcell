@@ -56,8 +56,11 @@ jobs:
           poetry build
           python scripts/check_package.py
 
-      - name: Fast tests
-        run: poetry run pytest -m "not slow" -q
+      - name: Fast tests + IO coverage ratchet
+        run: |
+          poetry run coverage run -m pytest -m "not slow" -q
+          poetry run coverage report --include="trackcell/io/read_data.py" --fail-under=75
+          poetry run coverage report --include="trackcell/io/read_sto.py" --fail-under=60
 
   integration:
     name: Integration extras (Python 3.11)
