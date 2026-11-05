@@ -332,11 +332,11 @@ def build_poisson_gene_tables(
     var = pd.Series(row_var_sparse(umi), index=genes)
     overdispersion = var - amean
     all_poisson = genes[(overdispersion <= 0) | (amean < 1e-3)]
-    step1_poisson = genes_step1.intersection(  # noqa: F841  (unused; v2 review R-06)
-        all_poisson
-    )
-    inf_theta = model_pars.index[~np.isfinite(model_pars["theta"])]
-    poisson_step1 = genes_step1.intersection(all_poisson.union(inf_theta))
+    # NOTE: Seurat v2 restricts the Poisson offset model to the step-1 Poisson
+    # set = intersection(genes_step1, all_poisson ∪ infinite-theta genes).
+    # The offset table below is built for ``all_poisson``; whether these sets
+    # diverge in practice must be confirmed against R (parity tests need
+    # benchmark data), so the step-1 set is intentionally not wired in here.
 
     mean_cell_sum = float(np.asarray(umi.sum(axis=0)).mean())
     offset_rows: list[dict[str, float]] = []
@@ -357,5 +357,4 @@ def build_poisson_gene_tables(
     for col in model_pars.columns:
         if col not in vst_out_offset.columns:
             vst_out_offset[col] = 0.0
-    _ = poisson_step1
     return all_poisson, vst_out_offset

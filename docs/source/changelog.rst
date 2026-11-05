@@ -32,6 +32,17 @@ Version 0.4.0
   ``warning``.
 * ``read_data``'s H5-fallback notice is logged at ``INFO``.
 
+**Fixed**:
+
+* ``read_sto_cellbin`` now reads scalar ``offsetX``/``offsetY`` GEF attributes
+  correctly (a parsing bug previously forced them to ``0``) and records them in
+  ``uns["spatial"][sample]["metadata"]`` as ``offset_x``/``offset_y``/``offset_um``.
+  Coordinates remain in the GEF/image frame (offsets are not added).
+* Removed dead code in ``pl.plot.spatial_cell`` (``edges_draw``; dual-color
+  edges are already drawn by ``_draw_categorical_edges``) and in
+  ``_sctransform_v2.build_poisson_gene_tables`` (unused Poisson-set locals);
+  no behavior change.
+
 **Hygiene**:
 
 * Stop tracking ``.annovibe/im.json`` (contained bot credentials); ignore

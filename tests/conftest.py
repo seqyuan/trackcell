@@ -328,6 +328,8 @@ def write_cellbin_gef(
     expressions=(((0, 5), (1, 2)), ((2, 3),), ((1, 4), (0, 1))),
     borders=None,
     resolution: int = 500,
+    offset_x: int = 0,
+    offset_y: int = 0,
     include_cellbin_group: bool = True,
 ) -> Path:
     """Write a STOmics ``*.cellbin.gef`` (HDF5) file.
@@ -371,8 +373,8 @@ def write_cellbin_gef(
 
     with h5py.File(path, "w") as handle:
         handle.attrs["resolution"] = resolution
-        handle.attrs["offsetX"] = 0
-        handle.attrs["offsetY"] = 0
+        handle.attrs["offsetX"] = offset_x
+        handle.attrs["offsetY"] = offset_y
         if include_cellbin_group:
             cellbin = handle.create_group("cellBin")
             cell_ds = cellbin.create_dataset("cell", data=cell)

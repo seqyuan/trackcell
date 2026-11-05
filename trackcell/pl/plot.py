@@ -1349,8 +1349,9 @@ def spatial_cell(
         # ── Dual-color mode: edge_color as a column name for categorical edge coloring ──
         dual_color = edge_color is not None and edge_color in adata.obs.columns
         if dual_color and color_key is not None:
-            edges_draw = edges_color  # noqa: F841  (kept as fallback name; potential dual-color edge bug — review R-06)
-            edges_color = "none"  # fill pass draws no edges
+            # Fill pass draws no edges; the categorical edge pass below
+            # (``_draw_categorical_edges``) renders cell boundaries on top.
+            edges_color = "none"
 
         plot_kwargs = {
             "ax": current_ax,

@@ -253,3 +253,27 @@ def test_read_sto_bin_unsupported_format_raises(tmp_path):
 
     with pytest.raises(ValueError, match="Unsupported file format"):
         read_sto_bin(bogus)
+
+
+def test_read_sto_cellbin_records_gef_offsets(tmp_path):
+    # GEF offsets position the crop within the chip; they are recorded in
+    # metadata (not added to coordinates, which are already in image frame).
+    gef = write_cellbin_gef(
+        tmp_path / "B000010.cellbin.gef",
+        cells=(("A", 100, 200), ("B", 300, 400), ("C", 500, 600)),
+        resolution=500,
+        offset_x=1000,
+        offset_y=2000,
+    )
+
+    adata = read_sto_cellbin(gef, sample="off")
+    meta = adata.uns["spatial"]["off"]["metadata"]
+
+    assert meta["offset_x"] == 1000
+    assert meta["offset_y"] == 2000
+    # resolution 500 nm/unit -> 0.5 um/unit; offset um = offset_units * 0.5
+    assert meta["offset_um"] == pytest.approx([500.0, 1000.0])
+    # Coordinates stay in the GEF/image frame (offsets are NOT applied).
+    np.testing.assert_allclose(
+        adata.obsm["spatial"], [[100.0, 200.0], [300.0, 400.0], [500.0, 600.0]]
+    )

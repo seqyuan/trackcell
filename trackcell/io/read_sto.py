@@ -507,18 +507,20 @@ def read_sto_cellbin(
             if isinstance(gef_attrs.get("resolution"), np.ndarray)
             else gef_attrs.get("resolution", 500)
         )
-        # NOTE: offsetX/offsetY are parsed but not yet applied to coordinates
-        # (potential coordinate-offset bug — kept for review, R-06).
-        offset_x = int(  # noqa: F841
+        # offsetX/offsetY position the GEF within the full chip. STOmics
+        # cellbin ``cell['x'/'y']`` are already in the image coordinate frame
+        # (scalefactor 1.0 below), so the offsets are recorded in metadata
+        # rather than added to the coordinates (adding them would double-count).
+        offset_x = int(
             gef_attrs.get("offsetX", [0])[0]
             if isinstance(gef_attrs.get("offsetX"), np.ndarray)
-            else 0
+            else gef_attrs.get("offsetX", 0)
         )
-        offset_y = int(  # noqa: F841
+        offset_y = int(
             gef_attrs.get("offsetY", [0])[0]
             if isinstance(gef_attrs.get("offsetY"), np.ndarray)
-            else 0
-        )  # noqa: F841
+            else gef_attrs.get("offsetY", 0)
+        )
         # Cell-level attrs give bounding box
         cell_attrs = dict(f["cellBin"]["cell"].attrs)
         cell_min_x = int(cell_attrs.get("minX", 0))
@@ -580,6 +582,9 @@ def read_sto_cellbin(
                 "sample_id": sample,
                 "pixel_size_um": pixel_size_um,
                 "resolution_nm": resolution,
+                "offset_x": offset_x,
+                "offset_y": offset_y,
+                "offset_um": [offset_x * pixel_size_um, offset_y * pixel_size_um],
                 "coordinate_range": {
                     "x": [cell_min_x, cell_max_x],
                     "y": [cell_min_y, cell_max_y],

@@ -5,6 +5,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import geopandas as gpd
 from anndata import AnnData
+from matplotlib.collections import LineCollection
 from shapely.geometry import Polygon
 
 from trackcell.pl.plot import spatial_cell
@@ -104,4 +105,37 @@ def test_spatial_cell_flips_colored_background_when_invert_y_false():
 
     rendered_background = np.asarray(ax.images[0].get_array())
     np.testing.assert_array_equal(rendered_background, img[::-1])
+    plt.close(ax.figure)
+
+
+def test_spatial_cell_dual_color_draws_category_edges():
+    # dual-color mode: color drives fill, edge_color drives boundaries.
+    # The categorical edge pass (``_draw_categorical_edges``) must actually
+    # render boundaries as LineCollections on top of the fill.
+    adata = AnnData(
+        X=np.array([[1.0], [2.0], [3.0]], dtype=np.float32),
+        obs=pd.DataFrame({"celltype": ["A", "B", "A"]}, index=["c0", "c1", "c2"]),
+        var=pd.DataFrame(index=["g0"]),
+    )
+    adata.obsm["spatial"] = np.array([[0.5, 0.5], [1.5, 0.5], [2.5, 0.5]])
+    adata.uns["spatial"] = {
+        "sample": {
+            "geometries": gpd.GeoDataFrame(
+                geometry=[_square(0, 0), _square(1, 0), _square(2, 0)],
+                index=["c0", "c1", "c2"],
+            )
+        }
+    }
+
+    ax = spatial_cell(
+        adata,
+        color="g0",
+        edge_color="celltype",
+        edge_palette={"A": "#e41a1c", "B": "#377eb8"},
+        library_id="sample",
+        show=False,
+        legend=False,
+    )
+
+    assert any(isinstance(coll, LineCollection) for coll in ax.collections)
     plt.close(ax.figure)
