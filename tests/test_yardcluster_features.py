@@ -25,7 +25,9 @@ from trackcell.tl.spatial_cluster import (
 )
 
 
-def _make_two_blob_adata(n_per_blob: int = 25, n_genes: int = 40, seed: int = 0) -> AnnData:
+def _make_two_blob_adata(
+    n_per_blob: int = 25, n_genes: int = 40, seed: int = 0
+) -> AnnData:
     """Two well-separated blobs -> two spatial components."""
     rng = np.random.default_rng(seed)
     coords = np.vstack(

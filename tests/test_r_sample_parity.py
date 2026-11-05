@@ -10,7 +10,12 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from trackcell.benchmark.sct.data import BENCHMARK_ROOT, BENCHMARK_SAMPLES, REF_SEED, load_benchmark_umi
+from trackcell.benchmark.sct.data import (
+    BENCHMARK_ROOT,
+    BENCHMARK_SAMPLES,
+    REF_SEED,
+    load_benchmark_umi,
+)
 from trackcell.benchmark.sct.metrics import hvg_jaccard
 from trackcell.benchmark.sct.data import load_r_export, r_export_dir
 from trackcell.tl._density import r_density_fft
@@ -42,7 +47,9 @@ def test_cells_step1_matches_r_export(sample: str) -> None:
     """R ``sample(colnames, n_cells)`` parity via rrng."""
     from trackcell.tl._rng import _RSampleRNG
 
-    umi, genes, cells, cell_attr = load_benchmark_umi(sample, benchmark_root=BENCHMARK_ROOT)
+    umi, genes, cells, cell_attr = load_benchmark_umi(
+        sample, benchmark_root=BENCHMARK_ROOT
+    )
     r = load_r_export(sample, REF_SEED, benchmark_root=BENCHMARK_ROOT)
     r_cells = pd.Index(r["cells_step1"]).intersection(cells)
 
@@ -90,10 +97,13 @@ def test_genes_step1_jaccard_vs_r(sample: str) -> None:
 @pytest.mark.parametrize("sample", BENCHMARK_SAMPLES)
 def test_native_vst_hvg_jaccard_vs_r(sample: str) -> None:
     """Full native ``vst()`` HVG improves with R subsampling + FFT density."""
-    umi, genes, cells, cell_attr = load_benchmark_umi(sample, benchmark_root=BENCHMARK_ROOT)
+    umi, genes, cells, cell_attr = load_benchmark_umi(
+        sample, benchmark_root=BENCHMARK_ROOT
+    )
     r_hvg = set(
         (
-            r_export_dir(sample, REF_SEED, benchmark_root=BENCHMARK_ROOT) / "hvg_top3000.txt"
+            r_export_dir(sample, REF_SEED, benchmark_root=BENCHMARK_ROOT)
+            / "hvg_top3000.txt"
         )
         .read_text()
         .strip()

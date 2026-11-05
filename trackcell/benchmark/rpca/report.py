@@ -17,7 +17,9 @@ def _fmt(x: float | None, nd: int = 4) -> str:
 
 def render_rpca_benchmark_table(payload: dict[str, Any]) -> str:
     ref = payload.get("ref_seed", 1448145)
-    sct = next((s for s in payload.get("sct_stepwise", []) if s.get("seed") == ref), None)
+    sct = next(
+        (s for s in payload.get("sct_stepwise", []) if s.get("seed") == ref), None
+    )
     step = next((s for s in payload.get("stepwise", []) if s.get("seed") == ref), None)
     e2e = next((s for s in payload.get("e2e", []) if s.get("seed") == ref), None)
 
@@ -77,8 +79,20 @@ def render_rpca_benchmark_table(payload: dict[str, Any]) -> str:
     if step:
         st = step["steps"]
         rows = [
-            ("03 features", "Jaccard", _fmt(st["03_features"]["jaccard"]), "R SCT → Py SelectIntegrationFeatures", ""),
-            ("04 prep", "Gene corr (median)", _fmt(st["04_prep"].get("gene_corr_median")), "R SCT + R features → Py Prep", ""),
+            (
+                "03 features",
+                "Jaccard",
+                _fmt(st["03_features"]["jaccard"]),
+                "R SCT → Py SelectIntegrationFeatures",
+                "",
+            ),
+            (
+                "04 prep",
+                "Gene corr (median)",
+                _fmt(st["04_prep"].get("gene_corr_median")),
+                "R SCT + R features → Py Prep",
+                "",
+            ),
             (
                 "05 anchors",
                 "Local pair Jaccard",
@@ -102,7 +116,15 @@ def render_rpca_benchmark_table(payload: dict[str, Any]) -> str:
             ),
         ]
         for r in rows:
-            lines.extend([f"   * - {r[0]}", f"     - {r[1]}", f"     - {r[2]}", f"     - {r[3]}", f"     - {r[4]}"])
+            lines.extend(
+                [
+                    f"   * - {r[0]}",
+                    f"     - {r[1]}",
+                    f"     - {r[2]}",
+                    f"     - {r[3]}",
+                    f"     - {r[4]}",
+                ]
+            )
 
     if e2e:
         summary = payload.get("summary", {})
@@ -118,16 +140,16 @@ def render_rpca_benchmark_table(payload: dict[str, Any]) -> str:
                 "   * - Metric",
                 "     - Stepwise",
                 "     - E2E",
-                f"   * - Features Jaccard",
+                "   * - Features Jaccard",
                 f"     - {_fmt(step_ref.get('features_jaccard'))}",
                 f"     - {_fmt(e2e_ref.get('features_jaccard'))}",
-                f"   * - Prep gene corr",
+                "   * - Prep gene corr",
                 f"     - {_fmt(step_ref.get('prep_corr_median'))}",
                 f"     - {_fmt(e2e_ref.get('prep_corr_median'))}",
-                f"   * - Anchor local-pair Jaccard",
+                "   * - Anchor local-pair Jaccard",
                 f"     - {_fmt(step_ref.get('anchor_local_jaccard'))}",
                 f"     - {_fmt(e2e_ref.get('anchor_local_jaccard'))}",
-                f"   * - Integrate gene corr",
+                "   * - Integrate gene corr",
                 f"     - {_fmt(step_ref.get('integrate_corr_median_r_anchors'))}",
                 f"     - {_fmt(e2e_ref.get('integrate_corr_median'))}",
             ]
@@ -147,21 +169,21 @@ def render_rpca_benchmark_table(payload: dict[str, Any]) -> str:
     if e2e:
         lines.extend(
             [
-                f"   * - SCT HVG Jaccard (median per batch)",
+                "   * - SCT HVG Jaccard (median per batch)",
                 f"     - {_fmt(payload.get('summary', {}).get('e2e_ref', {}).get('sct_hvg_jaccard_median'))}",
-                f"   * - Integration features Jaccard",
+                "   * - Integration features Jaccard",
                 f"     - {_fmt(e2e['features_jaccard'])}",
-                f"   * - Shared integration features",
+                "   * - Shared integration features",
                 f"     - {e2e.get('n_shared_features', '—')}",
-                f"   * - Prep gene corr (aligned columns)",
+                "   * - Prep gene corr (aligned columns)",
                 f"     - {_fmt(e2e['prep'].get('gene_corr_median'))}",
-                f"   * - Prep gene corr (shared features only)",
+                "   * - Prep gene corr (shared features only)",
                 f"     - {_fmt(e2e.get('prep_shared_features_only', {}).get('gene_corr_median'))}",
-                f"   * - Anchor local pair Jaccard",
+                "   * - Anchor local pair Jaccard",
                 f"     - {_fmt(e2e['anchors']['local_pair_jaccard'])}",
-                f"   * - Integrated gene corr (aligned)",
+                "   * - Integrated gene corr (aligned)",
                 f"     - {_fmt(e2e['integrated'].get('gene_corr_median'))}",
-                f"   * - Integrated gene corr (shared features)",
+                "   * - Integrated gene corr (shared features)",
                 f"     - {_fmt(e2e.get('integrated_shared_features_only', {}).get('gene_corr_median'))}",
             ]
         )

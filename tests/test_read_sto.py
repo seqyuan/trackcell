@@ -22,7 +22,6 @@ from tests.conftest import (
     write_tif_image,
 )
 
-
 # ---------------------------------------------------------------------------
 # read_sto_cellbin
 # ---------------------------------------------------------------------------
@@ -69,7 +68,12 @@ def test_read_sto_cellbin_happy_path(sto_cellbin_bundle):
     assert [poly.centroid.x for poly in geometries.geometry] == [100.0, 300.0, 500.0]
 
     assert all(g.startswith("POLYGON") for g in adata.obs["geometry"])
-    assert wkt.loads(adata.obs["geometry"].iloc[0]).bounds == (96.0, 196.0, 104.0, 204.0)
+    assert wkt.loads(adata.obs["geometry"].iloc[0]).bounds == (
+        96.0,
+        196.0,
+        104.0,
+        204.0,
+    )
     assert "images" not in spatial  # no 03.register/ sibling in this bundle
 
 
@@ -91,9 +95,7 @@ def test_read_sto_cellbin_accepts_directory(sto_cellbin_bundle):
 
     assert from_directory.shape == from_file.shape == (3, 3)
     assert list(from_directory.uns["spatial"]) == ["C57_7"]
-    np.testing.assert_array_equal(
-        from_directory.X.toarray(), from_file.X.toarray()
-    )
+    np.testing.assert_array_equal(from_directory.X.toarray(), from_file.X.toarray())
 
 
 def test_read_sto_cellbin_without_cellbin_group_raises(tmp_path):
@@ -138,7 +140,9 @@ def test_read_sto_cellbin_directory_without_gef_raises(tmp_path):
 
 def test_read_sto_cellbin_autodiscovers_registered_image(sto_cellbin_bundle):
     # STOmics keeps the ssDNA image in a sibling 03.register/ directory.
-    write_tif_image(sto_cellbin_bundle.parents[1] / "03.register" / "ssDNA_1_regist.tif")
+    write_tif_image(
+        sto_cellbin_bundle.parents[1] / "03.register" / "ssDNA_1_regist.tif"
+    )
 
     adata = read_sto_cellbin(sto_cellbin_bundle.parent)
 

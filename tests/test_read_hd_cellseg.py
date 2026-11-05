@@ -31,7 +31,9 @@ def test_read_hd_cellseg_happy_path(hd_cellseg_bundle):
     )
 
     # WKT strings in obs, GeoDataFrame in uns.
-    assert all(isinstance(g, str) and g.startswith("POLYGON") for g in adata.obs["geometry"])
+    assert all(
+        isinstance(g, str) and g.startswith("POLYGON") for g in adata.obs["geometry"]
+    )
     parsed = [wkt.loads(g) for g in adata.obs["geometry"]]
     assert [poly.area for poly in parsed] == [64.0, 64.0, 64.0]
 
@@ -65,7 +67,9 @@ def test_read_hd_cellseg_extra_segmentations_warn_and_are_dropped(hd_cellseg_bun
         cell_ids=(1, 2, 3, 4),
     )
 
-    with pytest.warns(UserWarning, match="segmented cells have no expression matrix row"):
+    with pytest.warns(
+        UserWarning, match="segmented cells have no expression matrix row"
+    ):
         adata = read_hd_cellseg(hd_cellseg_bundle, sample="Cse1")
 
     assert adata.n_obs == 3

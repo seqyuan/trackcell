@@ -9,9 +9,7 @@ import trackcell as tcl
 
 def _make_counts(n_cells: int = 80, n_genes: int = 50, seed: int = 0) -> AnnData:
     rng = np.random.default_rng(seed)
-    adata = AnnData(
-        X=rng.poisson(2.0, size=(n_cells, n_genes)).astype(np.float32)
-    )
+    adata = AnnData(X=rng.poisson(2.0, size=(n_cells, n_genes)).astype(np.float32))
     adata.var_names = [f"g{i}" for i in range(n_genes)]
     adata.obsm["spatial"] = rng.normal(size=(n_cells, 2))
     return adata

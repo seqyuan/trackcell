@@ -39,14 +39,18 @@ def align_r_gene_list(genes: Sequence[str], target_genes: pd.Index) -> list[str]
     return align_gene_list(genes, target_genes)
 
 
-def align_r_model_pars(model_pars: pd.DataFrame, target_genes: pd.Index) -> pd.DataFrame:
+def align_r_model_pars(
+    model_pars: pd.DataFrame, target_genes: pd.Index
+) -> pd.DataFrame:
     """Align an R model parameter table to Trackcell gene names."""
     model_pars = normalize_r_model_pars(model_pars)
     lookup = build_gene_alias_lookup(target_genes)
     rows: list[pd.Series] = []
     index: list[str] = []
     for gene, row in model_pars.iterrows():
-        matched = next((lookup[a] for a in _suffix_aliases(str(gene)) if a in lookup), None)
+        matched = next(
+            (lookup[a] for a in _suffix_aliases(str(gene)) if a in lookup), None
+        )
         if matched is not None and matched not in index:
             rows.append(row)
             index.append(matched)
@@ -116,7 +120,9 @@ def load_r_vst_export(export_dir: Path | str) -> dict[str, Any]:
         raise FileNotFoundError(f"Missing {root / 'model_pars_step1.csv'}")
 
     gene_attr_path = root / "gene_attr.csv"
-    gene_attr = pd.read_csv(gene_attr_path, index_col=0) if gene_attr_path.exists() else None
+    gene_attr = (
+        pd.read_csv(gene_attr_path, index_col=0) if gene_attr_path.exists() else None
+    )
     genes_vst = read_lines("genes_vst.txt", required=False)
     if genes_vst is None and gene_attr is not None:
         genes_vst = gene_attr.index.astype(str).tolist()

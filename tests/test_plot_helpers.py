@@ -51,7 +51,9 @@ def test_spatial_cell_does_not_tight_layout_user_axes(monkeypatch):
     )
     adata.obsm["spatial"] = np.array([[0.5, 0.5]])
     adata.uns["spatial"] = {
-        "sample": {"geometries": gpd.GeoDataFrame(geometry=[_square(0, 0)], index=["c0"])}
+        "sample": {
+            "geometries": gpd.GeoDataFrame(geometry=[_square(0, 0)], index=["c0"])
+        }
     }
     fig, ax = plt.subplots()
 

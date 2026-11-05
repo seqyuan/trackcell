@@ -16,7 +16,6 @@ from trackcell.benchmark.rpca.data import (
     K_SCORE,
     K_WEIGHT,
     N_INTEGRATION_FEATURES,
-    N_SCT_HVG,
     N_TREES,
     N_TREES_WEIGHT,
     INTEGRATION_DTYPE,
@@ -56,6 +55,7 @@ from trackcell.tl.integration.sample_tree import integrate_batches_sample_tree
 from trackcell.tl.integration.select_features import select_integration_features
 from trackcell.tl.integration._rpca import reciprocal_project, run_batch_pca
 
+
 def _run_py_anchors(
     prep: pd.DataFrame,
     adata,
@@ -74,7 +74,9 @@ def _run_py_anchors(
     for label in batch_labels:
         mask = batches == label
         batch_data[label] = prep.loc[mask, features].to_numpy(dtype=np.float64)
-        batch_pca[label] = run_batch_pca(batch_data[label], n_components=DIMS, seed=seed)
+        batch_pca[label] = run_batch_pca(
+            batch_data[label], n_components=DIMS, seed=seed
+        )
         cell_offsets[label] = offset
         offset += int(mask.sum())
 
@@ -193,7 +195,9 @@ def _run_stepwise(
         layer="counts",
         key_added="sct_prep",
     )
-    py_prep = pd.DataFrame(adata.obsm["X_sct_prep"], index=adata.obs_names, columns=r_features)
+    py_prep = pd.DataFrame(
+        adata.obsm["X_sct_prep"], index=adata.obs_names, columns=r_features
+    )
     steps["04_prep"] = {
         "input": "R Step 02 SCT + R Step 03 features",
         **matrix_gene_corr(r_prep, py_prep),
@@ -278,7 +282,9 @@ def _run_e2e_native(
     hvg_js: dict[str, float] = {}
     sct_dir = r_export_dir(seed, benchmark_root=benchmark_root) / "02_sct"
     for sample in RPCA_SAMPLES:
-        r_hvg = set((sct_dir / f"{sample}_hvg.txt").read_text().strip().split("\n")) - {""}
+        r_hvg = set((sct_dir / f"{sample}_hvg.txt").read_text().strip().split("\n")) - {
+            ""
+        }
         py_hvg = set(out.uns["sct"]["batch_models"][sample]["variable_features"])
         hvg_js[sample] = jaccard(py_hvg, r_hvg)
 
@@ -320,12 +326,16 @@ def run_rpca_benchmark_suite(
     missing: list[str] = []
 
     for seed in seeds:
-        export_marker = r_export_dir(seed, benchmark_root=benchmark_root) / "pipeline_summary.json"
+        export_marker = (
+            r_export_dir(seed, benchmark_root=benchmark_root) / "pipeline_summary.json"
+        )
         if not export_marker.exists():
             missing.append(f"seed_{seed}")
             continue
         stepwise.append(_run_stepwise(seed, benchmark_root=benchmark_root))
-        sct_stepwise.append(run_integration_sct_stepwise(seed, benchmark_root=benchmark_root))
+        sct_stepwise.append(
+            run_integration_sct_stepwise(seed, benchmark_root=benchmark_root)
+        )
         if not skip_e2e:
             e2e.append(_run_e2e_native(seed, benchmark_root=benchmark_root))
 
@@ -340,13 +350,15 @@ def run_rpca_benchmark_suite(
         summary["stepwise_ref"] = {
             "features_jaccard": ref_step["steps"]["03_features"]["jaccard"],
             "prep_corr_median": ref_step["steps"]["04_prep"].get("gene_corr_median"),
-            "anchor_local_jaccard": ref_step["steps"]["05_anchors"]["local_pair_jaccard"],
-            "integrate_corr_median_r_anchors": ref_step["steps"]["06_integrated_r_anchors"].get(
-                "gene_corr_median"
-            ),
-            "integrate_corr_median_py_anchors": ref_step["steps"]["06_integrated_py_anchors"].get(
-                "gene_corr_median"
-            ),
+            "anchor_local_jaccard": ref_step["steps"]["05_anchors"][
+                "local_pair_jaccard"
+            ],
+            "integrate_corr_median_r_anchors": ref_step["steps"][
+                "06_integrated_r_anchors"
+            ].get("gene_corr_median"),
+            "integrate_corr_median_py_anchors": ref_step["steps"][
+                "06_integrated_py_anchors"
+            ].get("gene_corr_median"),
         }
     if ref_e2e:
         summary["e2e_ref"] = {
@@ -358,9 +370,9 @@ def run_rpca_benchmark_suite(
             ),
             "anchor_local_jaccard": ref_e2e["anchors"]["local_pair_jaccard"],
             "integrate_corr_median": ref_e2e["integrated"].get("gene_corr_median"),
-            "integrate_shared_corr_median": ref_e2e["integrated_shared_features_only"].get(
-                "gene_corr_median"
-            ),
+            "integrate_shared_corr_median": ref_e2e[
+                "integrated_shared_features_only"
+            ].get("gene_corr_median"),
             "sct_hvg_jaccard_median": summarize_distribution(
                 list(ref_e2e["sct_hvg_jaccard"].values())
             ).get("median"),

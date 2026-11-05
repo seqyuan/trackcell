@@ -23,12 +23,19 @@ def test_read_hd_bin_happy_path(hd_bin_bundle):
     assert adata.shape == (len(DEFAULT_BARCODES), len(DEFAULT_GENES))
     assert list(adata.var_names) == list(DEFAULT_GENES)
     assert list(adata.obs_names) == list(DEFAULT_BARCODES)
-    assert int(adata.X.sum()) == int(dense_counts(len(DEFAULT_GENES), len(DEFAULT_BARCODES)).sum())
+    assert int(adata.X.sum()) == int(
+        dense_counts(len(DEFAULT_GENES), len(DEFAULT_BARCODES)).sum()
+    )
 
     # Positions were merged into obs and spatial coordinates come from
     # the full-resolution pixel columns, ordered (col, row).
-    for column in ("in_tissue", "array_row", "array_col",
-                   "pxl_row_in_fullres", "pxl_col_in_fullres"):
+    for column in (
+        "in_tissue",
+        "array_row",
+        "array_col",
+        "pxl_row_in_fullres",
+        "pxl_col_in_fullres",
+    ):
         assert column in adata.obs.columns
     expected = np.column_stack(
         [
@@ -137,9 +144,7 @@ def test_read_hd_bin_directory_matrix_form(hd_bin_bundle):
     assert adata.shape == (3, 3)
     assert list(adata.var_names) == list(DEFAULT_GENES)
     assert adata.var["feature_types"].unique().tolist() == ["Gene Expression"]
-    expected_total = int(
-        dense_counts(len(DEFAULT_GENES), len(DEFAULT_BARCODES)).sum()
-    )
+    expected_total = int(dense_counts(len(DEFAULT_GENES), len(DEFAULT_BARCODES)).sum())
     assert int(adata.X.sum()) == expected_total
 
 
@@ -151,9 +156,7 @@ def test_read_hd_bin_corrupt_h5_falls_back_to_directory(hd_bin_bundle):
     adata = read_hd_bin(hd_bin_bundle, sample="Cse1")
 
     assert adata.shape == (3, 3)
-    expected_total = int(
-        dense_counts(len(DEFAULT_GENES), len(DEFAULT_BARCODES)).sum()
-    )
+    expected_total = int(dense_counts(len(DEFAULT_GENES), len(DEFAULT_BARCODES)).sum())
     assert int(adata.X.sum()) == expected_total
 
 

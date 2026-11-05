@@ -51,7 +51,9 @@ def test_load_rpca_subsample_indices():
 
 
 @pytest.mark.skipif(
-    not rpca_exports_support_r_step1(RPCA_BENCHMARK_ROOT, RPCA_SEED, (RPCA_SAMPLES[0],)),
+    not rpca_exports_support_r_step1(
+        RPCA_BENCHMARK_ROOT, RPCA_SEED, (RPCA_SAMPLES[0],)
+    ),
     reason="RPCA step-1 exports missing",
 )
 def test_materialize_and_resolve_r_vst_exports(tmp_path: Path):

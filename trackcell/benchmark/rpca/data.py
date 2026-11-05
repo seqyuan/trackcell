@@ -9,7 +9,6 @@ import pandas as pd
 import scanpy as sc
 
 from trackcell.benchmark.sct.data import (
-    BENCHMARK_FILTER,
     BENCHMARK_ROOT,
     BENCHMARK_SAMPLES,
     BENCHMARK_SEEDS,
@@ -95,19 +94,27 @@ def load_merged_adata_native(
     return merged
 
 
-def batch_sizes_from_adata(adata: sc.AnnData, batch_key: str = BATCH_KEY) -> dict[str, int]:
+def batch_sizes_from_adata(
+    adata: sc.AnnData, batch_key: str = BATCH_KEY
+) -> dict[str, int]:
     batches = adata.obs[batch_key].astype(str)
     return {label: int((batches == label).sum()) for label in batches.unique()}
 
 
-def inject_r_sct_models(adata: sc.AnnData, seed: int, *, benchmark_root: Path = RPCA_BENCHMARK_ROOT) -> None:
+def inject_r_sct_models(
+    adata: sc.AnnData, seed: int, *, benchmark_root: Path = RPCA_BENCHMARK_ROOT
+) -> None:
     """Populate ``adata.uns['sct']`` from R Step 02 CSV exports."""
     sct_dir = r_export_dir(seed, benchmark_root=benchmark_root) / "02_sct"
     batch_models: dict[str, dict] = {}
     union_hvg: set[str] = set()
 
     for sample in RPCA_SAMPLES:
-        hvg = [g for g in (sct_dir / f"{sample}_hvg.txt").read_text().strip().split("\n") if g]
+        hvg = [
+            g
+            for g in (sct_dir / f"{sample}_hvg.txt").read_text().strip().split("\n")
+            if g
+        ]
         model_pars = pd.read_csv(sct_dir / f"{sample}_model_pars.csv", index_col=0)
         model_pars.index = model_pars.index.astype(str)
         scale_df = pd.read_csv(sct_dir / f"{sample}_residuals_hvg.csv", index_col=0)
@@ -133,7 +140,9 @@ def inject_r_sct_models(adata: sc.AnnData, seed: int, *, benchmark_root: Path = 
             data={
                 "residual_mean": 0.0,
                 "residual_variance": model_pars.index.map(
-                    lambda g: float(scale_df.loc[g].var()) if g in scale_df.index else np.nan
+                    lambda g: (
+                        float(scale_df.loc[g].var()) if g in scale_df.index else np.nan
+                    )
                 ),
                 "gmean": np.nan,
             },
@@ -157,8 +166,14 @@ def inject_r_sct_models(adata: sc.AnnData, seed: int, *, benchmark_root: Path = 
     }
 
 
-def load_r_features(seed: int, *, benchmark_root: Path = RPCA_BENCHMARK_ROOT) -> list[str]:
-    path = r_export_dir(seed, benchmark_root=benchmark_root) / "03_features" / "integration_features.txt"
+def load_r_features(
+    seed: int, *, benchmark_root: Path = RPCA_BENCHMARK_ROOT
+) -> list[str]:
+    path = (
+        r_export_dir(seed, benchmark_root=benchmark_root)
+        / "03_features"
+        / "integration_features.txt"
+    )
     return [g for g in path.read_text().strip().split("\n") if g]
 
 
@@ -169,20 +184,30 @@ def load_r_prep(
     benchmark_root: Path = RPCA_BENCHMARK_ROOT,
 ) -> pd.DataFrame:
     prep = pd.read_csv(
-        r_export_dir(seed, benchmark_root=benchmark_root) / "04_prep" / "prep_residuals.csv",
+        r_export_dir(seed, benchmark_root=benchmark_root)
+        / "04_prep"
+        / "prep_residuals.csv",
         index_col=0,
     )
     prep.index = prep.index.astype(str)
     return prep.loc[adata.obs_names]
 
 
-def load_r_anchors(seed: int, *, benchmark_root: Path = RPCA_BENCHMARK_ROOT) -> pd.DataFrame:
-    return pd.read_csv(r_export_dir(seed, benchmark_root=benchmark_root) / "05_anchors" / "anchors.csv")
+def load_r_anchors(
+    seed: int, *, benchmark_root: Path = RPCA_BENCHMARK_ROOT
+) -> pd.DataFrame:
+    return pd.read_csv(
+        r_export_dir(seed, benchmark_root=benchmark_root) / "05_anchors" / "anchors.csv"
+    )
 
 
-def load_r_integrated(seed: int, *, benchmark_root: Path = RPCA_BENCHMARK_ROOT) -> pd.DataFrame:
+def load_r_integrated(
+    seed: int, *, benchmark_root: Path = RPCA_BENCHMARK_ROOT
+) -> pd.DataFrame:
     df = pd.read_csv(
-        r_export_dir(seed, benchmark_root=benchmark_root) / "06_integrated" / "integrated_residuals.csv",
+        r_export_dir(seed, benchmark_root=benchmark_root)
+        / "06_integrated"
+        / "integrated_residuals.csv",
         index_col=0,
     )
     df.index = df.index.astype(str)
@@ -197,9 +222,13 @@ def load_integration_batch_umi(
 ):
     """Load genes × cells UMI for one batch using R integration filter cell list."""
     root = r_export_dir(seed, benchmark_root=benchmark_root)
-    keep = set((root / "01_filter" / f"{sample}_cells.txt").read_text().strip().split("\n"))
+    keep = set(
+        (root / "01_filter" / f"{sample}_cells.txt").read_text().strip().split("\n")
+    )
     keep.discard("")
-    umi, genes, cells, cell_attr = load_benchmark_umi(sample, benchmark_root=benchmark_root)
+    umi, genes, cells, cell_attr = load_benchmark_umi(
+        sample, benchmark_root=benchmark_root
+    )
     keep_idx = cells.isin(keep)
     umi = umi[:, keep_idx]
     cells = cells[keep_idx]

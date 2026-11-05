@@ -15,10 +15,10 @@ def test_raw_anchor_scores_does_not_mix_index_spaces():
     n_ref = 3
     anchors = pd.DataFrame({"cell1": [0], "cell2": [n_ref + 0]})
 
-    nnab = np.array([[1, 1]])       # batch2 local neighbor of cell1
-    nnba = np.array([[1, 1]])       # batch1 local neighbor of cell2
-    nnaa = np.array([[0, 0]])       # batch1 neighbor of cell1
-    nnbb = np.array([[0, 0]])       # batch2 neighbor of cell2
+    nnab = np.array([[1, 1]])  # batch2 local neighbor of cell1
+    nnba = np.array([[1, 1]])  # batch1 local neighbor of cell2
+    nnaa = np.array([[0, 0]])  # batch1 neighbor of cell1
+    nnbb = np.array([[0, 0]])  # batch2 neighbor of cell2
 
     raw = _raw_anchor_scores(
         anchors,
@@ -57,9 +57,7 @@ def test_raw_anchor_scores_counts_shared_neighbors_per_dataset():
 
 def test_score_anchors_seurat_normalizes_raw_counts():
     n_ref = 3
-    anchors = pd.DataFrame(
-        {"cell1": [0, 1], "cell2": [n_ref + 0, n_ref + 1]}
-    )
+    anchors = pd.DataFrame({"cell1": [0, 1], "cell2": [n_ref + 0, n_ref + 1]})
     # Anchor 0 shares everything; anchor 1 shares nothing.
     nnab = np.array([[0, 1], [2, 2]])
     nnba = np.array([[1, 2], [1, 1]])

@@ -10,7 +10,10 @@ from trackcell.tl.integration import integrate_sct_rpca, select_integration_feat
 from trackcell.tl.integration.select_features import _select_integration_features_seurat
 from trackcell.tl.integration._annoy_nn import annoy_available
 from trackcell.tl.integration._xgboost_integration import xgboost_available
-from trackcell.tl.integration.sample_tree import build_sample_tree, count_anchor_similarity
+from trackcell.tl.integration.sample_tree import (
+    build_sample_tree,
+    count_anchor_similarity,
+)
 from trackcell.tl.sctransform import sctransform
 
 
@@ -26,7 +29,9 @@ def _make_batch_adata(n_cells=(40, 35), n_genes=80, seed=0) -> AnnData:
         ad.obs["orig.ident"] = f"B{i}"
         adatas.append(ad)
     merged = adatas[0].concatenate(adatas[1], batch_key="orig.ident")
-    merged.obs["orig.ident"] = merged.obs["orig.ident"].astype(str).str.replace("-.*", "", regex=True)
+    merged.obs["orig.ident"] = (
+        merged.obs["orig.ident"].astype(str).str.replace("-.*", "", regex=True)
+    )
     merged.layers["counts"] = merged.X.copy()
     return merged
 
@@ -259,7 +264,10 @@ def test_split_sct_and_rpca_integration():
         k_weight=20,
     )
 
-    assert out_split.obsm["X_sct_integrated"].shape == out_combined.obsm["X_sct_integrated"].shape
+    assert (
+        out_split.obsm["X_sct_integrated"].shape
+        == out_combined.obsm["X_sct_integrated"].shape
+    )
     np.testing.assert_allclose(
         out_split.obsm["X_sct_integrated"],
         out_combined.obsm["X_sct_integrated"],

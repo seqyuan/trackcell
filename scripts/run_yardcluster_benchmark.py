@@ -11,7 +11,10 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO))
 
-from trackcell.benchmark.yardcluster.runner import format_benchmark_table, run_yardcluster_benchmark
+from trackcell.benchmark.yardcluster.runner import (
+    format_benchmark_table,
+    run_yardcluster_benchmark,
+)
 
 
 def main() -> None:
@@ -19,7 +22,9 @@ def main() -> None:
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--n-per-patch", type=int, default=40)
     parser.add_argument("--n-patches", type=int, default=3)
-    parser.add_argument("--json", action="store_true", help="Print JSON instead of table")
+    parser.add_argument(
+        "--json", action="store_true", help="Print JSON instead of table"
+    )
     args = parser.parse_args()
 
     summary = run_yardcluster_benchmark(

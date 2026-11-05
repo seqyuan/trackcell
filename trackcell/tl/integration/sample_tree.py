@@ -30,9 +30,8 @@ def count_anchor_similarity(
     sim = np.zeros((n_batches, n_batches), dtype=np.float64)
     for i in range(n_batches):
         for j in range(i + 1, n_batches):
-            mask = (
-                ((anchors["dataset1"] == i) & (anchors["dataset2"] == j))
-                | ((anchors["dataset1"] == j) & (anchors["dataset2"] == i))
+            mask = ((anchors["dataset1"] == i) & (anchors["dataset2"] == j)) | (
+                (anchors["dataset1"] == j) & (anchors["dataset2"] == i)
             )
             score = float(mask.sum()) / min(n_cells[i], n_cells[j])
             sim[i, j] = score
@@ -70,13 +69,22 @@ def _filter_pair_anchors(
     global_to_local_a = {int(g): i for i, g in enumerate(ref_obj.global_indices)}
     global_to_local_b = {int(g): i for i, g in enumerate(query_obj.global_indices)}
     rows: list[dict[str, float]] = []
-    scores = anchors["score"].to_numpy() if "score" in anchors.columns else np.ones(len(anchors))
+    scores = (
+        anchors["score"].to_numpy()
+        if "score" in anchors.columns
+        else np.ones(len(anchors))
+    )
 
     for k, (_, row) in enumerate(anchors.iterrows()):
         d1, d2 = int(row["dataset1"]), int(row["dataset2"])
         c1, c2 = int(row["cell1"]), int(row["cell2"])
         score = float(scores[k])
-        if d1 in batches_a and d2 in batches_b and c1 in global_to_local_a and c2 in global_to_local_b:
+        if (
+            d1 in batches_a
+            and d2 in batches_b
+            and c1 in global_to_local_a
+            and c2 in global_to_local_b
+        ):
             rows.append(
                 {
                     "cell1": global_to_local_a[c1],
@@ -84,7 +92,12 @@ def _filter_pair_anchors(
                     "score": score,
                 }
             )
-        elif d2 in batches_a and d1 in batches_b and c2 in global_to_local_a and c1 in global_to_local_b:
+        elif (
+            d2 in batches_a
+            and d1 in batches_b
+            and c2 in global_to_local_a
+            and c1 in global_to_local_b
+        ):
             rows.append(
                 {
                     "cell1": global_to_local_a[c2],
@@ -170,7 +183,9 @@ def integrate_batches_sample_tree(
         merged = _IntegrateCluster(
             data=np.vstack([ref_obj.data, corrected_query]),
             batch_indices=ref_obj.batch_indices | query_obj.batch_indices,
-            global_indices=np.concatenate([ref_obj.global_indices, query_obj.global_indices]),
+            global_indices=np.concatenate(
+                [ref_obj.global_indices, query_obj.global_indices]
+            ),
         )
         clusters[next_id] = merged
         del clusters[left_id], clusters[right_id]

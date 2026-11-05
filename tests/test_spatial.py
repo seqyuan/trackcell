@@ -11,7 +11,9 @@ from trackcell.tl.spatial import hd_labeldist
 def _make_labeldist_adata(include_hires_scale: bool = True) -> AnnData:
     adata = AnnData(
         X=np.ones((3, 1), dtype=np.float32),
-        obs=pd.DataFrame({"celltype": ["target", "other", "other"]}, index=["c0", "c1", "c2"]),
+        obs=pd.DataFrame(
+            {"celltype": ["target", "other", "other"]}, index=["c0", "c1", "c2"]
+        ),
         var=pd.DataFrame(index=["g0"]),
     )
     adata.obsm["spatial"] = np.array([[0.0, 0.0], [10.0, 0.0], [0.0, 20.0]])

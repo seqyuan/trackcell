@@ -179,7 +179,9 @@ def test_residuals_match_r_model_pars_fit():
     sample = DEFAULT_SAMPLE
     export_dir = _benchmark_r_export_dir(sample)
     exported = load_r_vst_export(export_dir)
-    umi, genes, cells, cell_attr = load_benchmark_umi(sample, benchmark_root=SCT_BENCHMARK_ROOT)
+    umi, genes, cells, cell_attr = load_benchmark_umi(
+        sample, benchmark_root=SCT_BENCHMARK_ROOT
+    )
     min_var = float(exported["meta"].get("min_variance", 0.04))
 
     r_fit = normalize_r_model_pars(exported["model_pars_fit"]).reindex(genes)
@@ -208,9 +210,10 @@ def test_residuals_match_r_model_pars_fit():
     assert np.nanmedian(np.abs(py_mat - r_mat)) < 1e-10
 
 
-
 @pytest.mark.skipif(
-    not (BENCHMARK_ROOT / "steps/r_sct_reg_debug" / "GSM8779707" / "summary.json").exists(),
+    not (
+        BENCHMARK_ROOT / "steps/r_sct_reg_debug" / "GSM8779707" / "summary.json"
+    ).exists(),
     reason="R reg_model_pars debug export missing",
 )
 def test_reg_model_pars_pre_ksmooth_matches_r_export():
@@ -242,15 +245,26 @@ def test_reg_model_pars_pre_ksmooth_matches_r_export():
     r_out = pd.read_csv(dbg_dir / "outliers_step1.csv", index_col=0)["outlier"]
     r_out.index = align_r_gene_list(r_out.index.astype(str).tolist(), genes)
     shared = py["outliers"].index.intersection(r_out.index)
-    assert bool((py["outliers"].loc[shared].to_numpy() == r_out.loc[shared].to_numpy()).all())
+    assert bool(
+        (py["outliers"].loc[shared].to_numpy() == r_out.loc[shared].to_numpy()).all()
+    )
 
-    r_over = set(align_r_gene_list((dbg_dir / "overdispersed_genes.txt").read_text().strip().split("\n"), genes))
+    r_over = set(
+        align_r_gene_list(
+            (dbg_dir / "overdispersed_genes.txt").read_text().strip().split("\n"), genes
+        )
+    )
     py_over = set(map(str, py["overdispersed_genes"]))
     assert py_over == r_over
 
 
 @pytest.mark.skipif(
-    not (BENCHMARK_ROOT / "steps/r_sct_stepwise" / "GSM8779707" / "genes_log_gmean_step1.csv").exists(),
+    not (
+        BENCHMARK_ROOT
+        / "steps/r_sct_stepwise"
+        / "GSM8779707"
+        / "genes_log_gmean_step1.csv"
+    ).exists(),
     reason="R gmean export missing",
 )
 def test_r_step1_hvg_with_r_gmean_export():
@@ -280,13 +294,18 @@ def test_r_step1_hvg_with_r_gmean_export():
         genes_step1=pd.Index(align_r_gene_list(exported["genes_step1"], genes)),
         model_pars_step1=align_r_model_pars(exported["model_pars_step1"], genes),
         genes_log_gmean=align_r_gmean_series(exported["genes_log_gmean"], genes),
-        genes_log_gmean_step1=align_r_gmean_series(exported["genes_log_gmean_step1"], genes),
+        genes_log_gmean_step1=align_r_gmean_series(
+            exported["genes_log_gmean_step1"], genes
+        ),
         min_variance=exported["meta"].get("min_variance", -np.inf),
         return_corrected_umi=False,
         seed=1448145,
     )
     py_hvg = set(
-        out["gene_attr"]["residual_variance"].sort_values(ascending=False).index[:3000].astype(str)
+        out["gene_attr"]["residual_variance"]
+        .sort_values(ascending=False)
+        .index[:3000]
+        .astype(str)
     )
     r_hvg = set((export_dir / "hvg_top3000.txt").read_text().strip().split("\n"))
     jaccard = len(py_hvg & r_hvg) / len(py_hvg | r_hvg)
@@ -301,7 +320,12 @@ def test_seurat_parity_loader_matches_r_meta():
     """Seurat-parity loader: shape, cells, log_umi, and colSums match R reference."""
     umi, genes, cells, cell_attr = load_seurat_parity_with_cell_attr(DEFAULT_SAMPLE)
     report = verify_seurat_parity_vs_r(
-        umi, genes, cells, cell_attr, sample=DEFAULT_SAMPLE, benchmark_root=BENCHMARK_ROOT
+        umi,
+        genes,
+        cells,
+        cell_attr,
+        sample=DEFAULT_SAMPLE,
+        benchmark_root=BENCHMARK_ROOT,
     )
     assert report["shape_matches_meta"]
     assert report["cells_match_r"]
@@ -323,7 +347,9 @@ def test_pyglm_hvg_jaccard_gap_documented():
     sample = DEFAULT_SAMPLE
     export_dir = _benchmark_r_export_dir(sample)
     exported = load_r_vst_export(export_dir)
-    umi, genes, cells, cell_attr = load_benchmark_umi(sample, benchmark_root=SCT_BENCHMARK_ROOT)
+    umi, genes, cells, cell_attr = load_benchmark_umi(
+        sample, benchmark_root=SCT_BENCHMARK_ROOT
+    )
 
     out = vst(
         umi,
@@ -338,7 +364,10 @@ def test_pyglm_hvg_jaccard_gap_documented():
         seed=REF_SEED,
     )
     py_hvg = set(
-        out["gene_attr"]["residual_variance"].sort_values(ascending=False).index[:3000].astype(str)
+        out["gene_attr"]["residual_variance"]
+        .sort_values(ascending=False)
+        .index[:3000]
+        .astype(str)
     )
     r_hvg = set((export_dir / "hvg_top3000.txt").read_text().strip().split("\n"))
     jaccard = len(py_hvg & r_hvg) / len(py_hvg | r_hvg)

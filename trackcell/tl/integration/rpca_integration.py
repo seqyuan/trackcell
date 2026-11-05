@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Literal, Optional, Sequence, Union
+from typing import Literal, Optional, Sequence
 
 import numpy as np
 import pandas as pd
@@ -89,7 +89,9 @@ def integrate_rpca(
     for label in batch_labels:
         mask = batches == label
         batch_data[label] = prep_matrix[mask.to_numpy()]
-        batch_pca[label] = run_batch_pca(batch_data[label], n_components=dims, seed=seed)
+        batch_pca[label] = run_batch_pca(
+            batch_data[label], n_components=dims, seed=seed
+        )
         cell_offsets[label] = offset
         global_indices[label] = np.where(mask.to_numpy())[0]
         offset += int(mask.sum())
@@ -179,10 +181,12 @@ def integrate_rpca(
             "preserve_order": preserve_order,
             "normalization.method": "SCT",
             "reduction": "rpca",
-            "sct_method": adata.uns.get(sct_key, {}).get("params", {}).get("vst_method"),
-            "sct_v2_backend": adata.uns.get(sct_key, {}).get("params", {}).get(
-                "v2_backend"
-            ),
+            "sct_method": adata.uns.get(sct_key, {})
+            .get("params", {})
+            .get("vst_method"),
+            "sct_v2_backend": adata.uns.get(sct_key, {})
+            .get("params", {})
+            .get("v2_backend"),
             "xgb_n_delta_pcs": xgb_n_delta_pcs,
             "xgb_n_estimators": xgb_n_estimators,
             "xgb_max_depth": xgb_max_depth,

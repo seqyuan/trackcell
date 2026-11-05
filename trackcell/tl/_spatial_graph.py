@@ -7,7 +7,7 @@ from __future__ import annotations
 import numpy as np
 import scipy.sparse as sps
 from scipy.spatial import cKDTree
-from typing import Optional, Tuple, Union
+from typing import Optional, Union
 
 ArrayLike = Union[np.ndarray, sps.spmatrix]
 
@@ -18,7 +18,9 @@ def _as_dense(X: ArrayLike) -> np.ndarray:
     return np.asarray(X, dtype=np.float64)
 
 
-def _batch_groups(batch_labels: Optional[np.ndarray], n_obs: int) -> list[tuple[np.ndarray, np.ndarray]]:
+def _batch_groups(
+    batch_labels: Optional[np.ndarray], n_obs: int
+) -> list[tuple[np.ndarray, np.ndarray]]:
     """Return (global_indices, coords_subset) per batch."""
     if batch_labels is None:
         idx = np.arange(n_obs, dtype=np.int64)
@@ -132,7 +134,7 @@ def build_spatial_weights(
             else:
                 r_k = 1.0
 
-            weights = np.exp(-(nd / r_k) ** 2)
+            weights = np.exp(-((nd / r_k) ** 2))
             weight_sum = weights.sum()
             if not np.isfinite(weight_sum) or weight_sum <= 0:
                 weights = np.full(nd.shape, 1.0 / nd.size, dtype=np.float64)
@@ -313,9 +315,9 @@ def mix_embeddings(
     lam = float(lam)
     if not 0.0 <= lam <= 1.0:
         raise ValueError("lam must be in [0, 1].")
-    return np.hstack(
-        [np.sqrt(1.0 - lam) * identity, np.sqrt(lam) * context]
-    ).astype(np.float32)
+    return np.hstack([np.sqrt(1.0 - lam) * identity, np.sqrt(lam) * context]).astype(
+        np.float32
+    )
 
 
 def compute_neighborhood_gradient_regression(
@@ -384,7 +386,12 @@ def compute_neighborhood_gradient(
         )
     if mode == "regression":
         return compute_neighborhood_gradient_regression(
-            X, coords, weights, k_gradient=k_gradient, chunk_size=chunk_size, ridge=ridge
+            X,
+            coords,
+            weights,
+            k_gradient=k_gradient,
+            chunk_size=chunk_size,
+            ridge=ridge,
         )
     raise ValueError(f"Unknown gradient mode: {mode}. Use 'cosphi' or 'regression'.")
 

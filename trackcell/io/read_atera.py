@@ -190,9 +190,7 @@ def _detect_format(path: Union[str, Path], fmt: str = "auto") -> Tuple[str, Path
             "Pass the directory containing cell_feature_matrix.* instead."
         )
 
-    has_official = (
-        _member(root, _MATRIX_ZIP, "cell_feature_matrix.zarr") is not None
-    )
+    has_official = _member(root, _MATRIX_ZIP, "cell_feature_matrix.zarr") is not None
     has_preview = (root / _MATRIX_H5).exists()
 
     if fmt in ("auto", None):
@@ -273,8 +271,9 @@ def _var_feature_types(adata: ad.AnnData) -> Optional[np.ndarray]:
     return None
 
 
-def _normalize_var(adata: ad.AnnData, gene_name_index: bool = True,
-                   keep_de: bool = False) -> ad.AnnData:
+def _normalize_var(
+    adata: ad.AnnData, gene_name_index: bool = True, keep_de: bool = False
+) -> ad.AnnData:
     """Normalise ``var`` to the trackcell schema.
 
     Result
@@ -311,12 +310,13 @@ def _normalize_var(adata: ad.AnnData, gene_name_index: bool = True,
             index = make_index_unique(index)
         adata.var_names = index
     else:
-        id_col = "feature_id" if "feature_id" in var.columns else (
-            "gene_ids" if "gene_ids" in var.columns else None
+        id_col = (
+            "feature_id"
+            if "feature_id" in var.columns
+            else ("gene_ids" if "gene_ids" in var.columns else None)
         )
         if id_col is not None:
-            index = pd.Index(var[id_col].astype(str).to_numpy(),
-                             name="feature_id")
+            index = pd.Index(var[id_col].astype(str).to_numpy(), name="feature_id")
             if not index.is_unique:
                 index = make_index_unique(index)
             adata.var_names = index
@@ -332,8 +332,7 @@ def _normalize_var(adata: ad.AnnData, gene_name_index: bool = True,
             var["feature_types"] = "Gene Expression"
 
     var["is_gene_expression"] = (
-        var["feature_types"].astype(str).str.strip().str.lower()
-        == "gene expression"
+        var["feature_types"].astype(str).str.strip().str.lower() == "gene expression"
     )
 
     if not keep_de:
@@ -344,20 +343,23 @@ def _normalize_var(adata: ad.AnnData, gene_name_index: bool = True,
     return adata
 
 
-def _add_cell_ids(adata: ad.AnnData, cells_path: Optional[Path],
-                  verbose: bool = True) -> Optional[np.ndarray]:
+def _add_cell_ids(
+    adata: ad.AnnData, cells_path: Optional[Path], verbose: bool = True
+) -> Optional[np.ndarray]:
     """Attach ``cell_prefix`` / ``dataset_suffix`` and return the
     ``cells.zarr`` row -> ``adata.obs`` row map (``None`` when unavailable)."""
-    log = _log(verbose)
     if cells_path is None:
         return None
 
     with _zarr_group(cells_path) as group:
         cell_ids = np.asarray(group["cell_id"][:], dtype=np.uint32)
-        summary = np.asarray(group["cell_summary"][:]) if "cell_summary" in group else None
+        summary = (
+            np.asarray(group["cell_summary"][:]) if "cell_summary" in group else None
+        )
         summary_names = (
             list(group["cell_summary"].attrs.get("column_names", []))
-            if summary is not None else []
+            if summary is not None
+            else []
         )
 
     n_cells = len(cell_ids)
@@ -391,8 +393,10 @@ def _add_cell_ids(adata: ad.AnnData, cells_path: Optional[Path],
             obs_y = adata.obs.get("centroid_row")
             if obs_x is not None and obs_y is not None:
                 obs_xy = np.column_stack(
-                    [np.asarray(obs_x, dtype=np.float64),
-                     np.asarray(obs_y, dtype=np.float64)]
+                    [
+                        np.asarray(obs_x, dtype=np.float64),
+                        np.asarray(obs_y, dtype=np.float64),
+                    ]
                 )
                 cell_xy = summary[:, [ix, iy]].astype(np.float64)
                 diff = np.abs(obs_xy - cell_xy).max()
@@ -411,8 +415,9 @@ def _add_cell_ids(adata: ad.AnnData, cells_path: Optional[Path],
 
 def _match_rows_by_xy(obs_xy: np.ndarray, cell_xy: np.ndarray) -> Optional[np.ndarray]:
     """Map cells.zarr rows to obs rows using rounded centroids."""
-    keys = {(round(float(x), 3), round(float(y), 3)): i
-            for i, (x, y) in enumerate(obs_xy)}
+    keys = {
+        (round(float(x), 3), round(float(y), 3)): i for i, (x, y) in enumerate(obs_xy)
+    }
     mapping = np.empty(len(cell_xy), dtype=np.int64)
     seen = set()
     for i, (x, y) in enumerate(cell_xy):
@@ -440,8 +445,10 @@ def _parse_region(
         return tuple(float(v) for v in geom.bounds), geom
     if isinstance(region, Mapping):
         bounds = (
-            float(region["xmin"]), float(region["ymin"]),
-            float(region["xmax"]), float(region["ymax"]),
+            float(region["xmin"]),
+            float(region["ymin"]),
+            float(region["xmax"]),
+            float(region["ymax"]),
         )
         return bounds, None
     values = tuple(region)
@@ -467,15 +474,18 @@ def _region_mask(x: np.ndarray, y: np.ndarray, parsed_region) -> np.ndarray:
     if geom is not None:
         try:
             from shapely import contains_xy
+
             mask &= contains_xy(geom, x, y)
         except ImportError:  # pragma: no cover - shapely < 2.0
             from shapely.geometry import Point
+
             mask &= np.array([geom.contains(Point(xi, yi)) for xi, yi in zip(x, y)])
     return mask
 
 
-def _cell_mask(adata: ad.AnnData, region=None, n_cells: Optional[int] = None,
-               random_state: int = 0) -> np.ndarray:
+def _cell_mask(
+    adata: ad.AnnData, region=None, n_cells: Optional[int] = None, random_state: int = 0
+) -> np.ndarray:
     parsed = _parse_region(region)
     n = adata.n_obs
     mask = np.ones(n, dtype=bool)
@@ -541,9 +551,15 @@ def _polygons_from_group(group) -> Tuple[list, np.ndarray]:
     return polygons, cell_index[np.asarray(records, dtype=np.int64)]
 
 
-def _attach_polygons(adata: ad.AnnData, group, key: str, sample: str,
-                     row_map: np.ndarray, original_to_subset: np.ndarray,
-                     verbose: bool = True) -> None:
+def _attach_polygons(
+    adata: ad.AnnData,
+    group,
+    key: str,
+    sample: str,
+    row_map: np.ndarray,
+    original_to_subset: np.ndarray,
+    verbose: bool = True,
+) -> None:
     """Build a GeoDataFrame for ``key`` and attach it to ``uns['spatial']``."""
     log = _log(verbose)
     polygons, cell_index = _polygons_from_group(group)
@@ -570,12 +586,15 @@ def _attach_polygons(adata: ad.AnnData, group, key: str, sample: str,
 
     atera_uns = adata.uns.setdefault("atera", {})
     atera_uns[f"n_{key}"] = len(polygons)
-    log(f"[Atera] {key}: {len(polygons):,} polygons "
-        f"({len(polygons) / adata.n_obs * 100:.1f}% of cells)")
+    log(
+        f"[Atera] {key}: {len(polygons):,} polygons "
+        f"({len(polygons) / adata.n_obs * 100:.1f}% of cells)"
+    )
 
 
-def _attach_compact_boundaries(adata: ad.AnnData, sample: str, key: str,
-                               uns_key: str) -> None:
+def _attach_compact_boundaries(
+    adata: ad.AnnData, sample: str, key: str, uns_key: str
+) -> None:
     """Store compact polygon vertices (per-cell offsets) in ``uns``."""
     gdf = adata.uns.get("spatial", {}).get(sample, {}).get(key)
     if not isinstance(gdf, gpd.GeoDataFrame) or not len(gdf):
@@ -679,9 +698,7 @@ def read_atera(
     if include_nucleus is None:
         include_nucleus = build_polygons
     elif include_nucleus and not build_polygons:
-        raise ValueError(
-            "`include_nucleus=True` requires `build_polygons=True`."
-        )
+        raise ValueError("`include_nucleus=True` requires `build_polygons=True`.")
     fmt, root = _detect_format(path, format)
     kwargs = dict(
         sample=sample,
@@ -723,9 +740,7 @@ def read_atera_cellseg(
     if include_nucleus is None:
         include_nucleus = build_polygons
     elif include_nucleus and not build_polygons:
-        raise ValueError(
-            "`include_nucleus=True` requires `build_polygons=True`."
-        )
+        raise ValueError("`include_nucleus=True` requires `build_polygons=True`.")
     log = _log(verbose)
     t_total = time.time()
     root = Path(path).expanduser().resolve()
@@ -744,14 +759,16 @@ def read_atera_cellseg(
     adata = _read_adata_zarr(matrix_path)
     nnz = getattr(adata.X, "nnz", None)
     nnz_msg = f"{nnz / 1e6:.1f}M non-zero" if nnz is not None else "dense"
-    log(f"[Atera] Matrix: {adata.n_obs:,} cells × {adata.n_vars:,} features "
-        f"({nnz_msg}) [{time.time() - t0:.1f}s]")
+    log(
+        f"[Atera] Matrix: {adata.n_obs:,} cells × {adata.n_vars:,} features "
+        f"({nnz_msg}) [{time.time() - t0:.1f}s]"
+    )
 
     # ── spatial coordinates ──────────────────────────────────────────
     if {"centroid_column", "centroid_row"}.issubset(adata.obs.columns):
-        adata.obsm["spatial"] = adata.obs[
-            ["centroid_column", "centroid_row"]
-        ].to_numpy(np.float32)
+        adata.obsm["spatial"] = adata.obs[["centroid_column", "centroid_row"]].to_numpy(
+            np.float32
+        )
     else:
         warnings.warn(
             "Official bundle has no `centroid_column` / `centroid_row`; "
@@ -779,7 +796,9 @@ def read_atera_cellseg(
         "analysis_version": experiment.get("analysis_sw_version"),
         "major_version": experiment.get("major_version"),
         "minor_version": experiment.get("minor_version"),
-        "panel_path": str(root / _PANEL_CONFIG) if (root / _PANEL_CONFIG).exists() else None,
+        "panel_path": (
+            str(root / _PANEL_CONFIG) if (root / _PANEL_CONFIG).exists() else None
+        ),
         "transcripts_path": str(tx_path) if tx_path is not None else None,
     }
 
@@ -789,12 +808,13 @@ def read_atera_cellseg(
     # ── var schema ───────────────────────────────────────────────────
     _normalize_var(adata, gene_name_index=gene_name_index, keep_de=keep_de)
     n_expr = int(adata.var["is_gene_expression"].sum())
-    log(f"[Atera] Features: {adata.n_vars:,} total, {n_expr:,} Gene Expression "
-        f"(use `tcl.io.filter_atera_genes(adata)` before HVG/PCA)")
+    log(
+        f"[Atera] Features: {adata.n_vars:,} total, {n_expr:,} Gene Expression "
+        f"(use `tcl.io.filter_atera_genes(adata)` before HVG/PCA)"
+    )
 
     # ── cell subsetting (before polygon construction) ────────────────
-    mask = _cell_mask(adata, region=region, n_cells=n_cells,
-                      random_state=random_state)
+    mask = _cell_mask(adata, region=region, n_cells=n_cells, random_state=random_state)
     if not mask.all():
         original_to_subset = np.full(adata.n_obs, -1, dtype=np.int64)
         original_to_subset[np.flatnonzero(mask)] = np.arange(int(mask.sum()))
@@ -820,18 +840,30 @@ def read_atera_cellseg(
         }
         with _zarr_group(cells_path) as group:
             if "polygon_sets/1" in group:
-                _attach_polygons(adata, group["polygon_sets/1"],
-                                 "geometries", sample, row_map,
-                                 original_to_subset, verbose=verbose)
+                _attach_polygons(
+                    adata,
+                    group["polygon_sets/1"],
+                    "geometries",
+                    sample,
+                    row_map,
+                    original_to_subset,
+                    verbose=verbose,
+                )
                 _attach_compact_boundaries(
                     adata, sample, "geometries", "cell_boundaries"
                 )
             else:
                 warnings.warn("`polygon_sets/1` (cell polygons) not found.")
             if include_nucleus and "polygon_sets/0" in group:
-                _attach_polygons(adata, group["polygon_sets/0"],
-                                 "nucleus_geometries", sample, row_map,
-                                 original_to_subset, verbose=verbose)
+                _attach_polygons(
+                    adata,
+                    group["polygon_sets/0"],
+                    "nucleus_geometries",
+                    sample,
+                    row_map,
+                    original_to_subset,
+                    verbose=verbose,
+                )
                 _attach_compact_boundaries(
                     adata, sample, "nucleus_geometries", "nucleus_boundaries"
                 )
@@ -890,9 +922,7 @@ def read_atera_preview(
     if include_nucleus is None:
         include_nucleus = build_polygons
     elif include_nucleus and not build_polygons:
-        raise ValueError(
-            "`include_nucleus=True` requires `build_polygons=True`."
-        )
+        raise ValueError("`include_nucleus=True` requires `build_polygons=True`.")
     log = _log(verbose)
     root = Path(path).expanduser().resolve()
     experiment = _read_experiment(root)
@@ -923,7 +953,9 @@ def read_atera_preview(
         "z_step_size": experiment.get("z_step_size"),
         "chemistry_version": experiment.get("chemistry_version"),
         "analysis_version": experiment.get("analysis_sw_version"),
-        "panel_path": str(root / _GENE_PANEL) if (root / _GENE_PANEL).exists() else None,
+        "panel_path": (
+            str(root / _GENE_PANEL) if (root / _GENE_PANEL).exists() else None
+        ),
         "transcripts_path": None,
     }
     adata.uns["spatial"][sample].setdefault("metadata", {})["coord_unit"] = _UM
@@ -941,8 +973,7 @@ def read_atera_preview(
     if not load_panel:
         adata.uns.pop("gene_panel", None)
 
-    mask = _cell_mask(adata, region=region, n_cells=n_cells,
-                      random_state=random_state)
+    mask = _cell_mask(adata, region=region, n_cells=n_cells, random_state=random_state)
     adata = _subset_cells(adata, mask)
     if not mask.all():
         log(f"[Atera] Subset to {adata.n_obs:,} cells")
@@ -995,8 +1026,12 @@ def filter_atera_genes(adata: ad.AnnData, inplace: bool = False) -> ad.AnnData:
     return adata[:, mask].copy()
 
 
-def add_wkt_geometry(adata: ad.AnnData, sample: Optional[str] = None,
-                     key: str = "geometry", nucleus: bool = False) -> ad.AnnData:
+def add_wkt_geometry(
+    adata: ad.AnnData,
+    sample: Optional[str] = None,
+    key: str = "geometry",
+    nucleus: bool = False,
+) -> ad.AnnData:
     """Add WKT polygon strings to ``obs[key]``.
 
     This is the opt-in replacement for ``store_wkt=True``.
@@ -1040,8 +1075,10 @@ def _quick_counts(path: Path) -> dict:
             "n_cells": shape[0],
             "n_features": shape[1],
             "n_gene_expression": int(
-                (pd.Series(feature_type).astype(str).str.strip().str.lower()
-                 == "gene expression").sum()
+                (
+                    pd.Series(feature_type).astype(str).str.strip().str.lower()
+                    == "gene expression"
+                ).sum()
             ),
         }
     if h5py is None:  # pragma: no cover - defensive
@@ -1055,8 +1092,10 @@ def _quick_counts(path: Path) -> dict:
         "n_cells": shape[1],
         "n_features": shape[0],
         "n_gene_expression": int(
-            (pd.Series(ftype).astype(str).str.strip().str.lower()
-             == "gene expression").sum()
+            (
+                pd.Series(ftype).astype(str).str.strip().str.lower()
+                == "gene expression"
+            ).sum()
         ),
     }
 
@@ -1081,14 +1120,16 @@ def atera_info(path: Union[str, Path], verbose: bool = True) -> dict:
         "major_version": experiment.get("major_version"),
         "minor_version": experiment.get("minor_version"),
     }
-    info.update({
-        "roi": experiment.get("region_name"),
-        "slide": experiment.get("slide_name") or experiment.get("slide_id"),
-        "run": experiment.get("run_name"),
-        "pixel_size": experiment.get("pixel_size"),
-        "z_step_size": experiment.get("z_step_size"),
-        "region_area_um2": experiment.get("region_area"),
-    })
+    info.update(
+        {
+            "roi": experiment.get("region_name"),
+            "slide": experiment.get("slide_name") or experiment.get("slide_id"),
+            "run": experiment.get("run_name"),
+            "pixel_size": experiment.get("pixel_size"),
+            "z_step_size": experiment.get("z_step_size"),
+            "region_area_um2": experiment.get("region_area"),
+        }
+    )
     info.update(_quick_counts(root))
 
     cells_path = _member(root, _CELLS_ZIP, "cells.zarr")
@@ -1096,49 +1137,67 @@ def atera_info(path: Union[str, Path], verbose: bool = True) -> dict:
         with _zarr_group(cells_path) as group:
             n_cell_polys = (
                 int(group["polygon_sets/1/cell_index"].shape[0])
-                if "polygon_sets/1" in group else 0
+                if "polygon_sets/1" in group
+                else 0
             )
             n_nuc_polys = (
                 int(group["polygon_sets/0/cell_index"].shape[0])
-                if "polygon_sets/0" in group else 0
+                if "polygon_sets/0" in group
+                else 0
             )
-        info.update({
-            "n_cell_polygons": n_cell_polys,
-            "n_nucleus_polygons": n_nuc_polys,
-            "cell_boundary_frac": (
-                n_cell_polys / info["n_cells"] if info.get("n_cells") else None
-            ),
-        })
+        info.update(
+            {
+                "n_cell_polygons": n_cell_polys,
+                "n_nucleus_polygons": n_nuc_polys,
+                "cell_boundary_frac": (
+                    n_cell_polys / info["n_cells"] if info.get("n_cells") else None
+                ),
+            }
+        )
 
     tx_path = _member(root, _TX_ZIP, "transcripts.zarr")
     if tx_path is not None:
         with _zarr_group(tx_path) as group:
-            info.update({
-                "number_rnas": int(group.attrs.get("number_rnas", 0)),
-                "n_genes": int(group.attrs.get("number_genes", 0)),
-                "n_tiles": len(group["grid"].attrs.get("grid_keys", [])),
-                "grid_size_um": float(group["grid"].attrs.get("grid_size", 0.0)),
-                "coordinate_space": group.attrs.get("coordinate_space"),
-                "spatial_units": group.attrs.get("spatial_units"),
-            })
+            info.update(
+                {
+                    "number_rnas": int(group.attrs.get("number_rnas", 0)),
+                    "n_genes": int(group.attrs.get("number_genes", 0)),
+                    "n_tiles": len(group["grid"].attrs.get("grid_keys", [])),
+                    "grid_size_um": float(group["grid"].attrs.get("grid_size", 0.0)),
+                    "coordinate_space": group.attrs.get("coordinate_space"),
+                    "spatial_units": group.attrs.get("spatial_units"),
+                }
+            )
 
     if verbose:
         print(f"[Atera] {info['path']}")
         print(f"  format          : {info['format']}")
         if info.get("roi"):
-            print(f"  roi/slide/run   : {info['roi']} / {info.get('slide')} / {info.get('run')}")
-        print(f"  cells × features: {info['n_cells']:,} × {info['n_features']:,}"
-              f" ({info['n_gene_expression']:,} Gene Expression)")
+            print(
+                f"  roi/slide/run   : {info['roi']} / {info.get('slide')} / {info.get('run')}"
+            )
+        print(
+            f"  cells × features: {info['n_cells']:,} × {info['n_features']:,}"
+            f" ({info['n_gene_expression']:,} Gene Expression)"
+        )
         if "n_cell_polygons" in info:
-            print(f"  polygons        : {info['n_cell_polygons']:,} cell / "
-                  f"{info['n_nucleus_polygons']:,} nucleus")
+            print(
+                f"  polygons        : {info['n_cell_polygons']:,} cell / "
+                f"{info['n_nucleus_polygons']:,} nucleus"
+            )
         if info.get("number_rnas") is not None:
-            print(f"  transcripts     : {info['number_rnas']:,} molecules, "
-                  f"{info['n_tiles']} grid tiles, {info['grid_size_um']:g} µm/tile")
-        print(f"  coord unit      : µm (pixel_size={info.get('pixel_size')}, "
-              f"z_step={info.get('z_step_size')})")
-        print(f"  software        : chemistry={info['version']['chemistry']}, "
-              f"analysis={info['version']['analysis']}")
+            print(
+                f"  transcripts     : {info['number_rnas']:,} molecules, "
+                f"{info['n_tiles']} grid tiles, {info['grid_size_um']:g} µm/tile"
+            )
+        print(
+            f"  coord unit      : µm (pixel_size={info.get('pixel_size')}, "
+            f"z_step={info.get('z_step_size')})"
+        )
+        print(
+            f"  software        : chemistry={info['version']['chemistry']}, "
+            f"analysis={info['version']['analysis']}"
+        )
     return info
 
 
@@ -1167,15 +1226,17 @@ def list_atera_rois(run_dir: Union[str, Path]) -> pd.DataFrame:
             warnings.warn(f"Skipping {path}: {exc}")
             continue
         experiment = _read_experiment(path)
-        rows.append({
-            "roi": experiment.get("region_name", path.name),
-            "path": str(path),
-            **counts,
-            "has_transcripts": (
-                _member(path, _TX_ZIP, "transcripts.zarr") is not None
-            ),
-            "number_rnas": _quick_number_rnas(path),
-        })
+        rows.append(
+            {
+                "roi": experiment.get("region_name", path.name),
+                "path": str(path),
+                **counts,
+                "has_transcripts": (
+                    _member(path, _TX_ZIP, "transcripts.zarr") is not None
+                ),
+                "number_rnas": _quick_number_rnas(path),
+            }
+        )
     return pd.DataFrame(rows)
 
 
@@ -1190,9 +1251,9 @@ def _quick_number_rnas(path: Path) -> Optional[int]:
         return None
 
 
-def iter_atera_rois(run_dir: Union[str, Path],
-                    rois: Optional[Sequence[str]] = None,
-                    **read_kwargs) -> Iterator[Tuple[str, ad.AnnData]]:
+def iter_atera_rois(
+    run_dir: Union[str, Path], rois: Optional[Sequence[str]] = None, **read_kwargs
+) -> Iterator[Tuple[str, ad.AnnData]]:
     """Yield ``(roi_name, adata)`` one ROI at a time.
 
     Unlike a dict-returning helper, this keeps peak memory at one ROI.  Pass
@@ -1212,10 +1273,9 @@ def iter_atera_rois(run_dir: Union[str, Path],
 
 def _translate_roi(adata: ad.AnnData, dx: float, dy: float) -> None:
     if "spatial" in adata.obsm:
-        adata.obsm["spatial"] = (
-            np.asarray(adata.obsm["spatial"], dtype=np.float32)
-            + np.array([dx, dy], dtype=np.float32)
-        )
+        adata.obsm["spatial"] = np.asarray(
+            adata.obsm["spatial"], dtype=np.float32
+        ) + np.array([dx, dy], dtype=np.float32)
     for col, delta in (("x_centroid", dx), ("y_centroid", dy)):
         if col in adata.obs.columns:
             adata.obs[col] = np.asarray(adata.obs[col], dtype=np.float64) + delta
@@ -1228,12 +1288,17 @@ def _translate_roi(adata: ad.AnnData, dx: float, dy: float) -> None:
                 gdf["geometry"] = gdf.geometry.translate(xoff=dx, yoff=dy)
 
 
-def concat_atera_rois(adatas: Union[Sequence[ad.AnnData], Mapping[str, ad.AnnData]],
-                      offsets=None, *, names: Optional[Sequence[str]] = None,
-                      join: str = "inner", label: str = "roi",
-                      assume_aligned: bool = False,
-                      index_unique: Optional[str] = None,
-                      **concat_kwargs) -> ad.AnnData:
+def concat_atera_rois(
+    adatas: Union[Sequence[ad.AnnData], Mapping[str, ad.AnnData]],
+    offsets=None,
+    *,
+    names: Optional[Sequence[str]] = None,
+    join: str = "inner",
+    label: str = "roi",
+    assume_aligned: bool = False,
+    index_unique: Optional[str] = None,
+    **concat_kwargs,
+) -> ad.AnnData:
     """Concatenate ROIs from the same customer.
 
     Parameters
@@ -1331,8 +1396,12 @@ def concat_atera_rois(adatas: Union[Sequence[ad.AnnData], Mapping[str, ad.AnnDat
         )
 
     merged = ad.concat(
-        adatas, join=join, label=label, keys=list(names),
-        uns_merge="first", **concat_kwargs
+        adatas,
+        join=join,
+        label=label,
+        keys=list(names),
+        uns_merge="first",
+        **concat_kwargs,
     )
 
     spatial = {}
@@ -1350,7 +1419,9 @@ def concat_atera_rois(adatas: Union[Sequence[ad.AnnData], Mapping[str, ad.AnnDat
     if spatial:
         merged.uns["spatial"] = spatial
     merged.uns.setdefault("atera", {})["merged_rois"] = list(names)
-    merged.uns["atera"]["offsets"] = {k: tuple(map(float, v)) for k, v in offsets.items()}
+    merged.uns["atera"]["offsets"] = {
+        k: tuple(map(float, v)) for k, v in offsets.items()
+    }
     return merged
 
 
@@ -1426,8 +1497,7 @@ def _map_cell_keys(prefix: np.ndarray, suffix: np.ndarray, lookup) -> np.ndarray
         return rows
 
     query = (
-        (suffix.astype(np.uint64) << np.uint64(32))
-        | prefix.astype(np.uint64)
+        (suffix.astype(np.uint64) << np.uint64(32)) | prefix.astype(np.uint64)
     ).astype(np.int64)
     pos = np.searchsorted(keys, query)
     pos_clip = np.minimum(pos, len(keys) - 1)
@@ -1507,9 +1577,7 @@ def _iter_transcript_arrays(
         gene_names, gene_index_map = _transcript_gene_index(group)
         gene_indices = _resolve_genes(genes, gene_names, gene_index_map)
 
-        codeword_gene = np.asarray(
-            group.attrs["codeword_gene_mapping"], dtype=np.int64
-        )
+        codeword_gene = np.asarray(group.attrs["codeword_gene_mapping"], dtype=np.int64)
         codeword_mask = None
         if gene_indices is not None:
             codeword_mask = np.isin(codeword_gene, gene_indices)
@@ -1551,8 +1619,10 @@ def _iter_transcript_arrays(
                 except (AttributeError, TypeError):
                     base_chunk = 2_000_000
 
-            if gene_indices is not None and "gene_offset" in tile and (
-                len(gene_indices) <= 0.5 * len(gene_names)
+            if (
+                gene_indices is not None
+                and "gene_offset" in tile
+                and (len(gene_indices) <= 0.5 * len(gene_names))
             ):
                 gene_offset = np.asarray(tile["gene_offset"][:])
                 slices = [
@@ -1570,9 +1640,7 @@ def _iter_transcript_arrays(
                 codeword = np.asarray(
                     tile["codeword_identity"][start:end, 0], dtype=np.int64
                 )
-                nucleus = np.asarray(
-                    tile["overlaps_nucleus"][start:end, 0], dtype=bool
-                )
+                nucleus = np.asarray(tile["overlaps_nucleus"][start:end, 0], dtype=bool)
 
                 mask = codeword < len(codeword_gene)
                 if min_qv is not None:
@@ -1581,11 +1649,10 @@ def _iter_transcript_arrays(
                     safe_codeword = np.clip(codeword, 0, len(codeword_gene) - 1)
                     mask &= codeword_mask[safe_codeword]
                 if not include_unassigned:
-                    mask &= (cell_ids[:, 0] != _UNASSIGNED)
-                    mask &= (cell_ids[:, 1] != _UNASSIGNED)
+                    mask &= cell_ids[:, 0] != _UNASSIGNED
+                    mask &= cell_ids[:, 1] != _UNASSIGNED
                 if parsed_region is not None:
-                    mask &= _region_mask(location[:, 0], location[:, 1],
-                                         parsed_region)
+                    mask &= _region_mask(location[:, 0], location[:, 1], parsed_region)
                 if not mask.any():
                     continue
 
@@ -1607,9 +1674,11 @@ def _iter_transcript_arrays(
                 }
 
         if verbose:
-            log(f"[Atera] Streamed {n_tiles} transcript tiles "
+            log(
+                f"[Atera] Streamed {n_tiles} transcript tiles "
                 f"in {time.time() - t0:.1f}s ({skipped_negative} background "
-                f"tile(s) skipped)")
+                f"tile(s) skipped)"
+            )
     finally:
         if store is not None:
             store.close()
@@ -1679,24 +1748,31 @@ def iter_atera_transcripts(
     cell_lookup = _lookup_from_adata(adata) if adata is not None else None
 
     for arrays in _iter_transcript_arrays(
-        path, genes=genes, region=region, min_qv=min_qv,
-        include_unassigned=include_unassigned, chunksize=chunksize,
-        cell_lookup=cell_lookup, verbose=verbose,
+        path,
+        genes=genes,
+        region=region,
+        min_qv=min_qv,
+        include_unassigned=include_unassigned,
+        chunksize=chunksize,
+        cell_lookup=cell_lookup,
+        verbose=verbose,
     ):
-        yield pd.DataFrame({
-            "x": arrays["x"],
-            "y": arrays["y"],
-            "z": arrays["z"],
-            "qv": arrays["qv"],
-            "cell_index": arrays["cell_index"],
-            "cell_prefix": arrays["cell_prefix"],
-            "gene_index": arrays["gene_index"].astype(np.int32),
-            "gene": pd.Categorical.from_codes(
-                arrays["gene_index"].astype(np.int32), dtype=dtype
-            ),
-            "codeword": arrays["codeword"].astype(np.uint32),
-            "overlaps_nucleus": arrays["overlaps_nucleus"],
-        })
+        yield pd.DataFrame(
+            {
+                "x": arrays["x"],
+                "y": arrays["y"],
+                "z": arrays["z"],
+                "qv": arrays["qv"],
+                "cell_index": arrays["cell_index"],
+                "cell_prefix": arrays["cell_prefix"],
+                "gene_index": arrays["gene_index"].astype(np.int32),
+                "gene": pd.Categorical.from_codes(
+                    arrays["gene_index"].astype(np.int32), dtype=dtype
+                ),
+                "codeword": arrays["codeword"].astype(np.uint32),
+                "overlaps_nucleus": arrays["overlaps_nucleus"],
+            }
+        )
 
 
 def _transcript_gene_names(path: Union[str, Path]) -> list:
@@ -1740,8 +1816,13 @@ def read_atera_transcripts(
     frames = []
     n = 0
     for chunk in iter_atera_transcripts(
-        path, genes=genes, region=region, min_qv=min_qv,
-        include_unassigned=include_unassigned, adata=adata, verbose=verbose,
+        path,
+        genes=genes,
+        region=region,
+        min_qv=min_qv,
+        include_unassigned=include_unassigned,
+        adata=adata,
+        verbose=verbose,
     ):
         if max_rows is not None and n + len(chunk) > max_rows:
             chunk = chunk.iloc[: max_rows - n]
@@ -1750,28 +1831,31 @@ def read_atera_transcripts(
         if max_rows is not None and n >= max_rows:
             break
     if not frames:
-        return pd.DataFrame({
-            "x": pd.Series(dtype=np.float32),
-            "y": pd.Series(dtype=np.float32),
-            "z": pd.Series(dtype=np.float32),
-            "qv": pd.Series(dtype=np.float32),
-            "cell_index": pd.Series(dtype=np.int64),
-            "cell_prefix": pd.Series(dtype=np.uint32),
-            "gene_index": pd.Series(dtype=np.int32),
-            "gene": pd.Series(
-                dtype=pd.CategoricalDtype(categories=_transcript_gene_names(path))
-            ),
-            "codeword": pd.Series(dtype=np.uint32),
-            "overlaps_nucleus": pd.Series(dtype=bool),
-        })
+        return pd.DataFrame(
+            {
+                "x": pd.Series(dtype=np.float32),
+                "y": pd.Series(dtype=np.float32),
+                "z": pd.Series(dtype=np.float32),
+                "qv": pd.Series(dtype=np.float32),
+                "cell_index": pd.Series(dtype=np.int64),
+                "cell_prefix": pd.Series(dtype=np.uint32),
+                "gene_index": pd.Series(dtype=np.int32),
+                "gene": pd.Series(
+                    dtype=pd.CategoricalDtype(categories=_transcript_gene_names(path))
+                ),
+                "codeword": pd.Series(dtype=np.uint32),
+                "overlaps_nucleus": pd.Series(dtype=bool),
+            }
+        )
     return pd.concat(frames, ignore_index=True)
 
 
 # ---------------------------------------------------------------------------
 # QC
 # ---------------------------------------------------------------------------
-def atera_cell_qc(adata: ad.AnnData, compute_expression_genes: bool = True
-                  ) -> pd.DataFrame:
+def atera_cell_qc(
+    adata: ad.AnnData, compute_expression_genes: bool = True
+) -> pd.DataFrame:
     """Compute cell-level QC for an Atera AnnData object.
 
     Atera's ``obs['total_counts']`` includes control probes/codewords; use
@@ -1815,10 +1899,13 @@ def atera_cell_qc(adata: ad.AnnData, compute_expression_genes: bool = True
         if col in obs.columns:
             qc[col] = pd.to_numeric(obs[col], errors="coerce")
     if {"cell_area", "nucleus_area"}.issubset(qc.columns):
-        qc["nuclear_area_ratio"] = qc["nucleus_area"] / qc["cell_area"].replace(0, np.nan)
+        qc["nuclear_area_ratio"] = qc["nucleus_area"] / qc["cell_area"].replace(
+            0, np.nan
+        )
 
     control_cols = [
-        c for c in ("control_probe_counts", "control_codeword_counts")
+        c
+        for c in ("control_probe_counts", "control_codeword_counts")
         if c in obs.columns
     ]
     if control_cols:
@@ -1829,7 +1916,9 @@ def atera_cell_qc(adata: ad.AnnData, compute_expression_genes: bool = True
     return qc
 
 
-def _transcript_bounds(path: Path, adata: Optional[ad.AnnData], region) -> Optional[tuple]:
+def _transcript_bounds(
+    path: Path, adata: Optional[ad.AnnData], region
+) -> Optional[tuple]:
     parsed = _parse_region(region)
     if parsed is not None:
         return parsed[0]
@@ -1940,8 +2029,12 @@ def atera_transcript_qc(
     n_tiles_done = 0
 
     for arrays in _iter_transcript_arrays(
-        root, min_qv=None, include_unassigned=True, region=region,
-        cell_lookup=lookup, verbose=False,
+        root,
+        min_qv=None,
+        include_unassigned=True,
+        region=region,
+        cell_lookup=lookup,
+        verbose=False,
     ):
         qv = arrays["qv"]
         hq = qv >= float(min_qv)
@@ -1950,9 +2043,9 @@ def atera_transcript_qc(
         n_read += len(qv)
         n_q20 += int(hq.sum())
 
-        density += np.histogram2d(
-            arrays["x"][hq], arrays["y"][hq], bins=[xe, ye]
-        )[0].astype(np.int64)
+        density += np.histogram2d(arrays["x"][hq], arrays["y"][hq], bins=[xe, ye])[
+            0
+        ].astype(np.int64)
 
         rows = arrays["cell_index"]
         assigned = hq & (rows >= 0)
@@ -1970,12 +2063,13 @@ def atera_transcript_qc(
 
         n_tiles_done += 1
         if verbose and n_tiles_done % 10 == 0:
-            log(f"[Atera] QC: {n_read:,} molecules "
-                f"({time.time() - t0:.0f}s)")
+            log(f"[Atera] QC: {n_read:,} molecules " f"({time.time() - t0:.0f}s)")
 
     elapsed = time.time() - t0
     overall_nuclear = (
-        float(cell_nuclear.sum() / cell_total.sum()) if cell_total.sum() else float("nan")
+        float(cell_nuclear.sum() / cell_total.sum())
+        if cell_total.sum()
+        else float("nan")
     )
     summary = {
         "number_rnas": number_rnas,
@@ -1996,7 +2090,8 @@ def atera_transcript_qc(
         adata.obs["tx_q20_counts"] = cell_total.astype(np.int32)
         adata.obs["tx_nuclear_counts"] = cell_nuclear.astype(np.int32)
         adata.obs["nuclear_fraction"] = np.divide(
-            cell_nuclear, cell_total,
+            cell_nuclear,
+            cell_total,
             out=np.full(n_cells, np.nan, dtype=np.float64),
             where=cell_total > 0,
         )
@@ -2014,20 +2109,25 @@ def atera_transcript_qc(
             "yedges": ye,
             "unit": _UM,
         }
-        atera_uns["gene_qc"] = pd.DataFrame({
-            "gene": gene_names,
-            "total": gene_total,
-            "nuclear": gene_nuclear,
-            "nuclear_fraction": np.divide(
-                gene_nuclear, gene_total,
-                out=np.full(n_genes, np.nan, dtype=np.float64),
-                where=gene_total > 0,
-            ),
-        })
+        atera_uns["gene_qc"] = pd.DataFrame(
+            {
+                "gene": gene_names,
+                "total": gene_total,
+                "nuclear": gene_nuclear,
+                "nuclear_fraction": np.divide(
+                    gene_nuclear,
+                    gene_total,
+                    out=np.full(n_genes, np.nan, dtype=np.float64),
+                    where=gene_total > 0,
+                ),
+            }
+        )
 
     if verbose:
-        log(f"[Atera] QC done in {elapsed:.0f}s: "
+        log(
+            f"[Atera] QC done in {elapsed:.0f}s: "
             f"{n_read:,} molecules, Q≥{min_qv:g} {summary['q20_fraction'] * 100:.1f}%, "
             f"assigned {summary['assigned_fraction_q20'] * 100:.1f}%, "
-            f"nuclear {overall_nuclear * 100:.1f}%")
+            f"nuclear {overall_nuclear * 100:.1f}%"
+        )
     return summary

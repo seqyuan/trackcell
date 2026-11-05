@@ -23,7 +23,6 @@ sys.path.insert(0, str(REPO))
 
 import trackcell as tcl  # noqa: E402
 
-
 DEFAULT_CCHD_DATA = Path("/Volumes/data/co_project/CCHD/xenium_analysis/01_data")
 
 
@@ -122,8 +121,14 @@ def main() -> None:
     out.parent.mkdir(parents=True, exist_ok=True)
     adata.write_h5ad(out)
     print("Done.")
-    print("  yardcluster_celltype:", adata.obs["yardcluster_celltype"].nunique(), "clusters")
-    print("  yardcluster_domain:", adata.obs["yardcluster_domain"].nunique(), "clusters")
+    print(
+        "  yardcluster_celltype:",
+        adata.obs["yardcluster_celltype"].nunique(),
+        "clusters",
+    )
+    print(
+        "  yardcluster_domain:", adata.obs["yardcluster_domain"].nunique(), "clusters"
+    )
 
 
 if __name__ == "__main__":

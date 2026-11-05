@@ -36,7 +36,9 @@ def test_build_weights_chunked_matches_legacy():
     from sklearn.decomposition import PCA
 
     merged = np.vstack([data_ref, data_q])
-    dr = PCA(n_components=10, random_state=0).fit_transform(merged - merged.mean(0, keepdims=True))
+    dr = PCA(n_components=10, random_state=0).fit_transform(
+        merged - merged.mean(0, keepdims=True)
+    )
     dr_q = dr[n_ref:]
     aqc = np.unique(cell2)
     k_nn = min(20, len(aqc))
@@ -45,7 +47,15 @@ def test_build_weights_chunked_matches_legacy():
     nbr_idx, dists = nn_helper(dr_q[aqc], query=dr_q, k=k_nn, n_trees=10)
 
     w_legacy = _build_weights_seurat_legacy(
-        len(cell1), n_query, cell2, scores, aqc, nbr_idx, dists, k_weight=20, sd_weight=1.0
+        len(cell1),
+        n_query,
+        cell2,
+        scores,
+        aqc,
+        nbr_idx,
+        dists,
+        k_weight=20,
+        sd_weight=1.0,
     )
     for chunk in (1, 7, DEFAULT_WEIGHT_QUERY_CHUNK_SIZE):
         w_new = _build_weights_seurat(
@@ -60,7 +70,9 @@ def test_build_weights_chunked_matches_legacy():
             sd_weight=1.0,
             query_chunk_size=chunk,
         )
-        np.testing.assert_allclose(w_legacy.toarray(), w_new.toarray(), rtol=0, atol=1e-12)
+        np.testing.assert_allclose(
+            w_legacy.toarray(), w_new.toarray(), rtol=0, atol=1e-12
+        )
 
 
 def test_integrate_pair_dtypes_and_trees_weight():

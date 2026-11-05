@@ -55,7 +55,9 @@ def _run_stepwise_injection(
     benchmark_root: Path = BENCHMARK_ROOT,
 ) -> dict[str, Any]:
     """R step outputs → Python next step; compare each handoff."""
-    umi, genes, cells, cell_attr = load_benchmark_umi(sample, benchmark_root=benchmark_root)
+    umi, genes, cells, cell_attr = load_benchmark_umi(
+        sample, benchmark_root=benchmark_root
+    )
     r = load_r_export(sample, seed, benchmark_root=benchmark_root)
     meta = r.get("meta") or {}
     cells_step1 = pd.Index(r["cells_step1"]).intersection(cells)
@@ -69,7 +71,10 @@ def _run_stepwise_injection(
     r_step1 = normalize_r_model_pars(r["model_pars_step1"]).reindex(genes_step1)
     r_fit = normalize_r_model_pars(r["model_pars_fit"]).reindex(genes)
     r_gene = r["gene_attr"]
-    r_res = pd.read_csv(r_export_dir(sample, seed, benchmark_root=benchmark_root) / "residuals.csv", index_col=0)
+    r_res = pd.read_csv(
+        r_export_dir(sample, seed, benchmark_root=benchmark_root) / "residuals.csv",
+        index_col=0,
+    )
     r_hvg = set(
         (r_export_dir(sample, seed, benchmark_root=benchmark_root) / "hvg_top3000.txt")
         .read_text()
@@ -105,10 +110,14 @@ def _run_stepwise_injection(
         "model_str_nonreg": "",
         "cell_attr": cell_attr,
     }
-    py_res = get_residuals(vst_stub, umi, genes=genes, umi_genes=genes, min_variance=float(min_var))
+    py_res = get_residuals(
+        vst_stub, umi, genes=genes, umi_genes=genes, min_variance=float(min_var)
+    )
     step_rfit_py_res = compare_residual_matrices(py_res, r_res)
     py_rv = py_res.var(axis=1)
-    step_rfit_py_res["residual_variance"] = compare_series_dict(py_rv, r_gene["residual_variance"])
+    step_rfit_py_res["residual_variance"] = compare_series_dict(
+        py_rv, r_gene["residual_variance"]
+    )
     py_hvg = set(py_rv.sort_values(ascending=False).index[:3000].astype(str))
     step_rfit_py_res["hvg_jaccard"] = jaccard(py_hvg, r_hvg)
 
@@ -187,7 +196,10 @@ def _run_randomness_analysis(
     for sample in BENCHMARK_SAMPLES:
         hvg_by_seed: dict[int, set[str]] = {}
         for seed in seeds:
-            path = r_export_dir(sample, seed, benchmark_root=benchmark_root) / "hvg_top3000.txt"
+            path = (
+                r_export_dir(sample, seed, benchmark_root=benchmark_root)
+                / "hvg_top3000.txt"
+            )
             if path.exists():
                 hvg_by_seed[seed] = set(path.read_text().strip().split("\n")) - {""}
 
@@ -196,7 +208,9 @@ def _run_randomness_analysis(
                 r_inter.append(jaccard(hvg_by_seed[s1], hvg_by_seed[s2]))
 
         ref_hvg = hvg_by_seed.get(ref_seed, set())
-        umi, genes, cells, cell_attr = load_benchmark_umi(sample, benchmark_root=benchmark_root)
+        umi, genes, cells, cell_attr = load_benchmark_umi(
+            sample, benchmark_root=benchmark_root
+        )
         r_ref = load_r_export(sample, ref_seed, benchmark_root=benchmark_root)
         cells_step1 = pd.Index(r_ref["cells_step1"]).intersection(cells)
         genes_step1 = pd.Index(r_ref["genes_step1"]).intersection(genes)
@@ -251,11 +265,15 @@ def run_sct_benchmark_suite(
 
     for seed in seeds:
         for sample in samples:
-            export_path = r_export_dir(sample, seed, benchmark_root=benchmark_root) / "meta.json"
+            export_path = (
+                r_export_dir(sample, seed, benchmark_root=benchmark_root) / "meta.json"
+            )
             if not export_path.exists():
                 missing.append(f"{sample}/seed_{seed}")
                 continue
-            stepwise.append(_run_stepwise_injection(sample, seed, benchmark_root=benchmark_root))
+            stepwise.append(
+                _run_stepwise_injection(sample, seed, benchmark_root=benchmark_root)
+            )
 
     randomness = _run_randomness_analysis(
         benchmark_root=benchmark_root, seeds=seeds, ref_seed=ref_seed

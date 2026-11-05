@@ -45,7 +45,9 @@ _SKETCH_THRESHOLD = 500_000
 _SKETCH_N = 500_000
 
 
-def _context_expression_source(expression_source: ExpressionSourceType) -> ExpressionSourceType:
+def _context_expression_source(
+    expression_source: ExpressionSourceType,
+) -> ExpressionSourceType:
     """Gene-level matrix for spatial M/G; identity may use RPCA embedding."""
     if expression_source == "sct_integrated":
         return "sct_prep"
@@ -361,7 +363,9 @@ def neighborhood_features(
         _build_spatial()
 
     resolved_k_gradient = (
-        (k_gradient if k_gradient is not None else 2 * k_spatial) if use_gradient else None
+        (k_gradient if k_gradient is not None else 2 * k_spatial)
+        if use_gradient
+        else None
     )
     expected_params = {
         "k_spatial": k_spatial,
@@ -373,8 +377,14 @@ def neighborhood_features(
         "layer": layer,
         "use_raw": use_raw,
         "expression_source": expression_source,
-        "sct_prep_key": sct_prep_key if expression_source in ("sct_prep", "sct_integrated") else None,
-        "sct_integrated_key": sct_integrated_key if expression_source == "sct_integrated" else None,
+        "sct_prep_key": (
+            sct_prep_key
+            if expression_source in ("sct_prep", "sct_integrated")
+            else None
+        ),
+        "sct_integrated_key": (
+            sct_integrated_key if expression_source == "sct_integrated" else None
+        ),
     }
 
     context_source = _context_expression_source(expression_source)
@@ -515,8 +525,14 @@ def yard_embed(
         "identity_rep": id_key,
         "context_rep": ctx_key,
         "expression_source": expression_source,
-        "sct_prep_key": sct_prep_key if expression_source in ("sct_prep", "sct_integrated") else None,
-        "sct_integrated_key": sct_integrated_key if expression_source == "sct_integrated" else None,
+        "sct_prep_key": (
+            sct_prep_key
+            if expression_source in ("sct_prep", "sct_integrated")
+            else None
+        ),
+        "sct_integrated_key": (
+            sct_integrated_key if expression_source == "sct_integrated" else None
+        ),
     }
     return adata if copy else None
 
@@ -1188,7 +1204,11 @@ def spatial_cluster(
                     adata.obs.loc[sub.obs_names, col] = [
                         f"{b}_{label}" for label in sub.obs[col].astype(str).values
                     ]
-        _store_params(adata, f"{key_added}_params", {"integrate": "separate", "batch_key": batch_key})
+        _store_params(
+            adata,
+            f"{key_added}_params",
+            {"integrate": "separate", "batch_key": batch_key},
+        )
         return adata if copy else None
 
     res_ct = resolution if resolution_celltype is None else resolution_celltype
@@ -1355,10 +1375,7 @@ def _preprocess_for_yardcluster(
         )
 
     raw_counts = "log1p" not in adata.uns
-    need_hvg = (
-        adata.n_vars > n_top_genes
-        and "highly_variable" not in adata.var.columns
-    )
+    need_hvg = adata.n_vars > n_top_genes and "highly_variable" not in adata.var.columns
 
     if need_hvg and raw_counts:
         # Preferred path: HVG on raw counts, before normalize/log.

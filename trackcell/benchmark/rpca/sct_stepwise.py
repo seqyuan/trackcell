@@ -172,7 +172,9 @@ def run_integration_sct_stepwise(
                 "native_hvg_jaccard": jaccard(native_hvg, r_hvg),
                 "r_fit_to_py_residual_corr": res_corr,
                 "r_fit_to_py_hvg_jaccard": jaccard(py_rfit_hvg, r_hvg),
-                "r_step1_to_py_hvg_jaccard": jaccard(rstep1_hvg, r_hvg) if rstep1_hvg else float("nan"),
+                "r_step1_to_py_hvg_jaccard": (
+                    jaccard(rstep1_hvg, r_hvg) if rstep1_hvg else float("nan")
+                ),
                 "r_step1_theta_corr": rstep1_theta_corr,
             }
         )
@@ -199,7 +201,11 @@ def run_integration_sct_stepwise(
         layer="counts",
         key_added="sct_prep",
     )
-    from trackcell.benchmark.rpca.data import load_merged_adata_from_r_filter, load_r_prep, inject_r_sct_models
+    from trackcell.benchmark.rpca.data import (
+        load_merged_adata_from_r_filter,
+        load_r_prep,
+        inject_r_sct_models,
+    )
 
     adata_r = load_merged_adata_from_r_filter(seed, benchmark_root=benchmark_root)
     inject_r_sct_models(adata_r, seed, benchmark_root=benchmark_root)
@@ -212,7 +218,9 @@ def run_integration_sct_stepwise(
         key_added="sct_prep",
     )
     prep_features = list(adata.uns["sct_prep"]["anchor_features"])
-    py_prep = pd.DataFrame(adata.obsm["X_sct_prep"], index=adata.obs_names, columns=prep_features)
+    py_prep = pd.DataFrame(
+        adata.obsm["X_sct_prep"], index=adata.obs_names, columns=prep_features
+    )
     r_prep = load_r_prep(adata_r, seed, benchmark_root=benchmark_root)
 
     merged = {
@@ -231,8 +239,8 @@ def run_integration_sct_stepwise(
         "summary": {
             "native_hvg_jaccard_median": float(np.median(native_hvgs)),
             "r_fit_hvg_jaccard_median": float(np.median(rfit_hvgs)),
-            "prep_corr_median_native_sct_r_features": merged["prep_native_sct_r_features"].get(
-                "gene_corr_median"
-            ),
+            "prep_corr_median_native_sct_r_features": merged[
+                "prep_native_sct_r_features"
+            ].get("gene_corr_median"),
         },
     }

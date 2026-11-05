@@ -27,14 +27,26 @@ def _patch_adata(n=60, seed=0):
 
 
 def test_platform_preset_sto():
-    p = resolve_platform_params("sto", k_spatial=None, k_expr=None, n_pcs=None, resolution=None, n_top_genes=None)
+    p = resolve_platform_params(
+        "sto",
+        k_spatial=None,
+        k_expr=None,
+        n_pcs=None,
+        resolution=None,
+        n_top_genes=None,
+    )
     assert p["k_spatial"] == PLATFORM_PRESETS["sto"]["k_spatial"]
     assert p["resolution"] == PLATFORM_PRESETS["sto"]["resolution"]
 
 
 def test_platform_preset_xenium_tma():
     p = resolve_platform_params(
-        "xenium_tma", k_spatial=None, k_expr=None, n_pcs=None, resolution=None, n_top_genes=None
+        "xenium_tma",
+        k_spatial=None,
+        k_expr=None,
+        n_pcs=None,
+        resolution=None,
+        n_top_genes=None,
     )
     assert p == PLATFORM_PRESETS["xenium_tma"]
     assert p["k_spatial"] == 10
@@ -43,14 +55,22 @@ def test_platform_preset_xenium_tma():
 
 def test_platform_preset_xenium_tma_override():
     p = resolve_platform_params(
-        "xenium_tma", k_spatial=15, k_expr=None, n_pcs=None, resolution=1.1, n_top_genes=None
+        "xenium_tma",
+        k_spatial=15,
+        k_expr=None,
+        n_pcs=None,
+        resolution=1.1,
+        n_top_genes=None,
     )
     assert p["k_spatial"] == 15
     assert p["resolution"] == 1.1
     assert p["k_expr"] == PLATFORM_PRESETS["xenium_tma"]["k_expr"]
 
+
 def test_platform_explicit_override():
-    p = resolve_platform_params("sto", k_spatial=7, k_expr=None, n_pcs=None, resolution=None, n_top_genes=None)
+    p = resolve_platform_params(
+        "sto", k_spatial=7, k_expr=None, n_pcs=None, resolution=None, n_top_genes=None
+    )
     assert p["k_spatial"] == 7
 
 
@@ -59,7 +79,9 @@ def test_neighborhood_features_cache_reuse():
     neighborhood_features(adata, k_spatial=8, key_added="yard", use_gradient=False)
     assert "yard_M" in adata.obsm
     M1 = adata.obsm["yard_M"].copy()
-    neighborhood_features(adata, k_spatial=8, key_added="yard", use_gradient=False, reuse_neighbors=True)
+    neighborhood_features(
+        adata, k_spatial=8, key_added="yard", use_gradient=False, reuse_neighbors=True
+    )
     np.testing.assert_array_equal(adata.obsm["yard_M"], M1)
 
 

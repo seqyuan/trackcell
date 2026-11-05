@@ -116,7 +116,9 @@ def resolve_r_vst_exports(
             raise ValueError("export_seed is required for rpca_benchmark layout.")
         for batch in adata_batches:
             if not rpca_step1_available(root, export_seed, batch):
-                raise FileNotFoundError(f"RPCA step-1 export missing for batch '{batch}'.")
+                raise FileNotFoundError(
+                    f"RPCA step-1 export missing for batch '{batch}'."
+                )
             exports[str(batch)] = str(
                 materialize_rpca_r_step1_export_dir(root, export_seed, batch)
             )

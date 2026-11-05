@@ -31,9 +31,7 @@ def build_gene_alias_lookup(target_genes: pd.Index) -> dict[str, str]:
     return lookup
 
 
-def _gene_name_alias(
-    name: str, candidates: set[str] | dict[str, str]
-) -> Optional[str]:
+def _gene_name_alias(name: str, candidates: set[str] | dict[str, str]) -> Optional[str]:
     """Map Seurat/scanpy duplicate suffix variants to a name in ``candidates``."""
     if isinstance(candidates, dict):
         for alias in _gene_suffix_aliases(name):

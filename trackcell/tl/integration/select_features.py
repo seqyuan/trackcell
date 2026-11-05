@@ -106,9 +106,7 @@ def select_integration_features(
             if entry is None:
                 raise ValueError(f"Missing SCT batch model for '{batch_label}'.")
             vf = entry.get("variable_features") or []
-            vf_lists.append(
-                [resolve_gene_alias(g, adata.var_names) or g for g in vf]
-            )
+            vf_lists.append([resolve_gene_alias(g, adata.var_names) or g for g in vf])
             gene_attr = entry.get("gene_attr", {})
             if gene_attr:
                 gene_sets.append(
@@ -118,7 +116,9 @@ def select_integration_features(
                         if (canon := resolve_gene_alias(g, adata.var_names)) is not None
                     }
                 )
-        gene_universe = set.intersection(*gene_sets) if gene_sets else set(adata.var_names)
+        gene_universe = (
+            set.intersection(*gene_sets) if gene_sets else set(adata.var_names)
+        )
         return _select_integration_features_seurat(
             vf_lists,
             n_features=n_features,

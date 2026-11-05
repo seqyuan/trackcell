@@ -26,7 +26,6 @@ from trackcell.tl._sctransform import (
     vst,
 )
 
-
 SAMPLE = DEFAULT_SAMPLE
 
 
@@ -40,13 +39,18 @@ def test_seurat_parity_loader_matches_r_meta():
     """Seurat-parity loader should match R export meta cell/gene counts."""
     import json
 
-    meta = json.loads((BENCHMARK_ROOT / "steps/r_sct_stepwise" / SAMPLE / "meta.json").read_text())
+    meta = json.loads(
+        (BENCHMARK_ROOT / "steps/r_sct_stepwise" / SAMPLE / "meta.json").read_text()
+    )
     umi, genes, cells, cell_attr = load_seurat_parity_with_cell_attr(SAMPLE)
     assert umi.shape[0] == meta["n_genes"]
     assert umi.shape[1] == meta["n_cells"]
     assert len(cells) == meta["n_cells"]
     filter_cells = set(
-        (BENCHMARK_ROOT / "steps/r/01_filter" / f"{SAMPLE}_cells.txt").read_text().strip().split("\n")
+        (BENCHMARK_ROOT / "steps/r/01_filter" / f"{SAMPLE}_cells.txt")
+        .read_text()
+        .strip()
+        .split("\n")
     )
     filter_cells.discard("")
     assert set(cells) == filter_cells
@@ -77,7 +81,9 @@ def test_row_gmean_sparse_matches_rowwise_formula(shape):
 def test_python_genes_log_gmean_matches_r_golden():
     umi, genes, _cells, _cell_attr = _load_sample_umi()
     export = load_r_vst_export(BENCHMARK_ROOT / "steps/r_sct_stepwise" / SAMPLE)
-    ga = pd.read_csv(BENCHMARK_ROOT / "steps/r_sct_stepwise" / SAMPLE / "gene_attr.csv", index_col=0)
+    ga = pd.read_csv(
+        BENCHMARK_ROOT / "steps/r_sct_stepwise" / SAMPLE / "gene_attr.csv", index_col=0
+    )
     r_log10 = pd.Series(
         np.log10(ga["gmean"].clip(1e-9).to_numpy(dtype=np.float64)),
         index=align_r_gene_list(ga.index.astype(str).tolist(), genes),
@@ -107,7 +113,9 @@ def test_coerce_genes_log_gmean_keeps_log10_export():
 
 
 @pytest.mark.skipif(
-    not (BENCHMARK_ROOT / "steps/r_sct_stepwise" / SAMPLE / "model_pars_step1.csv").exists(),
+    not (
+        BENCHMARK_ROOT / "steps/r_sct_stepwise" / SAMPLE / "model_pars_step1.csv"
+    ).exists(),
     reason="R stepwise export missing",
 )
 @pytest.mark.slow
@@ -130,7 +138,10 @@ def test_vst_gmean_golden_improves_step1_intercept_corr():
         seed=1448145,
     )
     py_hvg = set(
-        out["gene_attr"]["residual_variance"].sort_values(ascending=False).index[:3000].astype(str)
+        out["gene_attr"]["residual_variance"]
+        .sort_values(ascending=False)
+        .index[:3000]
+        .astype(str)
     )
     r_hvg = set(
         (BENCHMARK_ROOT / "steps/r_sct_stepwise" / SAMPLE / "hvg_top3000.txt")
@@ -143,7 +154,9 @@ def test_vst_gmean_golden_improves_step1_intercept_corr():
 
 
 @pytest.mark.skipif(
-    not (BENCHMARK_ROOT / "steps/r_sct_stepwise" / SAMPLE / "model_pars_step1.csv").exists(),
+    not (
+        BENCHMARK_ROOT / "steps/r_sct_stepwise" / SAMPLE / "model_pars_step1.csv"
+    ).exists(),
     reason="R stepwise export missing",
 )
 @pytest.mark.slow
@@ -173,7 +186,9 @@ def test_native_step1_intercept_tracks_r():
 
 
 @pytest.mark.skipif(
-    not (BENCHMARK_ROOT / "steps/r_sct_stepwise" / SAMPLE / "model_pars_step1.csv").exists(),
+    not (
+        BENCHMARK_ROOT / "steps/r_sct_stepwise" / SAMPLE / "model_pars_step1.csv"
+    ).exists(),
     reason="R stepwise export missing",
 )
 @pytest.mark.slow
@@ -205,7 +220,9 @@ def test_native_step1_theta_log10_tracks_r():
 
 
 @pytest.mark.skipif(
-    not (BENCHMARK_ROOT / "steps/r_sct_stepwise" / SAMPLE / "model_pars_fit.csv").exists(),
+    not (
+        BENCHMARK_ROOT / "steps/r_sct_stepwise" / SAMPLE / "model_pars_fit.csv"
+    ).exists(),
     reason="R stepwise export missing",
 )
 @pytest.mark.slow
@@ -269,7 +286,10 @@ def test_native_hvg_jaccard_gap_documented():
         .split("\n")
     )
     py_hvg = set(
-        out["gene_attr"]["residual_variance"].sort_values(ascending=False).index[:3000].astype(str)
+        out["gene_attr"]["residual_variance"]
+        .sort_values(ascending=False)
+        .index[:3000]
+        .astype(str)
     )
     jaccard = len(py_hvg & r_hvg) / len(py_hvg | r_hvg)
     assert 0.45 < jaccard < 0.65, f"unexpected native HVG Jaccard {jaccard:.3f}"
@@ -302,7 +322,10 @@ def test_r_step1_hvg_jaccard_near_r():
         seed=1448145,
     )
     py_hvg = set(
-        out["gene_attr"]["residual_variance"].sort_values(ascending=False).index[:3000].astype(str)
+        out["gene_attr"]["residual_variance"]
+        .sort_values(ascending=False)
+        .index[:3000]
+        .astype(str)
     )
     r_hvg = set(
         (BENCHMARK_ROOT / "steps/r_sct_stepwise" / SAMPLE / "hvg_top3000.txt")

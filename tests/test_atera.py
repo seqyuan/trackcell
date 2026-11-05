@@ -25,49 +25,65 @@ if not hasattr(zarr.Group, "create_array"):
 # ---------------------------------------------------------------------------
 PREFIXES = np.array([100, 101, 102, 103, 104, 105], dtype=np.uint32)
 CENTROIDS = np.array(
-    [[10.0, 10.0], [20.0, 20.0], [30.0, 30.0],
-     [40.0, 40.0], [999.0, 999.0], [50.0, 50.0]],
+    [
+        [10.0, 10.0],
+        [20.0, 20.0],
+        [30.0, 30.0],
+        [40.0, 40.0],
+        [999.0, 999.0],
+        [50.0, 50.0],
+    ],
     dtype=np.float32,
 )
 GENES = ["GENE1", "GENE2", "NegCtrl1", "Unassigned1"]
 GENE_IDS = ["ENSG0001", "ENSG0002", "NC0001", "UN0001"]
 FEATURE_TYPES = [
-    "Gene Expression", "Gene Expression",
-    "Negative Control Codeword", "Unassigned Codeword",
+    "Gene Expression",
+    "Gene Expression",
+    "Negative Control Codeword",
+    "Unassigned Codeword",
 ]
 
 
 def _write_matrix_zarr(root: Path, with_de: bool = True) -> None:
     n_cells, n_genes = len(CENTROIDS), len(GENES)
     dense = np.array(
-        [[2, 1, 0, 0],
-         [0, 3, 0, 0],
-         [1, 0, 1, 0],
-         [0, 0, 0, 1],
-         [4, 0, 0, 0],
-         [0, 1, 0, 0]],
+        [
+            [2, 1, 0, 0],
+            [0, 3, 0, 0],
+            [1, 0, 1, 0],
+            [0, 0, 0, 1],
+            [4, 0, 0, 0],
+            [0, 1, 0, 0],
+        ],
         dtype=np.int32,
     )
     X = sp.csr_matrix(dense)
     barcodes = pd.Index([f"cell{i}-1" for i in range(n_cells)], name="barcode")
-    obs = pd.DataFrame({
-        "barcode": barcodes,
-        "cell_id": (1 << 32) + PREFIXES.astype(np.int64),
-        "centroid_column": CENTROIDS[:, 0],
-        "centroid_row": CENTROIDS[:, 1],
-        "cell_area": np.full(n_cells, 20.0),
-        "nucleus_area": np.full(n_cells, 9.0),
-        "transcript_counts": np.array([3, 3, 2, 1, 4, 1], dtype=np.int32),
-        "control_probe_counts": np.zeros(n_cells, dtype=np.int32),
-        "control_codeword_counts": np.array([0, 0, 1, 0, 0, 0], dtype=np.int32),
-        "total_counts": np.array([3, 3, 3, 1, 4, 1], dtype=np.int32),
-    }, index=barcodes)
-    var = pd.DataFrame({
-        "feature_name": GENES,
-        "feature_id": GENE_IDS,
-        "feature_type": FEATURE_TYPES,
-        "genome": "hg38",
-    }, index=pd.Index(GENE_IDS, name="feature_id"))
+    obs = pd.DataFrame(
+        {
+            "barcode": barcodes,
+            "cell_id": (1 << 32) + PREFIXES.astype(np.int64),
+            "centroid_column": CENTROIDS[:, 0],
+            "centroid_row": CENTROIDS[:, 1],
+            "cell_area": np.full(n_cells, 20.0),
+            "nucleus_area": np.full(n_cells, 9.0),
+            "transcript_counts": np.array([3, 3, 2, 1, 4, 1], dtype=np.int32),
+            "control_probe_counts": np.zeros(n_cells, dtype=np.int32),
+            "control_codeword_counts": np.array([0, 0, 1, 0, 0, 0], dtype=np.int32),
+            "total_counts": np.array([3, 3, 3, 1, 4, 1], dtype=np.int32),
+        },
+        index=barcodes,
+    )
+    var = pd.DataFrame(
+        {
+            "feature_name": GENES,
+            "feature_id": GENE_IDS,
+            "feature_type": FEATURE_TYPES,
+            "genome": "hg38",
+        },
+        index=pd.Index(GENE_IDS, name="feature_id"),
+    )
     if with_de:
         var["de_leiden_c0_logfc"] = np.arange(n_genes, dtype=float)
     adata = ad.AnnData(X=X, obs=obs, var=var)
@@ -83,15 +99,20 @@ def _write_cells_zarr(root: Path) -> None:
     summary = np.zeros((len(CENTROIDS), 8), dtype=np.float64)
     summary[:, 0] = CENTROIDS[:, 0]
     summary[:, 1] = CENTROIDS[:, 1]
-    summary[:, 2] = 20.0            # cell_area
+    summary[:, 2] = 20.0  # cell_area
     summary[:, 3] = CENTROIDS[:, 0]
     summary[:, 4] = CENTROIDS[:, 1]
-    summary[:, 5] = 9.0             # nucleus_area
+    summary[:, 5] = 9.0  # nucleus_area
     node = group.create_array("cell_summary", data=summary)
     node.attrs["column_names"] = [
-        "cell_centroid_x", "cell_centroid_y", "cell_area",
-        "nucleus_centroid_x", "nucleus_centroid_y", "nucleus_area",
-        "z_level", "nucleus_count",
+        "cell_centroid_x",
+        "cell_centroid_y",
+        "cell_area",
+        "nucleus_centroid_x",
+        "nucleus_centroid_y",
+        "nucleus_area",
+        "z_level",
+        "nucleus_count",
     ]
 
     def write_polygons(cell_indices, offset, path):
@@ -113,7 +134,9 @@ def _write_cells_zarr(root: Path) -> None:
         poly.create_array("method", data=np.full(n, offset, dtype=np.uint32))
 
     write_polygons(np.arange(len(CENTROIDS)), 0, "polygon_sets/1")
-    write_polygons(np.arange(len(CENTROIDS) - 1), 3, "polygon_sets/0")  # last cell missing
+    write_polygons(
+        np.arange(len(CENTROIDS) - 1), 3, "polygon_sets/0"
+    )  # last cell missing
 
 
 TX_ROWS = [
@@ -149,17 +172,16 @@ def _write_transcripts_zarr(root: Path) -> None:
     n = len(TX_ROWS)
     location = np.array([[r[3], r[4], 0.0] for r in TX_ROWS], dtype=np.float32)
     quality = np.array([[r[1]] for r in TX_ROWS], dtype=np.float16)
-    cell_ids = np.array([
-        [PREFIXES[r[2]], 1] if r[2] is not None else [4294967295, 4294967295]
-        for r in TX_ROWS
-    ], dtype=np.uint32)
-    codeword = np.array(
-        [[gene_to_index[r[0]]] for r in TX_ROWS], dtype=np.uint32
+    cell_ids = np.array(
+        [
+            [PREFIXES[r[2]], 1] if r[2] is not None else [4294967295, 4294967295]
+            for r in TX_ROWS
+        ],
+        dtype=np.uint32,
     )
+    codeword = np.array([[gene_to_index[r[0]]] for r in TX_ROWS], dtype=np.uint32)
     nucleus = np.array([[1 if r[5] else 0] for r in TX_ROWS], dtype=np.uint8)
-    gene_offset = np.array(
-        [[0, 3], [3, 5], [5, 6], [6, 7]], dtype=np.uint32
-    )
+    gene_offset = np.array([[0, 3], [3, 5], [5, 6], [6, 7]], dtype=np.uint32)
 
     tile = grid.create_group("0,0")
     tile.create_array("location", data=location)
@@ -171,20 +193,14 @@ def _write_transcripts_zarr(root: Path) -> None:
 
     # Atera writes a single placeholder row into background tiles.
     empty = grid.create_group("-1,0")
-    empty.create_array(
-        "location", data=np.array([[-0.4, 10.0, 0.0]], dtype=np.float32)
-    )
+    empty.create_array("location", data=np.array([[-0.4, 10.0, 0.0]], dtype=np.float32))
     empty.create_array("quality_score", data=np.array([[40.0]], dtype=np.float16))
     empty.create_array(
         "cell_id",
         data=np.array([[4294967295, 4294967295]], dtype=np.uint32),
     )
-    empty.create_array(
-        "codeword_identity", data=np.array([[0]], dtype=np.uint32)
-    )
-    empty.create_array(
-        "overlaps_nucleus", data=np.array([[0]], dtype=np.uint8)
-    )
+    empty.create_array("codeword_identity", data=np.array([[0]], dtype=np.uint32))
+    empty.create_array("overlaps_nucleus", data=np.array([[0]], dtype=np.uint8))
     empty.create_array("gene_offset", data=gene_offset)
 
 
@@ -193,22 +209,30 @@ def make_official_bundle(root: Path, with_de: bool = True) -> Path:
     _write_matrix_zarr(root, with_de=with_de)
     _write_cells_zarr(root)
     _write_transcripts_zarr(root)
-    (root / "experiment.spatial").write_text(json.dumps({
-        "major_version": 1,
-        "minor_version": 2,
-        "run_name": "RUN1",
-        "slide_name": "SLIDE1",
-        "region_name": "ROI1",
-        "pixel_size": 0.2125,
-        "z_step_size": 3.0,
-        "chemistry_version": "Atera v1",
-        "analysis_sw_version": "atera-test",
-    }))
-    (root / "panel_config.json").write_text(json.dumps({
-        "spec_version": "1",
-        "metadata": {"customer": "SHOULD_NOT_BE_LOADED_BY_DEFAULT"},
-        "payloads": [],
-    }))
+    (root / "experiment.spatial").write_text(
+        json.dumps(
+            {
+                "major_version": 1,
+                "minor_version": 2,
+                "run_name": "RUN1",
+                "slide_name": "SLIDE1",
+                "region_name": "ROI1",
+                "pixel_size": 0.2125,
+                "z_step_size": 3.0,
+                "chemistry_version": "Atera v1",
+                "analysis_sw_version": "atera-test",
+            }
+        )
+    )
+    (root / "panel_config.json").write_text(
+        json.dumps(
+            {
+                "spec_version": "1",
+                "metadata": {"customer": "SHOULD_NOT_BE_LOADED_BY_DEFAULT"},
+                "payloads": [],
+            }
+        )
+    )
     return root
 
 
@@ -236,12 +260,14 @@ def make_preview_bundle(root: Path) -> Path:
     root.mkdir(parents=True, exist_ok=True)
     n_cells, n_genes = len(CENTROIDS), len(GENES)
     dense = np.array(
-        [[2, 1, 0, 0],
-         [0, 3, 0, 0],
-         [1, 0, 1, 0],
-         [0, 0, 0, 1],
-         [4, 0, 0, 0],
-         [0, 1, 0, 0]],
+        [
+            [2, 1, 0, 0],
+            [0, 3, 0, 0],
+            [1, 0, 1, 0],
+            [0, 0, 0, 1],
+            [4, 0, 0, 0],
+            [0, 1, 0, 0],
+        ],
         dtype=np.int32,
     )
     csc = sp.csc_matrix(dense.T)  # genes x cells
@@ -253,9 +279,7 @@ def make_preview_bundle(root: Path) -> Path:
         matrix.create_dataset("data", data=csc.data)
         matrix.create_dataset("indices", data=csc.indices)
         matrix.create_dataset("indptr", data=csc.indptr)
-        matrix.create_dataset(
-            "barcodes", data=np.array([b.encode() for b in barcodes])
-        )
+        matrix.create_dataset("barcodes", data=np.array([b.encode() for b in barcodes]))
         features = matrix.create_group("features")
         features.create_dataset("name", data=np.array([g.encode() for g in GENES]))
         features.create_dataset("id", data=np.array([g.encode() for g in GENE_IDS]))
@@ -263,33 +287,40 @@ def make_preview_bundle(root: Path) -> Path:
             "feature_type", data=np.array([t.encode() for t in FEATURE_TYPES])
         )
 
-    pd.DataFrame({
-        "cell_id": barcodes,
-        "x_centroid": CENTROIDS[:, 0],
-        "y_centroid": CENTROIDS[:, 1],
-        "cell_area": 20.0,
-        "nucleus_area": 9.0,
-        "transcript_counts": np.array([3, 3, 2, 1, 4, 1]),
-        "total_counts": np.array([3, 3, 3, 1, 4, 1]),
-        "segmentation_method": "test",
-    }).to_parquet(root / "cells.parquet", index=False)
+    pd.DataFrame(
+        {
+            "cell_id": barcodes,
+            "x_centroid": CENTROIDS[:, 0],
+            "y_centroid": CENTROIDS[:, 1],
+            "cell_area": 20.0,
+            "nucleus_area": 9.0,
+            "transcript_counts": np.array([3, 3, 2, 1, 4, 1]),
+            "total_counts": np.array([3, 3, 3, 1, 4, 1]),
+            "segmentation_method": "test",
+        }
+    ).to_parquet(root / "cells.parquet", index=False)
 
     rows = []
     for i, (x, y) in enumerate(CENTROIDS):
         for dx, dy in ((-2, -2), (2, -2), (2, 2), (-2, 2)):
-            rows.append({"cell_id": barcodes[i],
-                         "vertex_x": x + dx, "vertex_y": y + dy})
+            rows.append(
+                {"cell_id": barcodes[i], "vertex_x": x + dx, "vertex_y": y + dy}
+            )
     pd.DataFrame(rows).to_parquet(root / "cell_boundaries.parquet", index=False)
     pd.DataFrame(rows[: len(rows) - 4]).to_parquet(
         root / "nucleus_boundaries.parquet", index=False
     )
-    (root / "experiment.xenium").write_text(json.dumps({
-        "run_name": "RUN1",
-        "slide_id": "SLIDE1",
-        "region_name": "PREVIEW1",
-        "pixel_size": 0.2125,
-        "z_step_size": 0.75,
-    }))
+    (root / "experiment.xenium").write_text(
+        json.dumps(
+            {
+                "run_name": "RUN1",
+                "slide_id": "SLIDE1",
+                "region_name": "PREVIEW1",
+                "pixel_size": 0.2125,
+                "z_step_size": 0.75,
+            }
+        )
+    )
     return root
 
 
@@ -313,9 +344,7 @@ def test_read_official_schema(official_bundle):
     assert "de_leiden_c0_logfc" not in adata.var.columns
 
     np.testing.assert_allclose(adata.obsm["spatial"], CENTROIDS)
-    assert adata.obs["barcode"].tolist() == [
-        f"cell{i}-1" for i in range(6)
-    ]
+    assert adata.obs["barcode"].tolist() == [f"cell{i}-1" for i in range(6)]
     assert adata.obs["cell_prefix"].tolist() == PREFIXES.tolist()
     assert (adata.obs["dataset_suffix"] == 1).all()
     assert adata.obs["cell_id"].tolist() == ((1 << 32) + PREFIXES).tolist()
@@ -332,7 +361,10 @@ def test_read_official_schema(official_bundle):
     assert set(geometries.index).issubset(set(adata.obs_names))
     assert len(adata.uns["spatial"][sample]["nucleus_geometries"]) == 5
     assert set(adata.uns["cell_boundaries"]) == {
-        "vertex_x", "vertex_y", "n_vertices", "cell_idx"
+        "vertex_x",
+        "vertex_y",
+        "n_vertices",
+        "cell_idx",
     }
     assert adata.uns["cell_boundaries"]["cell_idx"].shape == (6,)
     # store_wkt is off by default
@@ -364,9 +396,7 @@ def test_read_official_options(official_bundle):
     adata = tcl.io.read_atera(official_bundle, build_polygons=False)
     assert "nucleus_geometries" not in adata.uns["spatial"]["ROI1"]
     with pytest.raises(ValueError, match="include_nucleus"):
-        tcl.io.read_atera(
-            official_bundle, build_polygons=False, include_nucleus=True
-        )
+        tcl.io.read_atera(official_bundle, build_polygons=False, include_nucleus=True)
     assert "geometries" not in adata.uns["spatial"]["ROI1"]
     assert "cell_boundaries" not in adata.uns
 
@@ -389,6 +419,7 @@ def test_region_and_cell_subset(official_bundle):
 
     # shapely geometry is accepted too
     from shapely.geometry import box
+
     adata = tcl.io.read_atera(official_bundle, region=box(0, 0, 25, 25))
     assert adata.n_obs == 2
 
@@ -428,9 +459,7 @@ def test_atera_info(official_bundle):
 
 
 def test_transcript_streaming(official_bundle):
-    df = tcl.io.read_atera_transcripts(
-        official_bundle, genes=["GENE1"], min_qv=20
-    )
+    df = tcl.io.read_atera_transcripts(official_bundle, genes=["GENE1"], min_qv=20)
     assert len(df) == 2  # Q10 row removed, out-of-region row kept
     assert df["gene"].tolist() == ["GENE1", "GENE1"]
     assert str(df["gene"].dtype) == "category"
@@ -510,14 +539,13 @@ def test_transcript_qc(official_bundle):
 
     # plotting functions are re-callable from adata only
     import matplotlib
+
     matplotlib.use("Agg")
     axes = tcl.pl.atera_qc_summary(adata, show=False)
     assert np.asarray(axes).size == 4
     ax = tcl.pl.atera_transcript_density(adata, show=False)
     assert ax is not None
-    axes = tcl.pl.atera_nuclear_fraction(
-        adata, genes=["GENE1", "GENE2"], show=False
-    )
+    axes = tcl.pl.atera_nuclear_fraction(adata, genes=["GENE1", "GENE2"], show=False)
     assert axes.shape == (3,)
 
 
@@ -554,11 +582,15 @@ def test_list_and_iter_rois(tmp_path, official_bundle):
     run.mkdir()
     (run / "ROI_A").symlink_to(official_bundle)
     second = make_official_bundle(run / "ROI_B")
-    (second / "experiment.spatial").write_text(json.dumps({
-        "region_name": "ROI_B",
-        "slide_name": "SLIDE1",
-        "pixel_size": 0.2125,
-    }))
+    (second / "experiment.spatial").write_text(
+        json.dumps(
+            {
+                "region_name": "ROI_B",
+                "slide_name": "SLIDE1",
+                "pixel_size": 0.2125,
+            }
+        )
+    )
 
     table = tcl.io.list_atera_rois(run)
     assert set(table["roi"]) == {"ROI1", "ROI_B"}
@@ -566,8 +598,9 @@ def test_list_and_iter_rois(tmp_path, official_bundle):
     assert table["has_transcripts"].all()
 
     names = []
-    for name, adata in tcl.io.iter_atera_rois(run, rois=["ROI_B"],
-                                              build_polygons=False):
+    for name, adata in tcl.io.iter_atera_rois(
+        run, rois=["ROI_B"], build_polygons=False
+    ):
         names.append(name)
         assert adata.n_obs == 6
     assert names == ["ROI_B"]

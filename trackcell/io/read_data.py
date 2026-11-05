@@ -41,8 +41,7 @@ def _infer_sample_from_path(path: Union[str, Path]) -> str:
     original = Path(path)
     current = original.resolve()
     while current.name and (
-        current.name in _SAMPLE_DIR_MARKERS
-        or current.name.startswith("square_")
+        current.name in _SAMPLE_DIR_MARKERS or current.name.startswith("square_")
     ):
         parent = current.parent
         if parent == current:
@@ -74,14 +73,14 @@ def read_hd_bin(
     tissue_positions_file: str = "spatial/tissue_positions.parquet",
     hires_image_file: str = "spatial/tissue_hires_image.png",
     lowres_image_file: str = "spatial/tissue_lowres_image.png",
-    scalefactors_file: str = "spatial/scalefactors_json.json"
+    scalefactors_file: str = "spatial/scalefactors_json.json",
 ) -> sc.AnnData:
     """
     Read 10X HD SpaceRanger bin-level output (2um/8um/16um) and create an AnnData object with spatial information.
-    
+
     This function reads the output from SpaceRanger pipeline and creates an AnnData object
     that includes spatial coordinates, tissue images, and scalefactors for bin-level data.
-    
+
     Parameters
     ----------
     datapath : str or Path
@@ -103,7 +102,7 @@ def read_hd_bin(
         Path to the low-resolution tissue image relative to datapath.
     scalefactors_file : str, default "spatial/scalefactors_json.json"
         Name of the scalefactors JSON file.
-    
+
     Returns
     -------
     sc.AnnData
@@ -115,7 +114,7 @@ def read_hd_bin(
         - Tissue images in .uns["spatial"][sample]["images"]
         - Scalefactors in .uns["spatial"][sample]["scalefactors"]
         - Bin size in .uns["spatial"][sample]["binsize"]
-    
+
     Examples
     --------
     >>> import trackcell.io as tcio
@@ -125,7 +124,7 @@ def read_hd_bin(
         obs: 'barcode'
         obsm: 'spatial'
         uns: 'spatial'
-    
+
     Notes
     -----
     This function expects the SpaceRanger output to have the following structure:
@@ -135,73 +134,93 @@ def read_hd_bin(
     - spatial/tissue_lowres_image.png: Low-resolution tissue image
     - spatial/scalefactors_json.json: Image scaling factors
     """
-    
+
     # Convert to Path object for easier handling
     datapath = Path(datapath).resolve()
-    
+
     # If sample is not provided, try to infer from path
     if sample is None:
         sample = _infer_sample_from_path(datapath)
-    
+
     # Read expression matrix - try H5 first, then directory
     h5_path = datapath / matrix_file_h5
     matrix_dir_path = datapath / matrix_file_dir
-    
+
     if h5_path.exists():
         try:
             adata = sc.read_10x_h5(h5_path)
         except Exception as e:
-            logger.info("Could not read H5 file %s (%s); falling back to directory %s",
-                        h5_path, e, matrix_dir_path)
+            logger.info(
+                "Could not read H5 file %s (%s); falling back to directory %s",
+                h5_path,
+                e,
+                matrix_dir_path,
+            )
             if matrix_dir_path.exists():
                 adata = sc.read_10x_mtx(matrix_dir_path)
             else:
-                raise FileNotFoundError(f"Neither H5 file nor matrix directory found in {datapath}")
+                raise FileNotFoundError(
+                    f"Neither H5 file nor matrix directory found in {datapath}"
+                )
     elif matrix_dir_path.exists():
         adata = sc.read_10x_mtx(matrix_dir_path)
     else:
         raise FileNotFoundError(f"Neither {h5_path} nor {matrix_dir_path} found")
-    
+
     # Load the Spatial Coordinates
     tissue_pos_path = datapath / tissue_positions_file
-    
+
     if not tissue_pos_path.exists():
         # Try CSV format as fallback
-        tissue_pos_path_csv = datapath / tissue_positions_file.replace('.parquet', '.csv')
+        tissue_pos_path_csv = datapath / tissue_positions_file.replace(
+            ".parquet", ".csv"
+        )
         if tissue_pos_path_csv.exists():
             tissue_pos_path = tissue_pos_path_csv
         else:
-            raise FileNotFoundError(f"Tissue positions file not found: {tissue_pos_path} or {tissue_pos_path_csv}")
-    
+            raise FileNotFoundError(
+                f"Tissue positions file not found: {tissue_pos_path} or {tissue_pos_path_csv}"
+            )
+
     # Read tissue positions file
     try:
-        if tissue_pos_path.suffix == '.parquet':
+        if tissue_pos_path.suffix == ".parquet":
             df_tissue_positions = pd.read_parquet(tissue_pos_path)
         else:
             # Try CSV with different separators
             try:
-                df_tissue_positions = pd.read_csv(tissue_pos_path, sep=',')
+                df_tissue_positions = pd.read_csv(tissue_pos_path, sep=",")
             except Exception:
                 try:
-                    df_tissue_positions = pd.read_csv(tissue_pos_path, sep='\t')
+                    df_tissue_positions = pd.read_csv(tissue_pos_path, sep="\t")
                 except Exception:
-                    df_tissue_positions = pd.read_csv(tissue_pos_path, sep=None, engine='python')
+                    df_tissue_positions = pd.read_csv(
+                        tissue_pos_path, sep=None, engine="python"
+                    )
     except Exception as e:
         raise ValueError(f"Could not read tissue positions file {tissue_pos_path}: {e}")
-    
+
     # Set the index of the dataframe to the barcodes
-    if 'barcode' in df_tissue_positions.columns:
-        df_tissue_positions = df_tissue_positions.set_index('barcode')
-    elif df_tissue_positions.index.name == 'barcode' or 'barcode' in str(df_tissue_positions.index.name):
+    if "barcode" in df_tissue_positions.columns:
+        df_tissue_positions = df_tissue_positions.set_index("barcode")
+    elif df_tissue_positions.index.name == "barcode" or "barcode" in str(
+        df_tissue_positions.index.name
+    ):
         # Already indexed by barcode
         pass
     else:
         # Try to use first column as barcode if it's not already indexed
         if len(df_tissue_positions.columns) > 0:
-            df_tissue_positions = df_tissue_positions.set_index(df_tissue_positions.columns[0])
-    
+            df_tissue_positions = df_tissue_positions.set_index(
+                df_tissue_positions.columns[0]
+            )
+
     if df_tissue_positions.index.has_duplicates:
-        duplicate_examples = df_tissue_positions.index[df_tissue_positions.index.duplicated()].unique()[:5].tolist()
+        duplicate_examples = (
+            df_tissue_positions.index[df_tissue_positions.index.duplicated()]
+            .unique()[:5]
+            .tolist()
+        )
         raise ValueError(
             "Tissue positions contain duplicate barcodes; cannot align spatial coordinates safely. "
             f"Examples: {duplicate_examples}"
@@ -215,8 +234,10 @@ def read_hd_bin(
         )
 
     # Adding the tissue positions to the metadata
-    adata.obs = pd.merge(adata.obs, df_tissue_positions, left_index=True, right_index=True, how='left')
-    
+    adata.obs = pd.merge(
+        adata.obs, df_tissue_positions, left_index=True, right_index=True, how="left"
+    )
+
     # Extract spatial coordinates
     # Try different possible column names for spatial coordinates
     coord_cols = None
@@ -224,19 +245,19 @@ def read_hd_bin(
         ["pxl_col_in_fullres", "pxl_row_in_fullres"],
         ["pxl_col", "pxl_row"],
         ["x", "y"],
-        ["array_col", "array_row"]
+        ["array_col", "array_row"],
     ]:
         if all(col in adata.obs.columns for col in col_pair):
             coord_cols = col_pair
             break
-    
+
     if coord_cols is None:
         raise ValueError(
             "Could not find spatial coordinate columns. "
             "Expected one of: ['pxl_col_in_fullres', 'pxl_row_in_fullres'], "
             "['pxl_col', 'pxl_row'], ['x', 'y'], or ['array_col', 'array_row']"
         )
-    
+
     coord_values = adata.obs[coord_cols]
     if coord_values.isna().any().any():
         bad_barcodes = coord_values[coord_values.isna().any(axis=1)].index[:5].tolist()
@@ -244,42 +265,49 @@ def read_hd_bin(
             "Spatial coordinate columns contain missing values after alignment. "
             f"Examples: {bad_barcodes}"
         )
-    adata.obsm['spatial'] = coord_values.values
-    
+    adata.obsm["spatial"] = coord_values.values
+
     # Read tissue images
     try:
         hires_img = iio.imread(datapath / hires_image_file)
         lowres_img = iio.imread(datapath / lowres_image_file)
     except FileNotFoundError as e:
-        warnings.warn(f"Could not load tissue images ({e}); plotting will fall back to point-only rendering.",
-                      RuntimeWarning, stacklevel=2)
+        warnings.warn(
+            f"Could not load tissue images ({e}); plotting will fall back to point-only rendering.",
+            RuntimeWarning,
+            stacklevel=2,
+        )
         hires_img = None
         lowres_img = None
-    
+
     # Initialize spatial metadata
     adata.uns["spatial"] = {}
     adata.uns["spatial"][sample] = {}
-    
+
     # Load scalefactors
     try:
-        with open(datapath / scalefactors_file, 'r', encoding='utf-8') as file:
+        with open(datapath / scalefactors_file, "r", encoding="utf-8") as file:
             scalefactor = json.load(file)
     except FileNotFoundError as e:
-        warnings.warn(f"Could not load scalefactors ({e}); image-overlay scaling will be unavailable.",
-                      RuntimeWarning, stacklevel=2)
+        warnings.warn(
+            f"Could not load scalefactors ({e}); image-overlay scaling will be unavailable.",
+            RuntimeWarning,
+            stacklevel=2,
+        )
         scalefactor = {}
-    
+
     # Store images and scalefactors
     if hires_img is not None and lowres_img is not None:
         adata.uns["spatial"][sample]["images"] = {
             "hires": hires_img,
-            "lowres": lowres_img
+            "lowres": lowres_img,
         }
-    
+
     adata.uns["spatial"][sample]["scalefactors"] = scalefactor
     adata.uns["spatial"][sample]["binsize"] = binsize
-    
+
     return adata
+
 
 def read_hd_cellseg(
     datapath: Union[str, Path],
@@ -288,14 +316,14 @@ def read_hd_cellseg(
     matrix_file: str = "filtered_feature_cell_matrix.h5",
     hires_image_file: str = "spatial/tissue_hires_image.png",
     lowres_image_file: str = "spatial/tissue_lowres_image.png",
-    scalefactors_file: str = "spatial/scalefactors_json.json"
+    scalefactors_file: str = "spatial/scalefactors_json.json",
 ) -> sc.AnnData:
     """
     Read 10X HD SpaceRanger cell segmentation output and create an AnnData object with spatial information.
-    
+
     This function reads the output from SpaceRanger pipeline and creates an AnnData object
     that includes spatial coordinates, cell segmentations, and tissue images.
-    
+
     Parameters
     ----------
     datapath : str or Path
@@ -312,7 +340,7 @@ def read_hd_cellseg(
         Path to the low-resolution tissue image relative to datapath.
     scalefactors_file : str, default "spatial/scalefactors_json.json"
         Name of the scalefactors JSON file.
-    
+
     Returns
     -------
     sc.AnnData
@@ -325,7 +353,7 @@ def read_hd_cellseg(
         - Scalefactors in .uns["spatial"][sample]["scalefactors"]
         - Cell geometries in .uns["spatial"][sample]["geometries"] (GeoDataFrame)
         - Cell geometries in .obs["geometry"] (WKT strings for serialization)
-    
+
     Examples
     --------
     >>> import trackcell.io as tcio
@@ -335,7 +363,7 @@ def read_hd_cellseg(
         obs: 'cellid'
         obsm: 'spatial'
         uns: 'spatial'
-    
+
     Notes
     -----
     This function expects the SpaceRanger output to have the following structure:
@@ -345,14 +373,14 @@ def read_hd_cellseg(
     - spatial/tissue_lowres_image.png: Low-resolution tissue image
     - spatial/scalefactors_json.json: Image scaling factors
     """
-    
+
     # Convert to Path object for easier handling
     datapath = Path(datapath).resolve()
-    
+
     # If sample is not provided, try to infer from path
     if sample is None:
         sample = _infer_sample_from_path(datapath)
-    
+
     # Read cell segmentations
     # Try the specified file first, then try common alternative names if not found
     seg_file_path = datapath / cell_segmentations_file
@@ -361,7 +389,7 @@ def read_hd_cellseg(
         alternative_names = [
             "cell_segmentations.geojson",
             "cell_segmentations_annotated.geojson",
-            "annotated_cell_segmentations.geojson"
+            "annotated_cell_segmentations.geojson",
         ]
         found_file = None
         for alt_name in alternative_names:
@@ -373,7 +401,7 @@ def read_hd_cellseg(
                     f"Using alternative file '{alt_name}' instead."
                 )
                 break
-        
+
         if found_file is None:
             raise FileNotFoundError(
                 f"Cell segmentations file not found: {seg_file_path}\n"
@@ -381,30 +409,30 @@ def read_hd_cellseg(
                 f"Please specify the correct filename using the `cell_segmentations_file` parameter."
             )
         seg_file_path = datapath / found_file
-    
+
     gdf_seg = gpd.read_file(seg_file_path)
     df = pd.DataFrame(gdf_seg)
-    
+
     if "cell_id" not in df.columns:
         raise ValueError("Cell segmentation file must contain a 'cell_id' column.")
     if "geometry" not in df.columns:
         raise ValueError("Cell segmentation file must contain a geometry column.")
 
     # Create cellid in the format expected by SpaceRanger
-    df['cellid'] = df['cell_id'].apply(lambda x: f"cellid_{str(x).zfill(9)}-1")
-    if df['cellid'].duplicated().any():
-        duplicate_examples = df.loc[df['cellid'].duplicated(), 'cellid'].head().tolist()
+    df["cellid"] = df["cell_id"].apply(lambda x: f"cellid_{str(x).zfill(9)}-1")
+    if df["cellid"].duplicated().any():
+        duplicate_examples = df.loc[df["cellid"].duplicated(), "cellid"].head().tolist()
         raise ValueError(
             "Cell segmentation file contains duplicate cell IDs; cannot align safely. "
             f"Examples: {duplicate_examples}"
         )
-    
+
     # Read expression matrix
     adata = sc.read_10x_h5(datapath / matrix_file)
-    
+
     # Align cell segmentations with expression data
     expr_cellids = pd.Index(adata.obs_names)
-    seg_cellids = pd.Index(df['cellid'])
+    seg_cellids = pd.Index(df["cellid"])
     matched_cellids = expr_cellids.intersection(seg_cellids)
     if len(matched_cellids) == 0:
         raise ValueError(
@@ -425,7 +453,7 @@ def read_hd_cellseg(
             f"Examples: {extra_seg[:5].tolist()}"
         )
     adata = adata[expr_cellids.isin(seg_cellids), :].copy()
-    
+
     # Filter and reorder df to match adata.obs_names order
     df = df.set_index("cellid").reindex(adata.obs_names)
     if df["geometry"].isna().any():
@@ -434,63 +462,71 @@ def read_hd_cellseg(
             "Missing segmentation geometries after expression/segmentation alignment. "
             f"Examples: {bad_cellids}"
         )
-    
+
     # Convert geometry strings to shapely objects if needed
     first_geometry = df["geometry"].dropna().iloc[0]
     if isinstance(first_geometry, str):
         df["geometry"] = df["geometry"].apply(wkt.loads)
-    
+
     # Extract centroid coordinates
     df["x"] = df["geometry"].apply(lambda poly: poly.centroid.x)
     df["y"] = df["geometry"].apply(lambda poly: poly.centroid.y)
-    
+
     # Store spatial coordinates
     adata.obsm["spatial"] = np.array(df[["x", "y"]])
-    
-    if 'classification' in df.columns and not df['classification'].isna().all():
-        first_classification = df['classification'].dropna().iloc[0]
+
+    if "classification" in df.columns and not df["classification"].isna().all():
+        first_classification = df["classification"].dropna().iloc[0]
         if isinstance(first_classification, str):
-            classifications = df['classification'].apply(
+            classifications = df["classification"].apply(
                 lambda value: ast.literal_eval(value) if pd.notna(value) else None
             )
         else:
-            classifications = df['classification']
-        df['classification'] = classifications
-        adata.obs['classification'] = [
+            classifications = df["classification"]
+        df["classification"] = classifications
+        adata.obs["classification"] = [
             _classification_name(item) for item in classifications
         ]
-        adata.uns['classification_colors'] = convert_classification_to_color_dict(df, 'classification')
+        adata.uns["classification_colors"] = convert_classification_to_color_dict(
+            df, "classification"
+        )
 
     # Read tissue images
     try:
         hires_img = iio.imread(datapath / hires_image_file)
         lowres_img = iio.imread(datapath / lowres_image_file)
     except FileNotFoundError as e:
-        warnings.warn(f"Could not load tissue images ({e}); plotting will fall back to point-only rendering.",
-                      RuntimeWarning, stacklevel=2)
+        warnings.warn(
+            f"Could not load tissue images ({e}); plotting will fall back to point-only rendering.",
+            RuntimeWarning,
+            stacklevel=2,
+        )
         hires_img = None
         lowres_img = None
-    
+
     # Initialize spatial metadata
     adata.uns["spatial"] = {}
     adata.uns["spatial"][sample] = {}
-    
+
     # Load scalefactors
     try:
-        with open(datapath / scalefactors_file, 'r', encoding='utf-8') as file:
+        with open(datapath / scalefactors_file, "r", encoding="utf-8") as file:
             scalefactor = json.load(file)
     except FileNotFoundError as e:
-        warnings.warn(f"Could not load scalefactors ({e}); image-overlay scaling will be unavailable.",
-                      RuntimeWarning, stacklevel=2)
+        warnings.warn(
+            f"Could not load scalefactors ({e}); image-overlay scaling will be unavailable.",
+            RuntimeWarning,
+            stacklevel=2,
+        )
         scalefactor = {}
-    
+
     # Add spot_diameter_fullres if missing (required by scanpy's sc.pl.spatial)
     # For cell segmentation data, this is not a real spot diameter but needed for plotting
-    # 
+    #
     # Note: This is only used when spot_size parameter is NOT provided to sc.pl.spatial()
     # - If spot_size is provided: scanpy uses the provided value directly
     # - If spot_size is None: scanpy reads from scalefactors["spot_diameter_fullres"]
-    # 
+    #
     # Setting this ensures compatibility when users don't specify spot_size parameter
     if "spot_diameter_fullres" not in scalefactor:
         # Use a reasonable default for cell segmentation data
@@ -504,27 +540,29 @@ def read_hd_cellseg(
             # Default to 20 pixels for cell segmentation (cells are smaller than spots)
             estimated_spot_diameter = 20.0
         scalefactor["spot_diameter_fullres"] = estimated_spot_diameter
-    
+
     # Store images and scalefactors
     if hires_img is not None and lowres_img is not None:
         adata.uns["spatial"][sample]["images"] = {
             "hires": hires_img,
-            "lowres": lowres_img
+            "lowres": lowres_img,
         }
-    
+
     adata.uns["spatial"][sample]["scalefactors"] = scalefactor
-    
+
     # Store geometries: GeoDataFrame for fast access and WKT strings for serialization
     # Create GeoDataFrame indexed by cellid for easy lookup
     # cellid should already be a column from the reset_index() above
     gdf_indexed = gpd.GeoDataFrame(df[["geometry"]], geometry="geometry")
-    #gdf_indexed = gdf_indexed.set_index(df.index)
+    # gdf_indexed = gdf_indexed.set_index(df.index)
     adata.uns["spatial"][sample]["geometries"] = gdf_indexed
-    
+
     # Also store WKT strings in obs for serialization compatibility
-    adata.obs["geometry"] = df["geometry"].apply(lambda g: wkt.dumps(g) if g is not None else None)
-    
-    return adata 
+    adata.obs["geometry"] = df["geometry"].apply(
+        lambda g: wkt.dumps(g) if g is not None else None
+    )
+
+    return adata
 
 
 def read_xenium_cellseg(
@@ -549,10 +587,10 @@ def read_xenium_cellseg(
 ) -> sc.AnnData:
     """
     Read 10x Xenium cell segmentation output and create an AnnData object.
-    
+
     Reads Xenium Analyzer output files (parquet boundaries, HDF5 expression matrix)
     and builds a squidpy-compatible AnnData with GeoDataFrame cell polygons.
-    
+
     Parameters
     ----------
     datapath : str or Path
@@ -597,7 +635,7 @@ def read_xenium_cellseg(
         If True, store WKT strings in ``.obs['geometry']`` for serialization.
     verbose : bool, default True
         Print progress messages.
-    
+
     Returns
     -------
     sc.AnnData
@@ -611,7 +649,7 @@ def read_xenium_cellseg(
         - Nucleus boundary arrays in .uns['nucleus_boundaries'] (if available)
         - WKT geometry strings in .obs['geometry'] (for serialization)
         - Experiment metadata in .uns['experiment']
-    
+
     Examples
     --------
     >>> import trackcell.io as tcio
@@ -620,102 +658,132 @@ def read_xenium_cellseg(
     AnnData object with n_obs × n_vars = 819023 × 10029
     """
     datapath = Path(datapath).resolve()
-    
+
     if sample is None:
         sample = datapath.name
 
     log = print if verbose else (lambda *args, **kwargs: None)
-    
+
     t_total = time.time()
-    
+
     # ── 1. Read expression matrix ──
     t0 = time.time()
     h5_path = datapath / matrix_file
     if not h5_path.exists():
         raise FileNotFoundError(f"Expression matrix not found: {h5_path}")
-    
-    with h5py.File(h5_path, 'r') as f:
-        m = f['matrix']
-        shape = tuple(m['shape'][:])
-        data = m['data'][:]
-        indices = m['indices'][:]
-        indptr = m['indptr'][:]
-        barcodes = np.array([b.decode('utf-8') if isinstance(b, bytes) else str(b)
-                            for b in m['barcodes'][:]])
-        feat_names = np.array([n.decode('utf-8') if isinstance(n, bytes) else str(n)
-                              for n in m['features']['name'][:]])
-        feat_ids = np.array([i.decode('utf-8') if isinstance(i, bytes) else str(i)
-                            for i in m['features']['id'][:]])
-        feat_types = np.array([t.decode('utf-8') if isinstance(t, bytes) else str(t)
-                              for t in m['features']['feature_type'][:]])
-    
+
+    with h5py.File(h5_path, "r") as f:
+        m = f["matrix"]
+        shape = tuple(m["shape"][:])
+        data = m["data"][:]
+        indices = m["indices"][:]
+        indptr = m["indptr"][:]
+        barcodes = np.array(
+            [
+                b.decode("utf-8") if isinstance(b, bytes) else str(b)
+                for b in m["barcodes"][:]
+            ]
+        )
+        feat_names = np.array(
+            [
+                n.decode("utf-8") if isinstance(n, bytes) else str(n)
+                for n in m["features"]["name"][:]
+            ]
+        )
+        feat_ids = np.array(
+            [
+                i.decode("utf-8") if isinstance(i, bytes) else str(i)
+                for i in m["features"]["id"][:]
+            ]
+        )
+        feat_types = np.array(
+            [
+                t.decode("utf-8") if isinstance(t, bytes) else str(t)
+                for t in m["features"]["feature_type"][:]
+            ]
+        )
+
     # 10x HDF5 stores CSC (genes × cells); transpose to (cells × genes) CSR
     n_genes, n_cells = int(shape[0]), int(shape[1])
     mat_csc = sp_sparse.csc_matrix((data, indices, indptr), shape=(n_genes, n_cells))
     mat = mat_csc.tocsr().T
     del data, indices, indptr, mat_csc
     gc.collect()
-    log(f'[Xenium] Expression matrix: {mat.shape[0]:,} cells × {mat.shape[1]:,} genes '
-        f'({mat.nnz/1e6:.1f}M non-zero) [{time.time()-t0:.1f}s]')
-    
+    log(
+        f"[Xenium] Expression matrix: {mat.shape[0]:,} cells × {mat.shape[1]:,} genes "
+        f"({mat.nnz/1e6:.1f}M non-zero) [{time.time()-t0:.1f}s]"
+    )
+
     # ── 2. Read cell metadata ──
     t0 = time.time()
     cells_path = datapath / cells_file
     if not cells_path.exists():
         raise FileNotFoundError(f"Cell metadata not found: {cells_path}")
     cells_df = pd.read_parquet(cells_path)
-    cells_df = cells_df.set_index('cell_id')
-    log(f'[Xenium] Cell metadata: {len(cells_df):,} cells [{time.time()-t0:.1f}s]')
-    
+    cells_df = cells_df.set_index("cell_id")
+    log(f"[Xenium] Cell metadata: {len(cells_df):,} cells [{time.time()-t0:.1f}s]")
+
     # ── 3. Align expression barcodes with cell metadata ──
     t0 = time.time()
     # Xenium cell_ids already include suffix; use as-is
-    obs_index = pd.Index(barcodes, name='cell_id')
-    
+    obs_index = pd.Index(barcodes, name="cell_id")
+
     common_cells = obs_index.intersection(cells_df.index)
     if len(common_cells) != n_cells:
-        log(f'  Warning: {len(common_cells):,}/{n_cells:,} cells matched between '
-            f'expression and metadata')
-    
+        log(
+            f"  Warning: {len(common_cells):,}/{n_cells:,} cells matched between "
+            f"expression and metadata"
+        )
+
     # Build row index map for subsetting the matrix
     row_mask = obs_index.isin(common_cells)
     row_indices = np.where(row_mask)[0]
     mat = mat[row_indices, :]
-    
+
     # Reorder metadata to match expression order
     cells_df = cells_df.loc[common_cells]
-    log(f'[Xenium] Aligned: {len(common_cells):,} cells [{time.time()-t0:.1f}s]')
-    
+    log(f"[Xenium] Aligned: {len(common_cells):,} cells [{time.time()-t0:.1f}s]")
+
     # ── 4. Build AnnData ──
     t0 = time.time()
     obs = pd.DataFrame(index=common_cells)
-    obs_cols = ['x_centroid', 'y_centroid', 'cell_area', 'nucleus_area',
-                'transcript_counts', 'total_counts', 'nucleus_count',
-                'control_probe_counts', 'genomic_control_counts',
-                'control_codeword_counts', 'unassigned_codeword_counts',
-                'segmentation_method']
+    obs_cols = [
+        "x_centroid",
+        "y_centroid",
+        "cell_area",
+        "nucleus_area",
+        "transcript_counts",
+        "total_counts",
+        "nucleus_count",
+        "control_probe_counts",
+        "genomic_control_counts",
+        "control_codeword_counts",
+        "unassigned_codeword_counts",
+        "segmentation_method",
+    ]
     for col in obs_cols:
         if col in cells_df.columns:
             obs[col] = cells_df[col].values
-    
+
     var = pd.DataFrame(
-        {'gene_ids': feat_ids, 'feature_types': feat_types},
-        index=feat_names
+        {"gene_ids": feat_ids, "feature_types": feat_types}, index=feat_names
     )
-    var.index.name = 'gene_symbol'
-    
+    var.index.name = "gene_symbol"
+
     adata = sc.AnnData(X=mat, obs=obs, var=var)
-    adata.obs.index.name = 'cell_id'
-    
+    adata.obs.index.name = "cell_id"
+
     if not sp_sparse.isspmatrix_csr(adata.X):
         adata.X = adata.X.tocsr()
-    log(f'[Xenium] AnnData built: {adata.shape} [{time.time()-t0:.1f}s]')
-    
+    log(f"[Xenium] AnnData built: {adata.shape} [{time.time()-t0:.1f}s]")
+
     # ── 5. Spatial coordinates ──
     t0 = time.time()
-    adata.obsm['spatial'] = adata.obs[['x_centroid', 'y_centroid']].values.astype(np.float32)
-    log(f'[Xenium] Spatial coords [{time.time()-t0:.1f}s]')
-    
+    adata.obsm["spatial"] = adata.obs[["x_centroid", "y_centroid"]].values.astype(
+        np.float32
+    )
+    log(f"[Xenium] Spatial coords [{time.time()-t0:.1f}s]")
+
     # ── 6. Cell boundaries → GeoDataFrame polygons + compact arrays ──
     t0 = time.time()
     # These maps are also used by the nucleus-boundary block below, which can
@@ -726,22 +794,22 @@ def read_xenium_cellseg(
     bd_path = datapath / boundaries_file
     if build_polygons and bd_path.exists():
         bd_df = pd.read_parquet(bd_path)
-        log(f'  Loaded {len(bd_df):,} boundary vertices [{time.time()-t0:.1f}s]')
-        
+        log(f"  Loaded {len(bd_df):,} boundary vertices [{time.time()-t0:.1f}s]")
+
         t1 = time.time()
         # Single pass: build both compact arrays and polygons
         n_vertices_list, all_vx, all_vy = [], [], []
         cell_to_bd_idx = np.full(len(common_cells), -1, dtype=np.int32)
         polygons = {}
         cum_vertices = 0
-        
-        for cell_id, group in bd_df.groupby('cell_id', sort=False):
+
+        for cell_id, group in bd_df.groupby("cell_id", sort=False):
             if cell_id not in cell_set:
                 continue
-            vx = group['vertex_x'].values
-            vy = group['vertex_y'].values
+            vx = group["vertex_x"].values
+            vy = group["vertex_y"].values
             idx = cell_idx_map[cell_id]
-            
+
             # Compact arrays
             cell_to_bd_idx[idx] = cum_vertices
             nv = len(vx)
@@ -749,111 +817,112 @@ def read_xenium_cellseg(
             cum_vertices += nv
             all_vx.append(vx)
             all_vy.append(vy)
-            
+
             # Polygon
             if nv >= 3:
                 poly = geometry.Polygon(np.column_stack([vx, vy]))
                 if poly.is_valid and not poly.is_empty:
                     polygons[cell_id] = poly
-        
+
         if all_vx:
-            adata.uns['cell_boundaries'] = {
-                'vertex_x': np.concatenate(all_vx).astype(np.float32),
-                'vertex_y': np.concatenate(all_vy).astype(np.float32),
-                'n_vertices': np.array(n_vertices_list, dtype=np.int32),
-                'cell_idx': cell_to_bd_idx,
+            adata.uns["cell_boundaries"] = {
+                "vertex_x": np.concatenate(all_vx).astype(np.float32),
+                "vertex_y": np.concatenate(all_vy).astype(np.float32),
+                "n_vertices": np.array(n_vertices_list, dtype=np.int32),
+                "cell_idx": cell_to_bd_idx,
             }
         del bd_df
         gc.collect()
-        log(f'  Boundaries: {len(polygons):,}/{len(common_cells):,} cells '
-            f'({len(polygons)/len(common_cells)*100:.1f}%) '
-            f'[{time.time()-t1:.1f}s]')
+        log(
+            f"  Boundaries: {len(polygons):,}/{len(common_cells):,} cells "
+            f"({len(polygons)/len(common_cells)*100:.1f}%) "
+            f"[{time.time()-t1:.1f}s]"
+        )
     else:
         if build_polygons:
-            log(f'  No cell boundary file: {bd_path}')
+            log(f"  No cell boundary file: {bd_path}")
         polygons = {}
-    
+
     # ── 7. Nucleus boundaries (optional) ──
     nuc_path = datapath / nucleus_boundaries_file
     if include_nucleus and nuc_path.exists():
         t0 = time.time()
         nuc_df = pd.read_parquet(nuc_path)
-        nuc_grouped = nuc_df.groupby('cell_id', sort=False)
-        
+        nuc_grouped = nuc_df.groupby("cell_id", sort=False)
+
         nuc_nv_list, nuc_vx, nuc_vy = [], [], []
         nuc_to_idx = np.full(len(common_cells), -1, dtype=np.int32)
         cum_nuc = 0
-        
+
         for cell_id, group in nuc_grouped:
             if cell_id in cell_set:
-                vx = group['vertex_x'].values
-                vy = group['vertex_y'].values
+                vx = group["vertex_x"].values
+                vy = group["vertex_y"].values
                 idx = cell_idx_map[cell_id]
                 nuc_to_idx[idx] = cum_nuc
                 nuc_nv_list.append(len(vx))
                 cum_nuc += len(vx)
                 nuc_vx.append(vx)
                 nuc_vy.append(vy)
-        
+
         if nuc_vx:
-            adata.uns['nucleus_boundaries'] = {
-                'vertex_x': np.concatenate(nuc_vx).astype(np.float32),
-                'vertex_y': np.concatenate(nuc_vy).astype(np.float32),
-                'n_vertices': np.array(nuc_nv_list, dtype=np.int32),
-                'cell_idx': nuc_to_idx,
+            adata.uns["nucleus_boundaries"] = {
+                "vertex_x": np.concatenate(nuc_vx).astype(np.float32),
+                "vertex_y": np.concatenate(nuc_vy).astype(np.float32),
+                "n_vertices": np.array(nuc_nv_list, dtype=np.int32),
+                "cell_idx": nuc_to_idx,
             }
         del nuc_df
         gc.collect()
-        log(f'[Xenium] Nucleus boundaries [{time.time()-t0:.1f}s]')
-    
+        log(f"[Xenium] Nucleus boundaries [{time.time()-t0:.1f}s]")
+
     # ── 8. Experiment metadata ──
     exp_path = datapath / experiment_file
     if exp_path.exists():
         with open(exp_path) as f:
-            adata.uns['experiment'] = json.load(f)
-    
+            adata.uns["experiment"] = json.load(f)
+
     # ── 9. Gene panel metadata ──
     panel_path = datapath / panel_file
     if panel_path.exists():
         with open(panel_path) as f:
-            adata.uns['gene_panel'] = json.load(f)
-    
+            adata.uns["gene_panel"] = json.load(f)
+
     # ── 10. Setup spatial metadata (squidpy-compatible) ──
-    adata.uns['spatial'] = {
+    adata.uns["spatial"] = {
         sample: {
-            'metadata': {
-                'sample_id': sample,
-                'pixel_size': adata.uns.get('experiment', {}).get('pixel_size', 0.2125),
+            "metadata": {
+                "sample_id": sample,
+                "pixel_size": adata.uns.get("experiment", {}).get("pixel_size", 0.2125),
             },
-            'scalefactors': {
-                'spot_diameter_fullres': 1.0,
-                'tissue_hires_scalef': 1.0,
-                'tissue_lowres_scalef': 1.0,
+            "scalefactors": {
+                "spot_diameter_fullres": 1.0,
+                "tissue_hires_scalef": 1.0,
+                "tissue_lowres_scalef": 1.0,
             },
         }
     }
-    
+
     # ── 11. Store geometries (GeoDataFrame + WKT strings) ──
     if polygons:
         # Build GeoDataFrame indexed by cell_id
-        gdf = gpd.GeoDataFrame(
-            {'geometry': pd.Series(polygons)},
-            geometry='geometry'
-        )
-        gdf.index.name = 'cell_id'
-        adata.uns['spatial'][sample]['geometries'] = gdf
-        
+        gdf = gpd.GeoDataFrame({"geometry": pd.Series(polygons)}, geometry="geometry")
+        gdf.index.name = "cell_id"
+        adata.uns["spatial"][sample]["geometries"] = gdf
+
         # Store WKT strings in obs for serialization
         if store_wkt:
-            adata.obs['geometry'] = pd.Series(
+            adata.obs["geometry"] = pd.Series(
                 {cid: wkt.dumps(poly) for cid, poly in polygons.items()},
-                name='geometry'
+                name="geometry",
             )
-        
+
         n_geo = len(polygons)
-        log(f'[Xenium] Geometries: {n_geo:,}/{len(common_cells):,} cells '
-            f'({n_geo/len(common_cells)*100:.1f}%)')
-    
+        log(
+            f"[Xenium] Geometries: {n_geo:,}/{len(common_cells):,} cells "
+            f"({n_geo/len(common_cells)*100:.1f}%)"
+        )
+
     if slice_separate:
         from ..tl.slice_separation import spatial_slice_cluster
 
@@ -866,25 +935,25 @@ def read_xenium_cellseg(
             slice_prefix=slice_prefix,
         )
         n_slices = adata.uns.get("slice_id_summary", {}).get("n_slices", 0)
-        log(f'[Xenium] Slice separation: {n_slices} slices (eps={slice_eps})')
+        log(f"[Xenium] Slice separation: {n_slices} slices (eps={slice_eps})")
 
     elapsed = time.time() - t_total
-    log(f'[Xenium] Total: read_xenium_cellseg done [{elapsed:.1f}s]')
-    
+    log(f"[Xenium] Total: read_xenium_cellseg done [{elapsed:.1f}s]")
+
     return adata
 
 
-def convert_classification_to_color_dict(df, classification_col='classification'):
+def convert_classification_to_color_dict(df, classification_col="classification"):
     """
     Convert classification information in DataFrame column to color dictionary.
-    
+
     Parameters
     ----------
     df : pandas.DataFrame
         DataFrame containing classification information.
     classification_col : str, default 'classification'
         Column name containing classification information.
-    
+
     Returns
     -------
     dict
@@ -901,39 +970,39 @@ def convert_classification_to_color_dict(df, classification_col='classification'
         for cls in entries:
             if not isinstance(cls, dict):
                 continue
-            name = cls.get('name')
-            rgb = cls.get('color')
+            name = cls.get("name")
+            rgb = cls.get("color")
             if name is None or rgb is None or len(rgb) < 3:
                 continue
             # Convert RGB list to hexadecimal color code.
-            hex_color = '#{:02x}{:02x}{:02x}'.format(*rgb[:3])
+            hex_color = "#{:02x}{:02x}{:02x}".format(*rgb[:3])
             color_dict[name] = hex_color
-    
+
     return color_dict
 
 
 def sync_geometries_after_subset(adata, sample: Optional[str] = None):
     """
-    Synchronize geometries in adata.uns["spatial"][sample]["geometries"] 
+    Synchronize geometries in adata.uns["spatial"][sample]["geometries"]
     after subsetting the AnnData object.
-    
+
     When you subset an AnnData object (e.g., adata[mask] or adata[adata.obs['col'] == 'value']),
     the adata.obs["geometry"] column is automatically subset, but the GeoDataFrame in
     adata.uns["spatial"][sample]["geometries"] is not automatically updated. This function
     ensures that the geometries GeoDataFrame matches the subsetted cells.
-    
+
     Parameters
     ----------
     adata : sc.AnnData
         AnnData object that has been subsetted.
     sample : str, optional
         Sample name. If None, will use the first available sample in adata.uns["spatial"].
-    
+
     Returns
     -------
     sc.AnnData
         The same AnnData object with synchronized geometries (modified in place).
-    
+
     Examples
     --------
     >>> import trackcell.io as tcio
@@ -950,7 +1019,7 @@ def sync_geometries_after_subset(adata, sample: Optional[str] = None):
             "This function is intended for data loaded with read_hd_cellseg()."
         )
         return adata
-    
+
     # Determine sample name
     if sample is None:
         available_samples = list(adata.uns["spatial"].keys())
@@ -963,13 +1032,13 @@ def sync_geometries_after_subset(adata, sample: Optional[str] = None):
                 f"Multiple samples found: {available_samples}. "
                 f"Using '{sample}'. Specify `sample` explicitly to use a different one."
             )
-    
+
     if sample not in adata.uns["spatial"]:
         warnings.warn(f"Sample '{sample}' not found in adata.uns['spatial'].")
         return adata
-    
+
     spatial_info = adata.uns["spatial"][sample]
-    
+
     # Check if geometries exist
     if "geometries" not in spatial_info:
         warnings.warn(
@@ -977,12 +1046,12 @@ def sync_geometries_after_subset(adata, sample: Optional[str] = None):
             "This function is intended for data loaded with read_hd_cellseg()."
         )
         return adata
-    
+
     geometries = spatial_info["geometries"]
-    
+
     # Get the current cell IDs in the subsetted adata
     current_cell_ids = set(adata.obs_names)
-    
+
     # Filter geometries to only include cells in the subset
     # Check if geometries is indexed by cell IDs
     if isinstance(geometries, gpd.GeoDataFrame):
@@ -1005,10 +1074,10 @@ def sync_geometries_after_subset(adata, sample: Optional[str] = None):
                     f"Error: {e}"
                 )
                 return adata
-        
+
         # Update the geometries in place
         spatial_info["geometries"] = geometries_subset
-        
+
         # Note: adata.obs["geometry"] is automatically subset when adata is subset,
         # so we don't need to manually update it here
     else:
@@ -1033,4 +1102,3 @@ def sync_geometries_after_subset(adata, sample: Optional[str] = None):
                 )
 
     return adata
-

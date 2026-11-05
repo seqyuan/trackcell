@@ -366,11 +366,7 @@ def split_by_slice(
         mask = adata.obs[slice_key] == sid
         # Reindexing writes into ``uns``; force a copy so ``copy=False`` views
         # do not mutate the parent AnnData's boundary arrays.
-        sub = (
-            adata[mask].copy()
-            if (copy or reindex_boundaries)
-            else adata[mask]
-        )
+        sub = adata[mask].copy() if (copy or reindex_boundaries) else adata[mask]
         if reindex_boundaries:
             positions = adata.obs_names.get_indexer(sub.obs_names)
             _reindex_cell_boundaries(sub, positions)
@@ -590,7 +586,9 @@ def distance_to_nearest_centroids(
     gcc_mask = target.obs[centroid_key] == centroid_label
     gcc_coords = coords[gcc_mask.to_numpy()]
     if len(gcc_coords) == 0:
-        raise ValueError(f"No cells labeled '{centroid_label}' in obs['{centroid_key}']")
+        raise ValueError(
+            f"No cells labeled '{centroid_label}' in obs['{centroid_key}']"
+        )
 
     tree = cKDTree(gcc_coords)
     distances, _ = tree.query(coords, k=1)

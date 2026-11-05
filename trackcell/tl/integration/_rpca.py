@@ -84,14 +84,20 @@ def reciprocal_project(
         Both are (n1+n2) x dims matrices used for anchor finding.
     """
     dims = min(dims, pca1.embeddings.shape[1], pca2.embeddings.shape[1])
-    n_feat = min(data1.shape[1], data2.shape[1], pca1.loadings.shape[0], pca2.loadings.shape[0])
+    n_feat = min(
+        data1.shape[1], data2.shape[1], pca1.loadings.shape[0], pca2.loadings.shape[0]
+    )
     feature_idx = np.arange(n_feat)
     loadings1 = pca1.loadings[feature_idx, :dims]
     loadings2 = pca2.loadings[feature_idx, :dims]
     emb1 = pca1.embeddings[:, :dims]
     emb2 = pca2.embeddings[:, :dims]
-    proj1 = project_svd(loadings2, data1, feature_idx=feature_idx, center=False)[:, :dims]
-    proj2 = project_svd(loadings1, data2, feature_idx=feature_idx, center=False)[:, :dims]
+    proj1 = project_svd(loadings2, data1, feature_idx=feature_idx, center=False)[
+        :, :dims
+    ]
+    proj2 = project_svd(loadings1, data2, feature_idx=feature_idx, center=False)[
+        :, :dims
+    ]
     ref_embedding = np.vstack([emb1, proj2])
     query_embedding = np.vstack([proj1, emb2])
     if l2_norm:

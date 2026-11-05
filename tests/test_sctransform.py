@@ -111,7 +111,9 @@ def test_sctransform_layer_residuals_are_aligned_to_var_names():
         layer_col = dense[:, layer_ad.var_names.get_loc(gene)]
         np.testing.assert_allclose(layer_col, obsm_col, rtol=1e-5, atol=1e-5)
     # Non-HVG columns stay zero.
-    assert np.allclose(dense[:, np.setdiff1d(np.arange(layer_ad.n_vars), hvg_positions)], 0)
+    assert np.allclose(
+        dense[:, np.setdiff1d(np.arange(layer_ad.n_vars), hvg_positions)], 0
+    )
 
 
 def test_sctransform_dense_input():
@@ -343,7 +345,9 @@ def test_sctransform_batch_key_parallel_matches_serial():
     adata_serial = _make_count_adata(n_cells=80, n_genes=100, seed=31)
     adata_parallel = _make_count_adata(n_cells=80, n_genes=100, seed=31)
     for ad in (adata_serial, adata_parallel):
-        ad.obs["orig.ident"] = np.random.default_rng(31).choice(["A", "B", "C"], ad.n_obs)
+        ad.obs["orig.ident"] = np.random.default_rng(31).choice(
+            ["A", "B", "C"], ad.n_obs
+        )
     sctransform(
         adata_serial,
         batch_key="orig.ident",
@@ -365,9 +369,10 @@ def test_sctransform_batch_key_parallel_matches_serial():
     assert set(adata_serial.uns["sct"]["batch_models"]) == set(
         adata_parallel.uns["sct"]["batch_models"]
     )
-    assert adata_serial.uns["sct"]["variable_features"] == adata_parallel.uns["sct"][
-        "variable_features"
-    ]
+    assert (
+        adata_serial.uns["sct"]["variable_features"]
+        == adata_parallel.uns["sct"]["variable_features"]
+    )
     np.testing.assert_allclose(
         adata_serial.obsm["X_sct"],
         adata_parallel.obsm["X_sct"],
@@ -446,7 +451,6 @@ def test_sctransform_vst_flavor_v2_pyglmGamPoi():
     )
     assert adata.uns["sct"]["params"]["vst_flavor"] == "v2"
     assert np.isfinite(adata.obsm["X_sct"]).all()
-
 
 
 def test_sctransform_model_use_poisson():

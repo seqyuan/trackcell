@@ -62,7 +62,12 @@ def verify_seurat_parity_vs_r(
     """
     step_dir = benchmark_root / "steps/r_sct_stepwise" / sample
     meta = pd.read_json(step_dir / "meta.json", typ="series")
-    r_cells = (benchmark_root / "steps/r/01_filter" / f"{sample}_cells.txt").read_text().strip().split("\n")
+    r_cells = (
+        (benchmark_root / "steps/r/01_filter" / f"{sample}_cells.txt")
+        .read_text()
+        .strip()
+        .split("\n")
+    )
     r_cells = [c for c in r_cells if c]
 
     col_sums = np.asarray(umi.sum(axis=0)).ravel()
@@ -75,7 +80,9 @@ def verify_seurat_parity_vs_r(
         "meta_n_cells": int(meta["n_cells"]),
         "shape_matches_meta": umi.shape == (int(meta["n_genes"]), int(meta["n_cells"])),
         "cells_match_r": set(map(str, cells)) == set(r_cells),
-        "log_umi_max_diff": float(np.max(np.abs(cell_attr["log_umi"].to_numpy() - log_umi_ref))),
+        "log_umi_max_diff": float(
+            np.max(np.abs(cell_attr["log_umi"].to_numpy() - log_umi_ref))
+        ),
     }
     r_colsums_path = benchmark_root / "steps" / "py_loader_check" / "r_colsums.txt"
     if r_colsums_path.exists():
@@ -83,7 +90,9 @@ def verify_seurat_parity_vs_r(
         out["colsums_max_diff_vs_r"] = float(np.max(np.abs(col_sums - r_col)))
     r_genes = _load_r_reference_gene_names(benchmark_root, sample, int(umi.shape[0]))
     if r_genes is not None:
-        out["gene_names_match_r_reference"] = list(map(str, genes)) == list(map(str, r_genes))
+        out["gene_names_match_r_reference"] = list(map(str, genes)) == list(
+            map(str, r_genes)
+        )
     return out
 
 
@@ -170,7 +179,9 @@ def load_seurat_parity_umi(
         & (pct_mt < fp.max_percent_mt)
     )
     umi = umi[:, keep_cells]
-    cells = pd.Index([f"{sample}_{bc}" for bc in np.asarray(adata.obs_names)[keep_cells]])
+    cells = pd.Index(
+        [f"{sample}_{bc}" for bc in np.asarray(adata.obs_names)[keep_cells]]
+    )
 
     cell_attr = pd.DataFrame(
         {
@@ -243,7 +254,9 @@ def load_tcl_filtered_adata(
         seurat_parity=seurat_parity,
     )
     x = umi.T.tocsr() if issparse(umi) else csr_matrix(umi.T)
-    adata = sc.AnnData(X=x, obs=pd.DataFrame(index=cells), var=pd.DataFrame(index=genes))
+    adata = sc.AnnData(
+        X=x, obs=pd.DataFrame(index=cells), var=pd.DataFrame(index=genes)
+    )
     adata.layers["counts"] = adata.X.copy()
     return adata
 

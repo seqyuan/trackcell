@@ -17,15 +17,14 @@ from shapely.geometry import Polygon
 from shapely import wkt
 from scipy.sparse import csr_matrix
 from pathlib import Path
-from typing import Optional, Union, List
+from typing import Optional, Union
+
 try:
     import h5py
 except ImportError:
     h5py = None
 import time
 import warnings
-import glob
-import json
 
 from .._logging import get_logger
 
@@ -66,18 +65,22 @@ def _extract_polygon_from_relative_offsets(
         has fewer than 3 valid vertices.
     """
     # Strip trailing sentinel entries
-    valid_mask = (border_offsets[:, 0] != _BORDER_SENTINEL) | (border_offsets[:, 1] != _BORDER_SENTINEL)
+    valid_mask = (border_offsets[:, 0] != _BORDER_SENTINEL) | (
+        border_offsets[:, 1] != _BORDER_SENTINEL
+    )
     valid_offsets = border_offsets[valid_mask]
 
     if len(valid_offsets) < 3:
         # Not enough points for a polygon; use a small square around centroid.
         half = 5
-        return Polygon([
-            (cell_x - half, cell_y - half),
-            (cell_x + half, cell_y - half),
-            (cell_x + half, cell_y + half),
-            (cell_x - half, cell_y + half),
-        ])
+        return Polygon(
+            [
+                (cell_x - half, cell_y - half),
+                (cell_x + half, cell_y - half),
+                (cell_x + half, cell_y + half),
+                (cell_x - half, cell_y + half),
+            ]
+        )
 
     # Convert offsets + centroid → absolute coordinates
     abs_coords = valid_offsets.astype(np.float64)
@@ -88,8 +91,9 @@ def _extract_polygon_from_relative_offsets(
     if not poly.is_valid or poly.is_empty:
         # Fallback: convex hull of points → buffer to ensure polygon
         from shapely.geometry import MultiPoint
+
         hull = MultiPoint(abs_coords).convex_hull
-        if hasattr(hull, 'buffer'):
+        if hasattr(hull, "buffer"):
             return hull.buffer(1.0)
         return None
 
@@ -121,7 +125,7 @@ def _build_expression_matrix_from_cell_exp(
     csr_matrix
         Shape (n_cells, n_genes) with dtype np.float32.
     """
-    cell_offsets = cell['offset'].astype(np.int64)
+    cell_offsets = cell["offset"].astype(np.int64)
     total_entries = len(cell_exp)
 
     # Determine end offsets for each cell
@@ -146,9 +150,9 @@ def _build_expression_matrix_from_cell_exp(
         n = end - start
         if n > 0:
             indptr[i + 1] = indptr[i] + n
-            rows[pos:pos + n] = i
-            cols[pos:pos + n] = cell_exp['geneID'][start:end]
-            data[pos:pos + n] = cell_exp['count'][start:end].astype(np.float32)
+            rows[pos : pos + n] = i
+            cols[pos : pos + n] = cell_exp["geneID"][start:end]
+            data[pos : pos + n] = cell_exp["count"][start:end].astype(np.float32)
             pos += n
         else:
             indptr[i + 1] = indptr[i]
@@ -163,18 +167,18 @@ def _find_register_image(register_dir: Path) -> Optional[Path]:
     ``ssDNA_fov_stitched_transformed.tif`` or any ``*.tif``.
     """
     patterns = [
-        '*_regist.tif',
-        '*_regist.TIF',
-        'ssDNA_fov_stitched_transformed.tif',
-        '*.tif',
-        '*.TIF',
+        "*_regist.tif",
+        "*_regist.TIF",
+        "ssDNA_fov_stitched_transformed.tif",
+        "*.tif",
+        "*.TIF",
     ]
     for pat in patterns:
         candidates = list(register_dir.glob(pat))
         if candidates:
             # Prefer files without 'mask' or 'tissue_cut' in name
             for c in candidates:
-                if 'mask' not in c.name.lower() and 'tissue_cut' not in c.name.lower():
+                if "mask" not in c.name.lower() and "tissue_cut" not in c.name.lower():
                     return c
             return candidates[0]
     return None
@@ -203,6 +207,7 @@ def _load_tissue_image(
     np.ndarray or None
         The loaded image array (always 3-channel RGB), or None if not found.
     """
+
     def _ensure_rgb(img: np.ndarray) -> np.ndarray:
         """Convert grayscale (H,W) or (H,W,1) to (H,W,3) RGB."""
         if img.ndim == 2:
@@ -216,11 +221,17 @@ def _load_tissue_image(
 
     def _read_and_convert(path: Path) -> np.ndarray:
         import imageio.v3 as iio
+
         img = iio.imread(path)
         img = _ensure_rgb(img)
-        logger.info("[STO] Loaded tissue image: %s (%d×%d)",
-                    path.name, img.shape[0], img.shape[1])
+        logger.info(
+            "[STO] Loaded tissue image: %s (%d×%d)",
+            path.name,
+            img.shape[0],
+            img.shape[1],
+        )
         return img
+
     if image_path is not None:
         image_path = Path(image_path).resolve()
         if image_path.is_dir():
@@ -230,9 +241,9 @@ def _load_tissue_image(
             else:
                 warnings.warn(f"No tissue image found in {image_path}")
                 return None
-        if image_path.suffix.lower() in ('.tif', '.tiff'):
+        if image_path.suffix.lower() in (".tif", ".tiff"):
             return _read_and_convert(image_path)
-        elif image_path.suffix.lower() in ('.rpi',):
+        elif image_path.suffix.lower() in (".rpi",):
             warnings.warn(
                 "RPI pyramid images are not supported yet. "
                 "Use the corresponding .tif file instead."
@@ -247,7 +258,7 @@ def _load_tissue_image(
     # Register dir is .../C57_7/03.register/
     # First check sibling directories
     parent = gef_dir.parent
-    for candidate_name in ('03.register', 'register'):
+    for candidate_name in ("03.register", "register"):
         reg_dir = parent / candidate_name
         if reg_dir.is_dir():
             found = _find_register_image(reg_dir)
@@ -256,7 +267,7 @@ def _load_tissue_image(
 
     # Also check two levels up (some pipelines nest deeper)
     grandparent = parent.parent
-    for candidate_name in ('03.register', 'register'):
+    for candidate_name in ("03.register", "register"):
         reg_dir = grandparent / candidate_name
         if reg_dir.is_dir():
             found = _find_register_image(reg_dir)
@@ -271,10 +282,12 @@ def _find_cellbin_gef(dirpath: Path) -> Path:
 
     Looks for files matching ``*cellbin*.gef`` (case-insensitive on macOS).
     """
-    candidates = list(dirpath.glob('*cellbin*.gef')) + list(dirpath.glob('*cellbin*.GEF'))
+    candidates = list(dirpath.glob("*cellbin*.gef")) + list(
+        dirpath.glob("*cellbin*.GEF")
+    )
     if not candidates:
         # Also try any .gef file (some STOmics outputs don't have 'cellbin' in name)
-        candidates = list(dirpath.glob('*.gef')) + list(dirpath.glob('*.GEF'))
+        candidates = list(dirpath.glob("*.gef")) + list(dirpath.glob("*.GEF"))
     if not candidates:
         raise FileNotFoundError(
             f"No cellbin GEF file found in {dirpath}. "
@@ -293,11 +306,11 @@ def _find_tissue_gef(dirpath: Path) -> Path:
     Looks for files matching ``*tissue*.gef`` (case-insensitive on macOS).
     Falls back to any .gef file that is NOT a cellbin file.
     """
-    candidates = list(dirpath.glob('*tissue*.gef')) + list(dirpath.glob('*tissue*.GEF'))
+    candidates = list(dirpath.glob("*tissue*.gef")) + list(dirpath.glob("*tissue*.GEF"))
     if not candidates:
         # Any .gef that doesn't contain 'cellbin'
-        all_gef = list(dirpath.glob('*.gef')) + list(dirpath.glob('*.GEF'))
-        candidates = [f for f in all_gef if 'cellbin' not in f.name.lower()]
+        all_gef = list(dirpath.glob("*.gef")) + list(dirpath.glob("*.GEF"))
+        candidates = [f for f in all_gef if "cellbin" not in f.name.lower()]
     if not candidates:
         raise FileNotFoundError(
             f"No tissue/squarebin GEF file found in {dirpath}. "
@@ -400,28 +413,28 @@ def read_sto_cellbin(
     t_total = time.time()
 
     # ── 1. Open GEF and validate ──
-    with h5py.File(gef_path, 'r') as f:
-        if 'cellBin' not in f:
+    with h5py.File(gef_path, "r") as f:
+        if "cellBin" not in f:
             raise ValueError(
                 f"'{gef_path.name}' does not contain a 'cellBin' group. "
                 "Expected a cellbin GEF file."
             )
 
-        cb = f['cellBin']
+        cb = f["cellBin"]
 
         # ── 2. Read cell metadata ──
         t0 = time.time()
-        cell = cb['cell'][:]
+        cell = cb["cell"][:]
         n_cells = len(cell)
         logger.info("[STO cellbin] %s cells [%.1fs]", f"{n_cells:,}", time.time() - t0)
 
         # ── 3. Read cell borders → polygons ──
         t0 = time.time()
-        cell_border = cb['cellBorder'][:]  # (n_cells, 32, 2), int16
+        cell_border = cb["cellBorder"][:]  # (n_cells, 32, 2), int16
         border_sentinel = np.int16(_BORDER_SENTINEL)
 
-        cells_x = cell['x'].astype(np.float64)
-        cells_y = cell['y'].astype(np.float64)
+        cells_x = cell["x"].astype(np.float64)
+        cells_y = cell["y"].astype(np.float64)
 
         polygons = {}
         n_valid = 0
@@ -432,74 +445,107 @@ def read_sto_cellbin(
             # Quick check: is this cell fully sentinel?
             if np.all(offsets == border_sentinel):
                 half = 5.0
-                poly = Polygon([
-                    (cells_x[i] - half, cells_y[i] - half),
-                    (cells_x[i] + half, cells_y[i] - half),
-                    (cells_x[i] + half, cells_y[i] + half),
-                    (cells_x[i] - half, cells_y[i] + half),
-                ])
+                poly = Polygon(
+                    [
+                        (cells_x[i] - half, cells_y[i] - half),
+                        (cells_x[i] + half, cells_y[i] - half),
+                        (cells_x[i] + half, cells_y[i] + half),
+                        (cells_x[i] - half, cells_y[i] + half),
+                    ]
+                )
                 n_fallback += 1
             else:
-                poly = _extract_polygon_from_relative_offsets(offsets, cells_x[i], cells_y[i])
+                poly = _extract_polygon_from_relative_offsets(
+                    offsets, cells_x[i], cells_y[i]
+                )
                 if poly is not None:
                     n_valid += 1
                 else:
                     n_fallback += 1
             polygons[i] = poly
 
-        logger.info("[STO cellbin] Borders: %s valid polygons, "
-                    "%s fallback [%.1fs]",
-                    f"{n_valid:,}", f"{n_fallback:,}", time.time() - t0)
+        logger.info(
+            "[STO cellbin] Borders: %s valid polygons, " "%s fallback [%.1fs]",
+            f"{n_valid:,}",
+            f"{n_fallback:,}",
+            time.time() - t0,
+        )
 
         # ── 4. Read gene metadata ──
         t0 = time.time()
-        gene_data = cb['gene'][:]
+        gene_data = cb["gene"][:]
         # Some GEF files have gene rows with count==0 (placeholders); keep all.
-        gene_names_bytes = gene_data['geneName']
-        gene_names = np.array([gn.decode('utf-8') if isinstance(gn, bytes) else str(gn)
-                               for gn in gene_names_bytes])
+        gene_names_bytes = gene_data["geneName"]
+        gene_names = np.array(
+            [
+                gn.decode("utf-8") if isinstance(gn, bytes) else str(gn)
+                for gn in gene_names_bytes
+            ]
+        )
         n_genes = len(gene_names)
         logger.info("[STO cellbin] %s genes [%.1fs]", f"{n_genes:,}", time.time() - t0)
 
         # ── 5. Build expression matrix ──
         t0 = time.time()
-        cell_exp = cb['cellExp'][:]
-        exp_matrix = _build_expression_matrix_from_cell_exp(cell, cell_exp, n_genes, n_cells)
+        cell_exp = cb["cellExp"][:]
+        exp_matrix = _build_expression_matrix_from_cell_exp(
+            cell, cell_exp, n_genes, n_cells
+        )
         del cell_exp
-        logger.info("[STO cellbin] Expression matrix: %s "
-                    "(%.1fM non-zero) [%.1fs]",
-                    exp_matrix.shape, exp_matrix.nnz / 1e6, time.time() - t0)
+        logger.info(
+            "[STO cellbin] Expression matrix: %s " "(%.1fM non-zero) [%.1fs]",
+            exp_matrix.shape,
+            exp_matrix.nnz / 1e6,
+            time.time() - t0,
+        )
 
         # ── 6. Additional metadata from GEF ──
         # GEF top-level attrs: resolution (nm per unit), offsetX, offsetY
         gef_attrs = dict(f.attrs)
-        resolution = int(gef_attrs.get('resolution', [500])[0] if isinstance(gef_attrs.get('resolution'), np.ndarray) else gef_attrs.get('resolution', 500))
-        offset_x = int(gef_attrs.get('offsetX', [0])[0] if isinstance(gef_attrs.get('offsetX'), np.ndarray) else 0)
-        offset_y = int(gef_attrs.get('offsetY', [0])[0] if isinstance(gef_attrs.get('offsetY'), np.ndarray) else 0)
+        resolution = int(
+            gef_attrs.get("resolution", [500])[0]
+            if isinstance(gef_attrs.get("resolution"), np.ndarray)
+            else gef_attrs.get("resolution", 500)
+        )
+        # NOTE: offsetX/offsetY are parsed but not yet applied to coordinates
+        # (potential coordinate-offset bug — kept for review, R-06).
+        offset_x = int(  # noqa: F841
+            gef_attrs.get("offsetX", [0])[0]
+            if isinstance(gef_attrs.get("offsetX"), np.ndarray)
+            else 0
+        )
+        offset_y = int(  # noqa: F841
+            gef_attrs.get("offsetY", [0])[0]
+            if isinstance(gef_attrs.get("offsetY"), np.ndarray)
+            else 0
+        )  # noqa: F841
         # Cell-level attrs give bounding box
-        cell_attrs = dict(f['cellBin']['cell'].attrs)
-        cell_min_x = int(cell_attrs.get('minX', 0))
-        cell_max_x = int(cell_attrs.get('maxX', 0))
-        cell_min_y = int(cell_attrs.get('minY', 0))
-        cell_max_y = int(cell_attrs.get('maxY', 0))
+        cell_attrs = dict(f["cellBin"]["cell"].attrs)
+        cell_min_x = int(cell_attrs.get("minX", 0))
+        cell_max_x = int(cell_attrs.get("maxX", 0))
+        cell_min_y = int(cell_attrs.get("minY", 0))
+        cell_max_y = int(cell_attrs.get("maxY", 0))
 
     # ── 7. Infer sample name ──
     if sample is None:
         # Try to infer from filename: e.g. B02825B2.cellbin.gef -> B02825B2
-        sample = gef_path.stem.split('.')[0]
+        sample = gef_path.stem.split(".")[0]
 
     # ── 8. Build AnnData ──
     t0 = time.time()
 
     # Cell IDs: use numeric cell IDs from GEF
-    cell_ids = np.array([f"cell_{cid}" for cid in cell['id']])
+    cell_ids = np.array([f"cell_{cid}" for cid in cell["id"]])
 
-    obs = pd.DataFrame({
-        'area': cell['area'].astype(np.int32),
-        'dnb_count': cell['dnbCount'].astype(np.int32),
-        'gene_count': cell['geneCount'].astype(np.int32),
-        'exp_count': cell['expCount'].astype(np.int32),
-    }, index=cell_ids)
+    obs = pd.DataFrame(
+        {
+            "area": cell["area"].astype(np.int32),
+            "dnb_count": cell["dnbCount"].astype(np.int32),
+            "gene_count": cell["geneCount"].astype(np.int32),
+            "exp_count": cell["expCount"].astype(np.int32),
+        },
+        index=cell_ids,
+    )
 
     if gene_name_index:
         var = pd.DataFrame(index=gene_names)
@@ -507,15 +553,14 @@ def read_sto_cellbin(
         var = pd.DataFrame(index=np.arange(n_genes).astype(str))
 
     adata = sc.AnnData(X=exp_matrix, obs=obs, var=var)
-    adata.obs.index.name = 'cell_id'
+    adata.obs.index.name = "cell_id"
 
     # Spatial coordinates (centroids)
-    adata.obsm['spatial'] = np.column_stack([cells_x, cells_y])
+    adata.obsm["spatial"] = np.column_stack([cells_x, cells_y])
 
     # Store WKT geometry strings in .obs for serialization
-    adata.obs['geometry'] = pd.Series(
-        {cell_ids[i]: wkt.dumps(poly) for i, poly in polygons.items()},
-        name='geometry'
+    adata.obs["geometry"] = pd.Series(
+        {cell_ids[i]: wkt.dumps(poly) for i, poly in polygons.items()}, name="geometry"
     )
 
     # ── 9. Setup spatial metadata (trackcell-compatible) ──
@@ -527,23 +572,23 @@ def read_sto_cellbin(
     # while cell coordinates are a subset within that field.
     # scalefactor = 1.0: 1 image pixel = 1 GEF coordinate unit.
     # Circular-cell diameter from area (area is in coordinate units²).
-    spot_diameter = 2.0 * np.sqrt(np.median(cell['area']) / np.pi)
+    spot_diameter = 2.0 * np.sqrt(np.median(cell["area"]) / np.pi)
 
-    adata.uns['spatial'] = {
+    adata.uns["spatial"] = {
         sample: {
-            'metadata': {
-                'sample_id': sample,
-                'pixel_size_um': pixel_size_um,
-                'resolution_nm': resolution,
-                'coordinate_range': {
-                    'x': [cell_min_x, cell_max_x],
-                    'y': [cell_min_y, cell_max_y],
+            "metadata": {
+                "sample_id": sample,
+                "pixel_size_um": pixel_size_um,
+                "resolution_nm": resolution,
+                "coordinate_range": {
+                    "x": [cell_min_x, cell_max_x],
+                    "y": [cell_min_y, cell_max_y],
                 },
             },
-            'scalefactors': {
-                'spot_diameter_fullres': float(spot_diameter),
-                'tissue_hires_scalef': 1.0,
-                'tissue_lowres_scalef': 1.0,
+            "scalefactors": {
+                "spot_diameter_fullres": float(spot_diameter),
+                "tissue_hires_scalef": 1.0,
+                "tissue_lowres_scalef": 1.0,
             },
         }
     }
@@ -551,31 +596,33 @@ def read_sto_cellbin(
     # Convert polygon dict to GeoDataFrame
     gdf_geometries = [polygons[i] for i in range(n_cells)]
     gdf = gpd.GeoDataFrame(
-        {'geometry': gdf_geometries},
-        geometry='geometry',
+        {"geometry": gdf_geometries},
+        geometry="geometry",
         index=cell_ids,
     )
-    gdf.index.name = 'cell_id'
-    adata.uns['spatial'][sample]['geometries'] = gdf
+    gdf.index.name = "cell_id"
+    adata.uns["spatial"][sample]["geometries"] = gdf
 
     # ── 10. Load tissue image (optional) ──
     tissue_img = _load_tissue_image(image_path, gef_dir=gef_path.parent)
     if tissue_img is not None:
-        adata.uns['spatial'][sample]['images'] = {
-            'hires': tissue_img,
-            'lowres': tissue_img,
+        adata.uns["spatial"][sample]["images"] = {
+            "hires": tissue_img,
+            "lowres": tissue_img,
         }
         # Update scalefactors based on image dimensions
         # STOmics images are registered to sequencing coordinates,
         # so the scale factor is 1.0 (no scaling needed)
-        adata.uns['spatial'][sample]['scalefactors']['tissue_hires_scalef'] = 1.0
-        adata.uns['spatial'][sample]['scalefactors']['tissue_lowres_scalef'] = 1.0
+        adata.uns["spatial"][sample]["scalefactors"]["tissue_hires_scalef"] = 1.0
+        adata.uns["spatial"][sample]["scalefactors"]["tissue_lowres_scalef"] = 1.0
 
     logger.info("[STO cellbin] AnnData built [%.1fs]", time.time() - t0)
 
     elapsed = time.time() - t_total
     logger.info("[STO cellbin] Total: %.1fs", elapsed)
-    logger.info("  Output: %s cells × %s genes", f"{adata.n_obs:,}", f"{adata.n_vars:,}")
+    logger.info(
+        "  Output: %s cells × %s genes", f"{adata.n_obs:,}", f"{adata.n_vars:,}"
+    )
 
     return adata
 
@@ -654,14 +701,22 @@ def read_sto_bin(
 
     suf = path.suffix.lower()
 
-    if suf in ('.gef',):
-        return _read_sto_bin_from_gef(path, bin_size, sample, gene_name_index, image_path)
-    elif suf in ('.gem',) or (suf == '.gz' and len(path.suffixes) >= 2 and path.suffixes[-2] == '.gem'):
+    if suf in (".gef",):
+        return _read_sto_bin_from_gef(
+            path, bin_size, sample, gene_name_index, image_path
+        )
+    elif suf in (".gem",) or (
+        suf == ".gz" and len(path.suffixes) >= 2 and path.suffixes[-2] == ".gem"
+    ):
         # Try to find corresponding GEF
-        alt_gef = path.with_suffix('').with_suffix('.gef')
+        alt_gef = path.with_suffix("").with_suffix(".gef")
         if alt_gef.exists():
-            logger.info("[STO bin] Found matching GEF: %s, using that instead.", alt_gef)
-            return _read_sto_bin_from_gef(alt_gef, bin_size, sample, gene_name_index, image_path)
+            logger.info(
+                "[STO bin] Found matching GEF: %s, using that instead.", alt_gef
+            )
+            return _read_sto_bin_from_gef(
+                alt_gef, bin_size, sample, gene_name_index, image_path
+            )
         # Fallback to GEM reader (may be slow for large datasets)
         warnings.warn(
             "Reading large GEM files can be slow. Consider using the GEF (.gef) format."
@@ -690,48 +745,54 @@ def _read_sto_bin_from_gef(
 
     t_total = time.time()
 
-    with h5py.File(path, 'r') as f:
-        if 'geneExp' not in f:
+    with h5py.File(path, "r") as f:
+        if "geneExp" not in f:
             raise ValueError(
                 f"'{path.name}' does not contain 'geneExp' group (squarebin format)."
             )
 
         # GEF structure: geneExp/bin{N}/expression, geneExp/bin{N}/gene
         bin_key = None
-        for key in f['geneExp'].keys():
+        for key in f["geneExp"].keys():
             bin_key = key
             break
         if bin_key is None:
             raise ValueError("No bin group found in geneExp.")
 
-        bin_group = f['geneExp'][bin_key]
-        bin_level = int(bin_key.replace('bin', ''))  # e.g. 'bin1' -> 1
+        bin_group = f["geneExp"][bin_key]
+        bin_level = int(bin_key.replace("bin", ""))  # e.g. 'bin1' -> 1
 
         # Extract resolution from expression attrs
-        expr_attrs = dict(bin_group['expression'].attrs)
-        resolution = int(expr_attrs.get('resolution', 500))
-        min_x = int(expr_attrs.get('minX', 0))
-        max_x = int(expr_attrs.get('maxX', 0))
-        min_y = int(expr_attrs.get('minY', 0))
-        max_y = int(expr_attrs.get('maxY', 0))
+        expr_attrs = dict(bin_group["expression"].attrs)
+        resolution = int(expr_attrs.get("resolution", 500))
+        min_x = int(expr_attrs.get("minX", 0))
+        max_x = int(expr_attrs.get("maxX", 0))
+        min_y = int(expr_attrs.get("minY", 0))
+        max_y = int(expr_attrs.get("maxY", 0))
 
         t0 = time.time()
-        expr = bin_group['expression'][:]
-        genes = bin_group['gene'][:]
+        expr = bin_group["expression"][:]
+        genes = bin_group["gene"][:]
 
-        xs = expr['x'].astype(np.int64)
-        ys = expr['y'].astype(np.int64)
-        cnt_vals = expr['count'].astype(np.float32)
+        xs = expr["x"].astype(np.int64)
+        ys = expr["y"].astype(np.int64)
+        cnt_vals = expr["count"].astype(np.float32)
 
-        gene_names_bytes = genes['gene']
-        gene_names = np.array([
-            gn.decode('utf-8') if isinstance(gn, bytes) else str(gn)
-            for gn in gene_names_bytes
-        ])
+        gene_names_bytes = genes["gene"]
+        gene_names = np.array(
+            [
+                gn.decode("utf-8") if isinstance(gn, bytes) else str(gn)
+                for gn in gene_names_bytes
+            ]
+        )
         n_genes = len(gene_names)
         n_entries = len(expr)
-        logger.info("[STO bin] %s entries, %s genes [%.1fs]",
-                    f"{n_entries:,}", f"{n_genes:,}", time.time() - t0)
+        logger.info(
+            "[STO bin] %s entries, %s genes [%.1fs]",
+            f"{n_entries:,}",
+            f"{n_genes:,}",
+            time.time() - t0,
+        )
 
     # ── Merge bins ──
     t0 = time.time()
@@ -740,13 +801,17 @@ def _read_sto_bin_from_gef(
     bin_ids_int = (bin_x.astype(np.uint64) << 32) | bin_y.astype(np.uint64)
     unique_bins, inverse = np.unique(bin_ids_int, return_inverse=True)
     n_bins = len(unique_bins)
-    logger.info("[STO bin] %s unique bins (size=%s) [%.1fs]",
-                f"{n_bins:,}", bin_size, time.time() - t0)
+    logger.info(
+        "[STO bin] %s unique bins (size=%s) [%.1fs]",
+        f"{n_bins:,}",
+        bin_size,
+        time.time() - t0,
+    )
 
     # ── Gene index vector (the expression array is gene-ordered) ──
     t0 = time.time()
-    gene_offsets = genes['offset'].astype(np.int64)
-    gene_counts = genes['count'].astype(np.int64)
+    gene_offsets = genes["offset"].astype(np.int64)
+    gene_counts = genes["count"].astype(np.int64)
     col_vec = np.empty(n_entries, dtype=np.int32)
     for g in range(n_genes):
         s = gene_offsets[g]
@@ -763,8 +828,12 @@ def _read_sto_bin_from_gef(
         dtype=np.float32,
     )
     exp_matrix = coo  # csr_matrix() from COO triplets already handles duplicates
-    logger.info("[STO bin] CSR built: %s, nnz=%s [%.1fs]",
-                exp_matrix.shape, f"{exp_matrix.nnz:,}", time.time() - t0)
+    logger.info(
+        "[STO bin] CSR built: %s, nnz=%s [%.1fs]",
+        exp_matrix.shape,
+        f"{exp_matrix.nnz:,}",
+        time.time() - t0,
+    )
 
     # ── Build AnnData ──
     t0 = time.time()
@@ -772,35 +841,35 @@ def _read_sto_bin_from_gef(
     bin_y_unique = (unique_bins & 0xFFFFFFFF).astype(np.int64)
 
     if sample is None:
-        sample = path.stem.split('.')[0]
+        sample = path.stem.split(".")[0]
 
     obs = pd.DataFrame(index=unique_bins.astype(str))
     adata = sc.AnnData(X=exp_matrix, obs=obs)
     adata.var_names = gene_names if gene_name_index else np.arange(n_genes).astype(str)
-    adata.obs.index.name = 'bin_id'
+    adata.obs.index.name = "bin_id"
 
     center_x = (bin_x_unique * bin_size + bin_size // 2).astype(np.float64)
     center_y = (bin_y_unique * bin_size + bin_size // 2).astype(np.float64)
-    adata.obsm['spatial'] = np.column_stack([center_x, center_y])
+    adata.obsm["spatial"] = np.column_stack([center_x, center_y])
 
-    adata.uns['spatial'] = {
+    adata.uns["spatial"] = {
         sample: {
-            'metadata': {
-                'sample_id': sample,
-                'pixel_size_um': resolution / 1000.0,
-                'resolution_nm': resolution,
-                'bin_size': bin_size,
-                'bin_level': bin_level,
-                'bin_type': 'square_bins',
-                'coordinate_range': {
-                    'x': [min_x, max_x],
-                    'y': [min_y, max_y],
+            "metadata": {
+                "sample_id": sample,
+                "pixel_size_um": resolution / 1000.0,
+                "resolution_nm": resolution,
+                "bin_size": bin_size,
+                "bin_level": bin_level,
+                "bin_type": "square_bins",
+                "coordinate_range": {
+                    "x": [min_x, max_x],
+                    "y": [min_y, max_y],
                 },
             },
-            'scalefactors': {
-                'spot_diameter_fullres': float(bin_size),
-                'tissue_hires_scalef': 1.0,
-                'tissue_lowres_scalef': 1.0,
+            "scalefactors": {
+                "spot_diameter_fullres": float(bin_size),
+                "tissue_hires_scalef": 1.0,
+                "tissue_lowres_scalef": 1.0,
             },
         }
     }
@@ -808,12 +877,12 @@ def _read_sto_bin_from_gef(
     # ── Load tissue image (optional) ──
     tissue_img = _load_tissue_image(image_path, gef_dir=path.parent)
     if tissue_img is not None:
-        adata.uns['spatial'][sample]['images'] = {
-            'hires': tissue_img,
-            'lowres': tissue_img,
+        adata.uns["spatial"][sample]["images"] = {
+            "hires": tissue_img,
+            "lowres": tissue_img,
         }
-        adata.uns['spatial'][sample]['scalefactors']['tissue_hires_scalef'] = 1.0
-        adata.uns['spatial'][sample]['scalefactors']['tissue_lowres_scalef'] = 1.0
+        adata.uns["spatial"][sample]["scalefactors"]["tissue_hires_scalef"] = 1.0
+        adata.uns["spatial"][sample]["scalefactors"]["tissue_lowres_scalef"] = 1.0
 
     logger.info("[STO bin] AnnData built [%.1fs]", time.time() - t0)
     elapsed = time.time() - t_total
@@ -835,7 +904,7 @@ def _read_sto_bin_from_gem(
     from collections import defaultdict
 
     t_total = time.time()
-    compression = 'gzip' if path.suffix.lower() == '.gz' else None
+    compression = "gzip" if path.suffix.lower() == ".gz" else None
 
     # Streaming groupby using a dict-of-dicts accumulator
     bin_gene_counts: dict = defaultdict(lambda: defaultdict(float))
@@ -843,19 +912,28 @@ def _read_sto_bin_from_gem(
     n_rows = 0
 
     for chunk in pd.read_csv(
-        path, sep='\t', comment='#', header=0,
-        dtype={'geneID': str, 'x': np.int64, 'y': np.int64,
-               'MIDCount': np.float32, 'MIDCounts': np.float32},
-        chunksize=5_000_000, compression=compression,
-        engine='python',
+        path,
+        sep="\t",
+        comment="#",
+        header=0,
+        dtype={
+            "geneID": str,
+            "x": np.int64,
+            "y": np.int64,
+            "MIDCount": np.float32,
+            "MIDCounts": np.float32,
+        },
+        chunksize=5_000_000,
+        compression=compression,
+        engine="python",
     ):
-        count_col = 'MIDCounts' if 'MIDCounts' in chunk.columns else 'MIDCount'
+        count_col = "MIDCounts" if "MIDCounts" in chunk.columns else "MIDCount"
         if count_col not in chunk.columns:
             raise ValueError("Missing MIDCount/MIDCounts in GEM file.")
 
-        bx = (chunk['x'].values // bin_size).astype(np.int64)
-        by = (chunk['y'].values // bin_size).astype(np.int64)
-        gn = chunk['geneID'].values
+        bx = (chunk["x"].values // bin_size).astype(np.int64)
+        by = (chunk["y"].values // bin_size).astype(np.int64)
+        gn = chunk["geneID"].values
         cv = chunk[count_col].values.astype(np.float32)
 
         for i in range(len(bx)):
@@ -867,10 +945,13 @@ def _read_sto_bin_from_gem(
         if n_rows % 25_000_000 == 0:
             logger.info("[STO bin GEM] Processed %s rows...", f"{n_rows:,}")
 
-    logger.info("[STO bin GEM] %s rows → %s bins, "
-                "%s genes [%.1fs]",
-                f"{n_rows:,}", f"{len(bin_gene_counts):,}",
-                f"{len(gene_set):,}", time.time() - t_total)
+    logger.info(
+        "[STO bin GEM] %s rows → %s bins, " "%s genes [%.1fs]",
+        f"{n_rows:,}",
+        f"{len(bin_gene_counts):,}",
+        f"{len(gene_set):,}",
+        time.time() - t_total,
+    )
 
     # ── Build sparse matrix ──
     t0 = time.time()
@@ -879,7 +960,6 @@ def _read_sto_bin_from_gem(
     n_genes = len(genes)
 
     bins = sorted(bin_gene_counts.keys())
-    bin_to_idx = {b: i for i, b in enumerate(bins)}
     n_bins = len(bins)
 
     # Build CSR directly
@@ -902,9 +982,14 @@ def _read_sto_bin_from_gem(
         shape=(n_bins, n_genes),
         dtype=np.float32,
     )
-    del bin_gene_counts, data_arr, cols_arr; gc.collect()
-    logger.info("[STO bin GEM] CSR: %s, nnz=%s [%.1fs]",
-                exp_matrix.shape, f"{exp_matrix.nnz:,}", time.time() - t0)
+    del bin_gene_counts, data_arr, cols_arr
+    gc.collect()
+    logger.info(
+        "[STO bin GEM] CSR: %s, nnz=%s [%.1fs]",
+        exp_matrix.shape,
+        f"{exp_matrix.nnz:,}",
+        time.time() - t0,
+    )
 
     # ── Build AnnData ──
     t0 = time.time()
@@ -912,40 +997,38 @@ def _read_sto_bin_from_gem(
     bin_y_arr = np.array([b[1] for b in bins], dtype=np.int64)
 
     if sample is None:
-        sample = path.stem.split('.')[0]
-    if sample.endswith('.tissue'):
-        sample = sample.rsplit('.', 1)[0]
+        sample = path.stem.split(".")[0]
+    if sample.endswith(".tissue"):
+        sample = sample.rsplit(".", 1)[0]
 
     center_x = (bin_x_arr * bin_size + bin_size // 2).astype(np.float64)
     center_y = (bin_y_arr * bin_size + bin_size // 2).astype(np.float64)
 
-    obs = pd.DataFrame(
-        index=[f"{x}_{y}" for x, y in zip(bin_x_arr, bin_y_arr)]
-    )
+    obs = pd.DataFrame(index=[f"{x}_{y}" for x, y in zip(bin_x_arr, bin_y_arr)])
     adata = sc.AnnData(X=exp_matrix, obs=obs)
     adata.var_names = genes if gene_name_index else np.arange(len(genes)).astype(str)
-    adata.obs.index.name = 'bin_id'
-    adata.obsm['spatial'] = np.column_stack([center_x, center_y])
+    adata.obs.index.name = "bin_id"
+    adata.obsm["spatial"] = np.column_stack([center_x, center_y])
 
-    adata.uns['spatial'] = {
+    adata.uns["spatial"] = {
         sample: {
-            'metadata': {'sample_id': sample, 'bin_size': bin_size, 'bin_type': 'square_bins'},
-            'scalefactors': {'spot_diameter_fullres': float(bin_size)},
+            "metadata": {
+                "sample_id": sample,
+                "bin_size": bin_size,
+                "bin_type": "square_bins",
+            },
+            "scalefactors": {"spot_diameter_fullres": float(bin_size)},
         }
     }
 
     tissue_img = _load_tissue_image(image_path, gef_dir=path.parent)
     if tissue_img is not None:
-        adata.uns['spatial'][sample]['images'] = {
-            'hires': tissue_img,
-            'lowres': tissue_img,
+        adata.uns["spatial"][sample]["images"] = {
+            "hires": tissue_img,
+            "lowres": tissue_img,
         }
-        adata.uns['spatial'][sample]['scalefactors'][
-            'tissue_hires_scalef'
-        ] = 1.0
-        adata.uns['spatial'][sample]['scalefactors'][
-            'tissue_lowres_scalef'
-        ] = 1.0
+        adata.uns["spatial"][sample]["scalefactors"]["tissue_hires_scalef"] = 1.0
+        adata.uns["spatial"][sample]["scalefactors"]["tissue_lowres_scalef"] = 1.0
 
     elapsed = time.time() - t_total
     logger.info("[STO bin GEM] Total: %.1fs", elapsed)
@@ -961,6 +1044,4 @@ def _read_sto_bin_from_gem_gz(
     image_path: Optional[Union[str, Path]] = None,
 ) -> sc.AnnData:
     """Read squarebin data from a gzipped GEM file (delegates to GEM reader)."""
-    return _read_sto_bin_from_gem(
-        path, bin_size, sample, gene_name_index, image_path
-    )
+    return _read_sto_bin_from_gem(path, bin_size, sample, gene_name_index, image_path)

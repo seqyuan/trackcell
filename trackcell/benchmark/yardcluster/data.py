@@ -27,12 +27,15 @@ def make_patch_adata(
         cx = col * patch_spacing
         cy = row * patch_spacing
         jitter = rng.uniform(-0.4, 0.4, size=(n_per_patch, 2))
-        patch_coords = np.column_stack(
-            [
-                cx + rng.uniform(-1.2, 1.2, n_per_patch),
-                cy + rng.uniform(-1.2, 1.2, n_per_patch),
-            ]
-        ) + jitter
+        patch_coords = (
+            np.column_stack(
+                [
+                    cx + rng.uniform(-1.2, 1.2, n_per_patch),
+                    cy + rng.uniform(-1.2, 1.2, n_per_patch),
+                ]
+            )
+            + jitter
+        )
         coords_list.append(patch_coords)
         labels.extend([f"patch_{p}"] * n_per_patch)
 

@@ -9,7 +9,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 import scanpy as sc
-from scipy.sparse import csr_matrix, issparse
+from scipy.sparse import csr_matrix
 
 from trackcell.tl._sctransform import _as_genes_by_cells
 
@@ -46,7 +46,9 @@ class BenchmarkFilterParams:
 BENCHMARK_FILTER = BenchmarkFilterParams()
 
 
-def _load_r_reference_gene_names(benchmark_root: Path, sample: str, n_genes: int) -> pd.Index | None:
+def _load_r_reference_gene_names(
+    benchmark_root: Path, sample: str, n_genes: int
+) -> pd.Index | None:
     path = benchmark_root / "ref" / f"{sample}_genes_min_cells.txt"
     if not path.exists():
         return None
@@ -71,7 +73,9 @@ def load_benchmark_umi(
     fp = filter_params or BENCHMARK_FILTER
     data_dir = benchmark_root / "data" / sample
 
-    adata = sc.read_10x_mtx(data_dir, gex_only=True, make_unique=True, var_names=var_names)
+    adata = sc.read_10x_mtx(
+        data_dir, gex_only=True, make_unique=True, var_names=var_names
+    )
     umi = _as_genes_by_cells(adata.X, adata.var_names, adata.obs_names)
     genes = pd.Index(adata.var_names)
 
@@ -91,7 +95,9 @@ def load_benchmark_umi(
         keep_cells &= n_feature <= fp.max_features
 
     umi = umi[:, keep_cells]
-    cells = pd.Index([f"{sample}_{bc}" for bc in np.asarray(adata.obs_names)[keep_cells]])
+    cells = pd.Index(
+        [f"{sample}_{bc}" for bc in np.asarray(adata.obs_names)[keep_cells]]
+    )
 
     cell_attr = pd.DataFrame(
         {

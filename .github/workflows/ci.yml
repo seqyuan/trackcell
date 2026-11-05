@@ -54,6 +54,13 @@ jobs:
         run: |
           poetry run mypy trackcell/_logging.py trackcell/io/serialize.py
 
+      - name: Format check (black)
+        run: poetry run black --check trackcell tests scripts
+
+      - name: Lint (unused imports / dead locals / bare except)
+        run: |
+          poetry run flake8 trackcell --count --select=F401,F811,F841,E722 --statistics
+
       - name: Build and validate wheel metadata
         run: |
           rm -rf dist

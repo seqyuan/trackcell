@@ -72,7 +72,9 @@ def main() -> None:
         action="store_true",
         help="Skip end-to-end native integrate_sct_rpca (slow)",
     )
-    parser.add_argument("--threads", type=int, default=1, help="ata concurrency for R export")
+    parser.add_argument(
+        "--threads", type=int, default=1, help="ata concurrency for R export"
+    )
     parser.add_argument(
         "--seeds",
         type=int,
@@ -92,7 +94,13 @@ def main() -> None:
         else:
             print(f"Exporting R RPCA reference: {len(seeds)} job(s) …")
             subprocess.run(
-                [str(ATA), "-i", str(cmd_file), "-t", str(min(args.threads, len(seeds)))],
+                [
+                    str(ATA),
+                    "-i",
+                    str(cmd_file),
+                    "-t",
+                    str(min(args.threads, len(seeds))),
+                ],
                 check=True,
                 env={**os.environ, "RPCA_BENCHMARK_ROOT": str(root)},
             )

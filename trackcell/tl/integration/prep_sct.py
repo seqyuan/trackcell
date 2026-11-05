@@ -33,7 +33,9 @@ def _unpack_vst_out(entry: dict) -> dict:
         "arguments": entry.get("arguments", {}),
     }
     if entry.get("model_pars_nonreg"):
-        vst_out["model_pars_nonreg"] = _split_dict_to_dataframe(entry["model_pars_nonreg"])
+        vst_out["model_pars_nonreg"] = _split_dict_to_dataframe(
+            entry["model_pars_nonreg"]
+        )
     scale_data = entry.get("scale_data")
     if scale_data is not None:
         vst_out["y"] = _split_dict_to_dataframe(scale_data)
@@ -72,7 +74,9 @@ def _batch_anchor_residuals(
         cached_genes = genes.intersection(scale_data.index)
         common_cells = obs_index.intersection(scale_data.columns)
         if len(cached_genes) > 0 and len(common_cells) == len(obs_index):
-            out.loc[cached_genes, obs_index] = scale_data.loc[cached_genes, obs_index].to_numpy()
+            out.loc[cached_genes, obs_index] = scale_data.loc[
+                cached_genes, obs_index
+            ].to_numpy()
 
     missing_genes = genes.difference(cached_genes)
     if len(missing_genes) > 0:

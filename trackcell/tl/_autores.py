@@ -10,7 +10,7 @@ mean pairwise ARI of its repeated runs.
 from __future__ import annotations
 
 from itertools import combinations
-from typing import Optional, Sequence, Union
+from typing import Optional, Sequence
 
 import numpy as np
 import pandas as pd

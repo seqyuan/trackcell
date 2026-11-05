@@ -38,7 +38,9 @@ sys.path.insert(0, str(REPO))
 import trackcell as tcl  # noqa: E402
 
 DEFAULT_DATA = Path("/Volumes/data/co_project/CCHD/xenium_analysis/01_data")
-DEFAULT_WORK = Path("/Volumes/data/co_project/CCHD/xenium_analysis/03_yardcluster_fln_sln")
+DEFAULT_WORK = Path(
+    "/Volumes/data/co_project/CCHD/xenium_analysis/03_yardcluster_fln_sln"
+)
 
 SAMPLE_CONFIG = [
     ("85863_F", "FLN", "F"),
@@ -65,7 +67,9 @@ def _load_fln_sln(data_dir: Path) -> ad.AnnData:
         n_pre = adata.n_obs
         if "slice_id" in adata.obs:
             adata = adata[adata.obs["slice_id"].astype(str) != "debris"].copy()
-            print(f"{n_pre:,} → {adata.n_obs:,} cells (debris removed), {time.time()-t0:.0f}s")
+            print(
+                f"{n_pre:,} → {adata.n_obs:,} cells (debris removed), {time.time()-t0:.0f}s"
+            )
         else:
             print(f"{adata.n_obs:,} cells, {time.time()-t0:.0f}s")
 
@@ -110,7 +114,9 @@ def _load_fln_sln(data_dir: Path) -> ad.AnnData:
     slices = sorted(merged.obs["slice_id"].astype(str).unique())
     print(f"  Combined: {merged.n_obs:,} cells × {merged.n_vars:,} genes")
     print(f"  Slices (batch_key): {len(slices)} — {slices[0]} … {slices[-1]}")
-    print(f"  FLN: {(merged.obs['group'] == 'FLN').sum():,}  SLN: {(merged.obs['group'] == 'SLN').sum():,}")
+    print(
+        f"  FLN: {(merged.obs['group'] == 'FLN').sum():,}  SLN: {(merged.obs['group'] == 'SLN').sum():,}"
+    )
     del adatas
     gc.collect()
     return merged
@@ -146,7 +152,9 @@ def step_sct_rpca(
 
     if release_cache:
         summary = tcl.tl.release_sct_integration_cache(adata, what="scale_data")
-        print(f"  released SCT scale_data cache (~{summary.get('bytes_estimate', 0) / 1e9:.1f} GB est.)")
+        print(
+            f"  released SCT scale_data cache (~{summary.get('bytes_estimate', 0) / 1e9:.1f} GB est.)"
+        )
         gc.collect()
     return adata
 
@@ -216,7 +224,9 @@ def main() -> None:
     parser.add_argument("--n-features", type=int, default=2000)
     parser.add_argument("--rpca-dims", type=int, default=30)
     parser.add_argument("--sct-jobs", type=int, default=-1)
-    parser.add_argument("--rpca-method", choices=("seurat", "xgboost"), default="seurat")
+    parser.add_argument(
+        "--rpca-method", choices=("seurat", "xgboost"), default="seurat"
+    )
     parser.add_argument("--no-release-cache", action="store_true")
     parser.add_argument("--sketch-n", type=int, default=500_000)
     parser.add_argument("--hybrid-alpha", type=float, default=0.25)
@@ -246,7 +256,9 @@ def main() -> None:
             print(f"Loading {inp} ...")
             adata = sc.read_h5ad(inp.expanduser().resolve())
             if "spatial" not in adata.obsm and "x_centroid" in adata.obs:
-                adata.obsm["spatial"] = adata.obs[["x_centroid", "y_centroid"]].to_numpy()
+                adata.obsm["spatial"] = adata.obs[
+                    ["x_centroid", "y_centroid"]
+                ].to_numpy()
             if "counts" not in adata.layers:
                 adata.layers["counts"] = adata.X.copy()
 
@@ -271,7 +283,9 @@ def main() -> None:
             print(f"Loading {inp} ...")
             adata = sc.read_h5ad(inp.expanduser().resolve())
             if "spatial" not in adata.obsm and "x_centroid" in adata.obs:
-                adata.obsm["spatial"] = adata.obs[["x_centroid", "y_centroid"]].to_numpy()
+                adata.obsm["spatial"] = adata.obs[
+                    ["x_centroid", "y_centroid"]
+                ].to_numpy()
 
         adata = step_yardcluster(
             adata,

@@ -27,9 +27,7 @@ def _write_xenium_fixture(root):
         features = matrix.create_group("features")
         features.create_dataset("name", data=genes)
         features.create_dataset("id", data=np.array([b"E1", b"E2", b"E3"]))
-        features.create_dataset(
-            "feature_type", data=np.array([b"Gene Expression"] * 3)
-        )
+        features.create_dataset("feature_type", data=np.array([b"Gene Expression"] * 3))
 
     pd.DataFrame(
         {

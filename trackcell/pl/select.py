@@ -44,7 +44,6 @@ from .plot import (
     _sync_geometries_to_obs,
 )
 
-
 ModeType = Literal["auto", "cellbin", "squarebin"]
 SelectorMode = Literal["rectangle", "ellipse", "lasso"]
 
@@ -224,7 +223,7 @@ class RegionSelector:
         self._selectors["rectangle"] = RectangleSelector(
             self.ax,
             self._on_rectangle,
-            useblit=False,          # ipympl compatibility (blit breaks selectors)
+            useblit=False,  # ipympl compatibility (blit breaks selectors)
             button=[1],
             minspanx=1,
             minspany=1,
@@ -235,7 +234,7 @@ class RegionSelector:
         self._selectors["ellipse"] = EllipseSelector(
             self.ax,
             self._on_ellipse,
-            useblit=False,          # ipympl compatibility
+            useblit=False,  # ipympl compatibility
             button=[1],
             minspanx=1,
             minspany=1,
@@ -246,7 +245,7 @@ class RegionSelector:
         self._selectors["lasso"] = LassoSelector(
             self.ax,
             self._on_lasso,
-            useblit=False,          # ipympl compatibility
+            useblit=False,  # ipympl compatibility
             props={"color": self._EDGE_COLOR, "linewidth": self._LINEWIDTH},
         )
 
@@ -302,7 +301,9 @@ class RegionSelector:
 
         # --- Clear ---
         clear_ax = self.fig.add_axes([0.06 + 3 * spacing, y0, bw, bh])
-        self._clear_btn = Button(clear_ax, "✕ Clear", color="lightcoral", hovercolor="coral")
+        self._clear_btn = Button(
+            clear_ax, "✕ Clear", color="lightcoral", hovercolor="coral"
+        )
         self._clear_btn.on_clicked(lambda e: self.clear())
 
         # --- Undo ---
@@ -321,7 +322,9 @@ class RegionSelector:
         active_color = "#2563eb"  # blue
         inactive_color = "#e0e0e0"
         for mode_name, btn in self._mode_buttons.items():
-            btn.color = active_color if mode_name == self._current_mode else inactive_color
+            btn.color = (
+                active_color if mode_name == self._current_mode else inactive_color
+            )
 
     # ------------------------------------------------------------------
     #  shape callbacks
@@ -746,7 +749,9 @@ def select_regions(
         raise ValueError("No valid observations found for ROI selection.")
 
     geometries = spatial_info.get("geometries", None)
-    use_wkt = (mode == "cellbin") and geometries is None and "geometry" in adata.obs.columns
+    use_wkt = (
+        (mode == "cellbin") and geometries is None and "geometry" in adata.obs.columns
+    )
 
     if ax is None:
         _, ax = plt.subplots(figsize=figsize or (8, 8))

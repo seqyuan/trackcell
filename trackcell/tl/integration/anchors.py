@@ -49,14 +49,10 @@ def _raw_anchor_scores(
         nbr_b: set[int] = set()
         if nnaa_idx is not None:
             nbr_a.update(int(x) for x in nnaa_idx[local1, :k_score])
-        nbr_a.update(
-            int(x) + n_ref for x in nnab_idx[local1, :k_score]
-        )
+        nbr_a.update(int(x) + n_ref for x in nnab_idx[local1, :k_score])
         nbr_b.update(int(x) for x in nnba_idx[local2, :k_score])
         if nnbb_idx is not None:
-            nbr_b.update(
-                int(x) + n_ref for x in nnbb_idx[local2, :k_score]
-            )
+            nbr_b.update(int(x) + n_ref for x in nnbb_idx[local2, :k_score])
         scores[idx] = float(len(nbr_a & nbr_b))
     return scores
 
@@ -193,7 +189,9 @@ def mirror_anchors(anchors: pd.DataFrame) -> pd.DataFrame:
         return anchors.copy()
     swapped = anchors.rename(columns={"cell1": "cell2", "cell2": "cell1"})
     if "dataset1" in anchors.columns and "dataset2" in anchors.columns:
-        swapped = swapped.rename(columns={"dataset1": "dataset2", "dataset2": "dataset1"})
+        swapped = swapped.rename(
+            columns={"dataset1": "dataset2", "dataset2": "dataset1"}
+        )
     if "batch1" in anchors.columns and "batch2" in anchors.columns:
         swapped = swapped.rename(columns={"batch1": "batch2", "batch2": "batch1"})
     return pd.concat([anchors, swapped], ignore_index=True)

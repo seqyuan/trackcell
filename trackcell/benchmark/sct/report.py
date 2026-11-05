@@ -33,7 +33,6 @@ def render_sct_benchmark_table(payload: dict[str, Any]) -> str:
     ]
     for s in rows:
         native = s["native_full_vst"]
-        golden = s["r_step1_golden_path"]
         rfit = s["r_fit_to_py_residuals"]
         rv = native.get("gene_attr", {}).get("residual_variance", {})
         res = native.get("residuals", {})
@@ -60,15 +59,15 @@ def render_sct_benchmark_table(payload: dict[str, Any]) -> str:
             "",
             "   * - Metric",
             "     - Value",
-            f"   * - R inter-seed HVG Jaccard (median)",
+            "   * - R inter-seed HVG Jaccard (median)",
             f"     - {_fmt(r_inter.get('median'))}",
-            f"   * - R inter-seed HVG Jaccard (min – max)",
+            "   * - R inter-seed HVG Jaccard (min – max)",
             f"     - {_fmt(r_inter.get('min'))} – {_fmt(r_inter.get('max'))}",
-            f"   * - Python vs R (ref seed) HVG Jaccard (median)",
+            "   * - Python vs R (ref seed) HVG Jaccard (median)",
             f"     - {_fmt(py_vs.get('median'))}",
-            f"   * - Py median within R seed min–max",
+            "   * - Py median within R seed min–max",
             f"     - {rand.get('py_median_within_r_seed_range')}",
-            f"   * - Py median within R inter-seed IQR",
+            "   * - Py median within R inter-seed IQR",
             f"     - {rand.get('py_median_within_r_inter_seed_iqr')}",
         ]
     )

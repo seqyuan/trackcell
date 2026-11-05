@@ -39,7 +39,9 @@ def _serialize_batch_model(
         **vst_out.get("arguments", {}),
     }
     if isinstance(vst_out.get("model_pars_nonreg"), pd.DataFrame):
-        entry["model_pars_nonreg"] = vst_out["model_pars_nonreg"].to_dict(orient="split")
+        entry["model_pars_nonreg"] = vst_out["model_pars_nonreg"].to_dict(
+            orient="split"
+        )
     entry["model_pars_fit"] = vst_out["model_pars_fit"].to_dict(orient="split")
     entry["gene_attr"] = vst_out["gene_attr"].to_dict(orient="index")
     entry["variable_features"] = list(variable_features)
@@ -110,8 +112,7 @@ def _write_sctransform_results(
         if aligned.isna().any().any():
             missing = aligned.index[aligned.isna().all(axis=1)].tolist()
             raise ValueError(
-                "Residual features missing from adata.var_names: "
-                f"{missing[:5]}"
+                "Residual features missing from adata.var_names: " f"{missing[:5]}"
             )
         values = aligned.T.to_numpy(dtype=np.float32)
         rows = np.repeat(np.arange(adata.n_obs), values.shape[1])
@@ -306,7 +307,9 @@ def _run_sct_per_batch(
             if sps.issparse(counts):
                 counts = counts.tocsr()
             batch_subsample = (subsample_indices or {}).get(str(batch_label), {})
-            latent_data = sub.obs[list(vars_to_regress)].copy() if vars_to_regress else None
+            latent_data = (
+                sub.obs[list(vars_to_regress)].copy() if vars_to_regress else None
+            )
             jobs.append(
                 delayed(_fit_sct_batch_job)(
                     str(batch_label),
@@ -537,9 +540,9 @@ def sctransform(
                     rv = row.get("residual_variance", np.nan)
                     if np.isfinite(rv):
                         rv_scores[gene] = max(rv_scores.get(gene, -np.inf), float(rv))
-            combined_hvg = sorted(
-                rv_scores, key=rv_scores.get, reverse=True
-            )[:n_top_genes]
+            combined_hvg = sorted(rv_scores, key=rv_scores.get, reverse=True)[
+                :n_top_genes
+            ]
 
         gene_to_col = {g: i for i, g in enumerate(combined_hvg)}
         combined_residuals = np.zeros(
@@ -553,8 +556,10 @@ def sctransform(
                 g for g in combined_hvg if g in assay_out["scale.data"].index
             ]
             if batch_genes:
-                block = assay_out["scale.data"].loc[batch_genes].T.to_numpy(
-                    dtype=np.float32
+                block = (
+                    assay_out["scale.data"]
+                    .loc[batch_genes]
+                    .T.to_numpy(dtype=np.float32)
                 )
                 cols = [gene_to_col[g] for g in batch_genes]
                 combined_residuals[np.where(mask)[0][:, None], cols] = block
@@ -635,9 +640,7 @@ def sctransform(
     if vars_to_regress:
         missing = [v for v in vars_to_regress if v not in adata.obs.columns]
         if missing:
-            raise ValueError(
-                f"vars_to_regress not found in adata.obs: {missing}"
-            )
+            raise ValueError(f"vars_to_regress not found in adata.obs: {missing}")
         latent_data = adata.obs[list(vars_to_regress)].copy()
 
     assay_out, vst_out = _run_sctransform_on_counts(

@@ -15,7 +15,6 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
 
 import check_package  # noqa: E402  (path manipulation must come first)
 
-
 EXTRA_PACKAGES = {
     "clustering": ("leidenalg", "igraph"),
     "integration": ("annoy", "harmonypy", "bbknn"),

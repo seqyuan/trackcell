@@ -17,12 +17,11 @@ import statsmodels.api as sm
 from joblib import Parallel, cpu_count, delayed
 from patsy import dmatrix
 from scipy import optimize
-from scipy.interpolate import interp1d
 from scipy.sparse import csr_matrix, issparse
 from scipy.special import digamma, polygamma
 from ._density import r_density_interp
 from ._gene_utils import align_gene_frame, align_gene_list, normalize_model_pars
-from ._rng import make_vst_rng, r_sample_available
+from ._rng import make_vst_rng
 from ._sctransform_v2 import (
     LOG10_SLOPE,
     apply_vst_flavor_settings,
@@ -105,7 +104,11 @@ def _build_design_matrix(cell_attr: pd.DataFrame, model_str: str) -> pd.DataFram
 
 
 def _coef_columns(model_pars: pd.DataFrame, regressor_data: pd.DataFrame) -> list[str]:
-    return [col for col in model_pars.columns if col != "theta" and col in regressor_data.columns]
+    return [
+        col
+        for col in model_pars.columns
+        if col != "theta" and col in regressor_data.columns
+    ]
 
 
 def _batch_coef_columns(
@@ -156,11 +159,17 @@ def _make_cell_attr(
             f"{unknown}. Provide them in cell_attr."
         )
 
-    if any(name in missing for name in ("umi", "log_umi", "umi_per_gene", "log_umi_per_gene")):
+    if any(
+        name in missing
+        for name in ("umi", "log_umi", "umi_per_gene", "log_umi_per_gene")
+    ):
         umi_per_cell = np.asarray(umi.sum(axis=0)).ravel()
         cell_attr["umi"] = umi_per_cell
         cell_attr["log_umi"] = np.log10(umi_per_cell + 1e-9)
-    if any(name in missing for name in ("gene", "log_gene", "umi_per_gene", "log_umi_per_gene")):
+    if any(
+        name in missing
+        for name in ("gene", "log_gene", "umi_per_gene", "log_umi_per_gene")
+    ):
         gene_per_cell = np.asarray((umi > 0).sum(axis=0)).ravel()
         cell_attr["gene"] = gene_per_cell
         cell_attr["log_gene"] = np.log10(gene_per_cell + 1e-9)
@@ -171,8 +180,13 @@ def _make_cell_attr(
     for name in needed:
         values = cell_attr[name]
         if pd.api.types.is_numeric_dtype(values):
-            if pd.isna(values).any() or np.isinf(values.to_numpy(dtype=np.float64, na_value=np.nan)).any():
-                raise ValueError(f'cell attribute "{name}" contains NA or infinite values.')
+            if (
+                pd.isna(values).any()
+                or np.isinf(values.to_numpy(dtype=np.float64, na_value=np.nan)).any()
+            ):
+                raise ValueError(
+                    f'cell attribute "{name}" contains NA or infinite values.'
+                )
         elif pd.isna(values).any():
             raise ValueError(f'cell attribute "{name}" contains NA values.')
 
@@ -286,7 +300,9 @@ def _trigamma(x: float) -> float:
 def _score(n: float, th: float, mu: np.ndarray, y: np.ndarray, w: np.ndarray) -> float:
     a = th + y
     b = th + mu
-    return float(np.sum(w * (digamma(a) - digamma(th) + np.log(th) + 1 - np.log(b) - a / b)))
+    return float(
+        np.sum(w * (digamma(a) - digamma(th) + np.log(th) + 1 - np.log(b) - a / b))
+    )
 
 
 @numba.jit(forceobj=True)
@@ -294,11 +310,15 @@ def _info(n: float, th: float, mu: np.ndarray, y: np.ndarray, w: np.ndarray) -> 
     a = th + y
     b = th + mu
     return float(
-        np.sum(w * (-_trigamma(a) + _trigamma(th) - 1 / th + 2 / b - a / np.power(b, 2)))
+        np.sum(
+            w * (-_trigamma(a) + _trigamma(th) - 1 / th + 2 / b - a / np.power(b, 2))
+        )
     )
 
 
-def _theta_ml(y: np.ndarray, mu: np.ndarray, limit: int = 10, eps: float = 0.0001220703) -> float:
+def _theta_ml(
+    y: np.ndarray, mu: np.ndarray, limit: int = 10, eps: float = 0.0001220703
+) -> float:
     weights = np.ones(len(y))
     n = float(np.sum(weights))
     t0 = n / np.sum(weights * (y / mu - 1) ** 2)
@@ -578,7 +598,9 @@ def _deviance_residual(
     mask = y_safe > 0
     y_log[mask] = y_safe[mask] * np.log(y_safe[mask] / np.maximum(mu[mask], 1e-9))
     theta_row = theta.reshape(-1, 1)
-    r = 2.0 * (y_log - (y_safe + theta_row) * np.log((y_safe + theta_row) / (mu + theta_row)))
+    r = 2.0 * (
+        y_log - (y_safe + theta_row) * np.log((y_safe + theta_row) / (mu + theta_row))
+    )
     return np.sqrt(np.maximum(r, 0.0)) * np.sign(y - mu)
 
 
@@ -667,7 +689,9 @@ def _reg_model_pars_pre_ksmooth(
 
     all_poisson_genes = pd.Index([])
     if exclude_poisson and umi is not None and genes_step1 is not None:
-        all_poisson_genes, _ = build_poisson_gene_tables(umi, genes, genes_step1, model_pars)
+        all_poisson_genes, _ = build_poisson_gene_tables(
+            umi, genes, genes_step1, model_pars
+        )
 
     model_pars_all = model_pars.copy()
     gmean_step1 = genes_log_gmean_step1.reindex(model_pars.index)
@@ -689,8 +713,12 @@ def _reg_model_pars_pre_ksmooth(
     for col in model_pars_pre_outlier.columns:
         outliers |= _is_outlier(model_pars_pre_outlier[col], gmean_for_outlier)
     if exclude_poisson:
-        outliers |= ~np.isfinite(model_pars_all["theta"].reindex(model_pars_pre_outlier.index).to_numpy())
-    outliers_series = pd.Series(outliers, index=model_pars_pre_outlier.index, dtype=bool)
+        outliers |= ~np.isfinite(
+            model_pars_all["theta"].reindex(model_pars_pre_outlier.index).to_numpy()
+        )
+    outliers_series = pd.Series(
+        outliers, index=model_pars_pre_outlier.index, dtype=bool
+    )
 
     model_pars_work = model_pars_pre_outlier
     gmean_work = genes_log_gmean_step1.reindex(model_pars_work.index)
@@ -766,7 +794,9 @@ def _reg_model_pars(
     for col in model_pars.columns:
         outliers |= _is_outlier(model_pars[col], gmean_for_outlier)
     if exclude_poisson:
-        outliers |= ~np.isfinite(model_pars_all["theta"].reindex(model_pars.index).to_numpy())
+        outliers |= ~np.isfinite(
+            model_pars_all["theta"].reindex(model_pars.index).to_numpy()
+        )
     if outliers.any():
         outliers_series = pd.Series(outliers, index=model_pars.index, dtype=bool)
         model_pars = model_pars.loc[~outliers]
@@ -791,12 +821,14 @@ def _reg_model_pars(
     bw = bw_sj(genes_log_gmean_step1.to_numpy()) * bw_adjust
     gmean_step1_fit = genes_log_gmean_step1.reindex(model_pars.index)
 
-    model_pars_fit.iloc[order, model_pars_fit.columns.get_loc("dispersion_par")] = _ksmooth(
-        gmean_step1_fit,
-        model_pars["dispersion_par"],
-        x_points.copy(),
-        kern=2,
-        bw=bw,
+    model_pars_fit.iloc[order, model_pars_fit.columns.get_loc("dispersion_par")] = (
+        _ksmooth(
+            gmean_step1_fit,
+            model_pars["dispersion_par"],
+            x_points.copy(),
+            kern=2,
+            bw=bw,
+        )
     )
 
     coef_cols = [col for col in model_pars.columns if col != "dispersion_par"]
@@ -811,7 +843,9 @@ def _reg_model_pars(
             )
     else:
         if cells_step1 is None or genes_step1 is None:
-            raise ValueError("cells_step1 and genes_step1 are required when batch_var is set.")
+            raise ValueError(
+                "cells_step1 and genes_step1 are required when batch_var is set."
+            )
         genes_step1_arr = np.asarray(genes_step1)
         genes_step1_idx = np.array(
             [i for i, g in enumerate(genes_arr) if g in set(genes_step1_arr)]
@@ -819,12 +853,15 @@ def _reg_model_pars(
         batches = cell_attr[batch_var].cat.categories
         for batch_level in batches:
             sel_step1 = cell_attr.index[
-                (cell_attr[batch_var] == batch_level) & cell_attr.index.isin(cells_step1)
+                (cell_attr[batch_var] == batch_level)
+                & cell_attr.index.isin(cells_step1)
             ]
             cells_step1_mask = cell_attr.index.isin(sel_step1)
             umi_batch_step1 = umi[genes_step1_idx][:, cells_step1_mask]
             batch_gmean_step1 = pd.Series(
-                np.log10(np.maximum(_row_gmean_sparse(umi_batch_step1, gmean_eps), 1e-9)),
+                np.log10(
+                    np.maximum(_row_gmean_sparse(umi_batch_step1, gmean_eps), 1e-9)
+                ),
                 index=genes_step1_arr,
             )
             if np.isinf(batch_gmean_step1.to_numpy()).any():
@@ -835,7 +872,9 @@ def _reg_model_pars(
             sel = cell_attr.index[cell_attr[batch_var] == batch_level]
             cells_mask = cell_attr.index.isin(sel)
             batch_gmean = pd.Series(
-                np.log10(np.maximum(_row_gmean_sparse(umi[:, cells_mask], gmean_eps), 1e-9)),
+                np.log10(
+                    np.maximum(_row_gmean_sparse(umi[:, cells_mask], gmean_eps), 1e-9)
+                ),
                 index=genes,
             )
             batch_gmean = np.maximum(
@@ -853,7 +892,7 @@ def _reg_model_pars(
                     kern=2,
                     bw=bw,
                 )
-                col_idx = model_pars_fit.columns.get_loc(col)
+                col_idx = model_pars_fit.columns.get_loc(col)  # noqa: F841
                 values = model_pars_fit[col].to_numpy()
                 values[batch_order] = smoothed
                 model_pars_fit[col] = values
@@ -912,10 +951,15 @@ def _get_model_pars_nonreg(
             y = umi_bin[row_idx]
             theta = float(model_pars_fit.loc[gene, "theta"])
             offset = np.log(np.maximum(mu[row_idx], 1e-9))
-            family = sm.families.NegativeBinomial(alpha=1.0 / max(theta, 1e-7), link=sm.families.links.Log())
+            family = sm.families.NegativeBinomial(
+                alpha=1.0 / max(theta, 1e-7), link=sm.families.links.Log()
+            )
             try:
                 fit = sm.GLM(y, design, family=family, offset=offset).fit()
-                coefs = {design.columns[i]: float(fit.params[i]) for i in range(len(design.columns))}
+                coefs = {
+                    design.columns[i]: float(fit.params[i])
+                    for i in range(len(design.columns))
+                }
             except (np.linalg.LinAlgError, ValueError, FloatingPointError):
                 coefs = {col: np.nan for col in design.columns}
             rows.append(coefs)
@@ -954,7 +998,12 @@ def _get_correct_data(
     theta: pd.Series,
     pearson_residuals: pd.DataFrame,
 ) -> np.ndarray:
-    mu = np.exp(np.dot(coefs.to_numpy(dtype=np.float64), regressor_data.T.to_numpy(dtype=np.float64)))
+    mu = np.exp(
+        np.dot(
+            coefs.to_numpy(dtype=np.float64),
+            regressor_data.T.to_numpy(dtype=np.float64),
+        )
+    )
     variance = mu + np.divide(mu**2, theta.to_numpy().reshape(-1, 1))
     return mu + pearson_residuals.to_numpy() * np.sqrt(variance)
 
@@ -1054,7 +1103,9 @@ def get_residuals(
         )
         for i in range(1, max_bin + 1)
     )
-    residuals = pd.DataFrame(np.vstack(blocks), index=target_genes, columns=regressor_data.index)
+    residuals = pd.DataFrame(
+        np.vstack(blocks), index=target_genes, columns=regressor_data.index
+    )
     if res_clip_range is not None:
         return pd.DataFrame(
             _clip_matrix_values(residuals.to_numpy(), res_clip_range),
@@ -1096,7 +1147,9 @@ def _load_reference_model(reference_sct_model: dict[str, Any]) -> dict[str, Any]
     pars = model.get("model_pars_fit")
     if not isinstance(pars, pd.DataFrame):
         if isinstance(pars, dict) and "index" in pars:
-            model["model_pars_fit"] = pd.DataFrame(pars["data"], index=pars["index"], columns=pars["columns"])
+            model["model_pars_fit"] = pd.DataFrame(
+                pars["data"], index=pars["index"], columns=pars["columns"]
+            )
         else:
             model["model_pars_fit"] = pd.DataFrame(pars)
     gene_attr = model.get("gene_attr")
@@ -1105,7 +1158,9 @@ def _load_reference_model(reference_sct_model: dict[str, Any]) -> dict[str, Any]
     return model
 
 
-def pack_sct_model(vst_out: dict[str, Any], clip_range: Optional[tuple[float, float]] = None) -> dict[str, Any]:
+def pack_sct_model(
+    vst_out: dict[str, Any], clip_range: Optional[tuple[float, float]] = None
+) -> dict[str, Any]:
     """Serialize a VST result for reuse as a reference SCT model."""
     packed = {
         "model_str": vst_out["model_str"],
@@ -1139,7 +1194,9 @@ def _regress_out_matrix(
     out = np.empty(data_expr.shape, dtype=np.float64)
 
     if model_use == "linear":
-        x = np.column_stack([np.ones(len(cells)), latent_data.to_numpy(dtype=np.float64)])
+        x = np.column_stack(
+            [np.ones(len(cells)), latent_data.to_numpy(dtype=np.float64)]
+        )
         for i, gene in enumerate(data_expr.index):
             y = data_expr.loc[gene].to_numpy(dtype=np.float64)
             coeffs = np.linalg.lstsq(x, y, rcond=None)[0]
@@ -1149,13 +1206,17 @@ def _regress_out_matrix(
     fmla_rhs = " + ".join(vars_to_regress)
     for i, gene in enumerate(data_expr.index):
         y = data_expr.loc[gene].to_numpy(dtype=np.float64)
-        regression_mat = pd.DataFrame(latent_data.to_numpy(dtype=np.float64), columns=vars_to_regress)
+        regression_mat = pd.DataFrame(
+            latent_data.to_numpy(dtype=np.float64), columns=vars_to_regress
+        )
         regression_mat["GENE"] = y
         if model_use == "poisson":
             try:
                 fit = sm.GLM(
                     y,
-                    sm.add_constant(latent_data.to_numpy(dtype=np.float64), has_constant="add"),
+                    sm.add_constant(
+                        latent_data.to_numpy(dtype=np.float64), has_constant="add"
+                    ),
                     family=sm.families.Poisson(),
                 ).fit()
                 out[i] = fit.resid_pearson
@@ -1167,9 +1228,14 @@ def _regress_out_matrix(
     return pd.DataFrame(out, index=data_expr.index, columns=cells)
 
 
-def _nb_regress_out_gene(formula_rhs: str, regression_mat: pd.DataFrame, gene: Any) -> np.ndarray:
+def _nb_regress_out_gene(
+    formula_rhs: str, regression_mat: pd.DataFrame, gene: Any
+) -> np.ndarray:
     y = regression_mat["GENE"].to_numpy(dtype=np.float64)
-    x = sm.add_constant(regression_mat.drop(columns=["GENE"]).to_numpy(dtype=np.float64), has_constant="add")
+    x = sm.add_constant(
+        regression_mat.drop(columns=["GENE"]).to_numpy(dtype=np.float64),
+        has_constant="add",
+    )
     try:
         fit = sm.NegativeBinomial(y, x).fit(disp=0, maxiter=100)
         return fit.resid_pearson
@@ -1203,9 +1269,13 @@ def _scale_data(
         regress_expr = mat
         if model_use != "linear":
             if count_data is None:
-                raise ValueError("count_data is required when model_use is poisson or negbinom.")
+                raise ValueError(
+                    "count_data is required when model_use is poisson or negbinom."
+                )
             regress_expr = count_data.loc[mat.index, mat.columns]
-        mat = _regress_out_matrix(regress_expr, latent_data[vars_to_regress], model_use=model_use)
+        mat = _regress_out_matrix(
+            regress_expr, latent_data[vars_to_regress], model_use=model_use
+        )
 
     scaled = pd.DataFrame(
         np.zeros(mat.shape, dtype=np.float64),
@@ -1298,7 +1368,9 @@ def vst(
         When ``model_pars_step1`` is set, pass R values for ksmooth parity.
     """
     if model_pars_step1 is not None and model_pars_fit_override is not None:
-        raise ValueError("Pass only one of model_pars_step1 or model_pars_fit_override.")
+        raise ValueError(
+            "Pass only one of model_pars_step1 or model_pars_fit_override."
+        )
     if model_pars_step1 is not None and genes_step1 is None:
         genes_step1 = pd.Index(model_pars_step1.index.astype(str))
 
@@ -1368,7 +1440,8 @@ def vst(
         genes_log_gmean_step1 = genes_log_gmean.loc[genes_step1]
     else:
         genes_step1_mask = (
-            np.asarray((umi[:, cells.isin(cells_step1)] > 0).sum(axis=1)).ravel() >= min_cells
+            np.asarray((umi[:, cells.isin(cells_step1)] > 0).sum(axis=1)).ravel()
+            >= min_cells
         )
         genes_step1 = genes[genes_step1_mask]
 
@@ -1376,7 +1449,11 @@ def vst(
             amean = np.asarray(umi.mean(axis=1)).ravel()
             var = np.asarray(umi.power(2).mean(axis=1)).ravel() - amean**2
             overdispersed = genes_step1[
-                (var[genes.get_indexer(genes_step1)] - amean[genes.get_indexer(genes_step1)]) > 0
+                (
+                    var[genes.get_indexer(genes_step1)]
+                    - amean[genes.get_indexer(genes_step1)]
+                )
+                > 0
             ]
             genes_step1 = pd.Index(overdispersed)
 
@@ -1419,14 +1496,18 @@ def vst(
                 else genes_log_gmean.loc[genes_step1]
             )
             if genes_log_gmean_step1.isna().any():
-                raise ValueError("genes_log_gmean_step1 is missing injected step-1 genes.")
+                raise ValueError(
+                    "genes_log_gmean_step1 is missing injected step-1 genes."
+                )
         else:
             data_step1 = cell_attr.loc[cells_step1]
             regressor_data_step1 = _build_design_matrix(data_step1, model_str)
             cells_step1_idx = cells.get_indexer(cells_step1)
             if (cells_step1_idx < 0).any():
                 missing = cells_step1[cells_step1_idx < 0]
-                raise ValueError(f"cells_step1 not found in cells: {missing[:5].tolist()}")
+                raise ValueError(
+                    f"cells_step1 not found in cells: {missing[:5].tolist()}"
+                )
             umi_step1 = umi[genes.get_indexer(genes_step1)][:, cells_step1_idx]
             if method == "poisson":
                 model_pars = _fit_poisson(umi_step1, regressor_data_step1, genes_step1)
@@ -1518,7 +1599,9 @@ def vst(
             )
             for i in range(1, max_bin + 1)
         )
-        residuals = pd.DataFrame(np.vstack(res_blocks), index=genes, columns=regressor_data.index)
+        residuals = pd.DataFrame(
+            np.vstack(res_blocks), index=genes, columns=regressor_data.index
+        )
         residuals = residuals.clip(lower=res_clip_range[0], upper=res_clip_range[1])
 
     vst_out: dict[str, Any] = {
@@ -1547,10 +1630,14 @@ def vst(
     }
 
     if return_corrected_umi and residual_type == "pearson":
-        vst_out["umi_corrected"] = _correct_counts(vst_out, genes.to_numpy(), bin_size=bin_size)
+        vst_out["umi_corrected"] = _correct_counts(
+            vst_out, genes.to_numpy(), bin_size=bin_size
+        )
 
     gene_attr = pd.DataFrame(index=genes)
-    gene_attr["detection_rate"] = np.asarray((umi >= 0.01).sum(axis=1)).ravel() / umi.shape[1]
+    gene_attr["detection_rate"] = (
+        np.asarray((umi >= 0.01).sum(axis=1)).ravel() / umi.shape[1]
+    )
     gene_attr["gmean"] = np.power(10, genes_log_gmean)
     umi_mean = np.asarray(umi.mean(axis=1)).ravel()
     gene_attr["amean"] = umi_mean
@@ -1641,15 +1728,24 @@ def run_sctransform(
         clip_range = (-np.sqrt(umi_gbc.shape[1] / 30), np.sqrt(umi_gbc.shape[1] / 30))
     if res_clip_range is None:
         # Final stored residuals use the tighter SCTransform assay clip.
-        res_clip_range = (-np.sqrt(umi_gbc.shape[1] / 30), np.sqrt(umi_gbc.shape[1] / 30))
+        res_clip_range = (
+            -np.sqrt(umi_gbc.shape[1] / 30),
+            np.sqrt(umi_gbc.shape[1] / 30),
+        )
     variance_clip_range = (-np.sqrt(umi_gbc.shape[1]), np.sqrt(umi_gbc.shape[1]))
 
     if model_use not in SCALE_MODELS:
         raise ValueError(f"model_use must be one of {sorted(SCALE_MODELS)}.")
-    if reference_sct_model is not None and (latent_var or batch_var or latent_var_nonreg):
-        raise ValueError("Custom latent variables are not supported with reference_sct_model.")
+    if reference_sct_model is not None and (
+        latent_var or batch_var or latent_var_nonreg
+    ):
+        raise ValueError(
+            "Custom latent variables are not supported with reference_sct_model."
+        )
 
-    sct_method = _resolve_sct_method(reference_sct_model, residual_features, conserve_memory)
+    sct_method = _resolve_sct_method(
+        reference_sct_model, residual_features, conserve_memory
+    )
 
     return_only_var = return_only_var_genes
     correct_umi = do_correct_umi
@@ -1673,13 +1769,17 @@ def run_sctransform(
 
     if sct_method == "reference.model":
         if reference_sct_model is None:
-            raise ValueError("reference_sct_model is required for reference.model mode.")
+            raise ValueError(
+                "reference_sct_model is required for reference.model mode."
+            )
         reference_sct_model = _load_reference_model(reference_sct_model)
         if reference_sct_model.get("model_str") != "y ~ log_umi":
             raise ValueError("reference_sct_model must use model_str 'y ~ log_umi'.")
         center = False
         correct_umi = False
-        clip_range = reference_sct_model.get("arguments", {}).get("sct.clip.range") or clip_range
+        clip_range = (
+            reference_sct_model.get("arguments", {}).get("sct.clip.range") or clip_range
+        )
         vst_out = {
             "model_str": reference_sct_model["model_str"],
             "model_pars_fit": reference_sct_model["model_pars_fit"].copy(),
@@ -1688,7 +1788,9 @@ def run_sctransform(
             "y": None,
             "model_str_nonreg": reference_sct_model.get("model_str_nonreg", ""),
             "model_pars_nonreg": reference_sct_model.get("model_pars_nonreg"),
-            "arguments": reference_sct_model.get("arguments", {"min_variance": -np.inf}),
+            "arguments": reference_sct_model.get(
+                "arguments", {"min_variance": -np.inf}
+            ),
         }
         common_genes = gene_index.intersection(vst_out["model_pars_fit"].index)
         vst_out["model_pars_fit"] = vst_out["model_pars_fit"].loc[common_genes]
@@ -1742,9 +1844,7 @@ def run_sctransform(
         variable_features_rv_th,
     )
     residual_genes = (
-        pd.Index(residual_features)
-        if residual_features is not None
-        else top_features
+        pd.Index(residual_features) if residual_features is not None else top_features
     )
 
     if sct_method == "reference.model":
@@ -1764,8 +1864,10 @@ def run_sctransform(
         vst_out["y"] = residual_mat.sub(ref_means, axis=0)
         vst_out["gene_attr"] = vst_out["gene_attr"].loc[residual_genes]
     elif sct_method == "residual.features":
-        residual_genes = pd.Index(residual_features).intersection(gene_index).intersection(
-            vst_out["gene_attr"].index
+        residual_genes = (
+            pd.Index(residual_features)
+            .intersection(gene_index)
+            .intersection(vst_out["gene_attr"].index)
         )
         residual_mat = get_residuals(
             vst_out,
@@ -1777,8 +1879,12 @@ def run_sctransform(
             res_clip_range=res_clip_range,
         )
         vst_out["y"] = residual_mat
-        vst_out["gene_attr"].loc[residual_genes, "residual_mean"] = residual_mat.mean(axis=1)
-        vst_out["gene_attr"].loc[residual_genes, "residual_variance"] = residual_mat.var(axis=1)
+        vst_out["gene_attr"].loc[residual_genes, "residual_mean"] = residual_mat.mean(
+            axis=1
+        )
+        vst_out["gene_attr"].loc[residual_genes, "residual_variance"] = (
+            residual_mat.var(axis=1)
+        )
     elif sct_method == "conserve.memory":
         residual_mat = get_residuals(
             vst_out,
@@ -1790,7 +1896,9 @@ def run_sctransform(
             cell_attr=vst_out["cell_attr"],
         )
         vst_out["y"] = residual_mat
-        vst_out["gene_attr"].loc[top_features, "residual_mean"] = residual_mat.mean(axis=1)
+        vst_out["gene_attr"].loc[top_features, "residual_mean"] = residual_mat.mean(
+            axis=1
+        )
         if correct_umi and residual_type == "pearson":
             warnings.warn(
                 "do_correct_umi with conserve_memory runs an extra full residual pass.",
@@ -1853,7 +1961,9 @@ def run_sctransform(
         data = _expand_genes_gbc(data, count_genes, full_gene_index)
 
     variable_features = (
-        residual_genes.to_numpy() if residual_features is not None else top_features.to_numpy()
+        residual_genes.to_numpy()
+        if residual_features is not None
+        else top_features.to_numpy()
     )
     vst_out["arguments"] = {
         **vst_out.get("arguments", {}),

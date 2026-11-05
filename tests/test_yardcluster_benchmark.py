@@ -4,7 +4,10 @@ import numpy as np
 import pytest
 
 from trackcell.benchmark.yardcluster.data import make_patch_adata
-from trackcell.benchmark.yardcluster.metrics import evaluate_clustering, spatial_coherence
+from trackcell.benchmark.yardcluster.metrics import (
+    evaluate_clustering,
+    spatial_coherence,
+)
 from trackcell.benchmark.yardcluster.runner import run_yardcluster_benchmark
 
 

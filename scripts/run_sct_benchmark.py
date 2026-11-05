@@ -34,7 +34,9 @@ RSCRIPT = REPO / "trackcell" / "benchmark" / "sct" / "export_sct_benchmark_r.R"
 ATA = Path("/Volumes/data/GOPATH/bin/ata")
 
 
-def export_r_commands(benchmark_root: Path, seeds: tuple[int, ...], samples: tuple[str, ...]) -> Path:
+def export_r_commands(
+    benchmark_root: Path, seeds: tuple[int, ...], samples: tuple[str, ...]
+) -> Path:
     """Write ata command file for R exports."""
     cmd_file = benchmark_root / "steps" / "sct_benchmark" / "export_r_commands.txt"
     cmd_file.parent.mkdir(parents=True, exist_ok=True)
@@ -55,7 +57,9 @@ def main() -> None:
     parser.add_argument("--benchmark-root", type=Path, default=BENCHMARK_ROOT)
     parser.add_argument("--export-r", action="store_true", help="Run R exports via ata")
     parser.add_argument("--run", action="store_true", help="Run Python comparisons")
-    parser.add_argument("--threads", type=int, default=3, help="ata concurrency for R export")
+    parser.add_argument(
+        "--threads", type=int, default=3, help="ata concurrency for R export"
+    )
     parser.add_argument(
         "--seeds",
         type=int,

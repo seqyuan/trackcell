@@ -22,7 +22,9 @@ def pearson_corr(a: np.ndarray, b: np.ndarray) -> float:
     return float(np.corrcoef(a[mask], b[mask])[0, 1])
 
 
-def compare_series(a: pd.Series, b: pd.Series, *, log10: bool = False) -> dict[str, float]:
+def compare_series(
+    a: pd.Series, b: pd.Series, *, log10: bool = False
+) -> dict[str, float]:
     shared = a.index.intersection(b.index)
     x = a.loc[shared].to_numpy(dtype=np.float64)
     y = b.loc[shared].to_numpy(dtype=np.float64)
@@ -50,7 +52,9 @@ def compare_model_pars(py: pd.DataFrame, r: pd.DataFrame) -> dict[str, Any]:
     out["n_inf_both"] = int((~np.isfinite(py_t) & ~np.isfinite(r_t)).sum())
     for col in ("theta", "Intercept", "log_umi"):
         if col in py.columns and col in r.columns:
-            out[col] = compare_series(py.loc[shared, col], r.loc[shared, col], log10=(col == "theta"))
+            out[col] = compare_series(
+                py.loc[shared, col], r.loc[shared, col], log10=(col == "theta")
+            )
     return out
 
 
@@ -85,9 +89,14 @@ def compare_gene_attr(py: pd.DataFrame, r: pd.DataFrame) -> dict[str, Any]:
     return out
 
 
-def hvg_jaccard(py_gene_attr: pd.DataFrame, r_hvg: set[str], *, n_top: int = 3000) -> float:
+def hvg_jaccard(
+    py_gene_attr: pd.DataFrame, r_hvg: set[str], *, n_top: int = 3000
+) -> float:
     py_hvg = set(
-        py_gene_attr["residual_variance"].sort_values(ascending=False).index[:n_top].astype(str)
+        py_gene_attr["residual_variance"]
+        .sort_values(ascending=False)
+        .index[:n_top]
+        .astype(str)
     )
     return jaccard(py_hvg, r_hvg)
 

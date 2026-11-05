@@ -403,14 +403,12 @@ def diff_nhood_enrichment(
                 log_fold_change=log_fold_change,
             )
             with np.errstate(invalid="ignore"):
-                counts += (
-                    np.abs(perm_diff.values) >= np.abs(obs_diff.values)
-                ).astype(np.float64)
+                counts += (np.abs(perm_diff.values) >= np.abs(obs_diff.values)).astype(
+                    np.float64
+                )
 
         pvalue = counts / n_perms
-        pvalue = pd.DataFrame(
-            pvalue, index=obs_diff.index, columns=obs_diff.columns
-        )
+        pvalue = pd.DataFrame(pvalue, index=obs_diff.index, columns=obs_diff.columns)
         result[result_key]["pvalue"] = pvalue
 
     if copy:

@@ -52,7 +52,9 @@ def _as_counts(genes, cells, counts) -> np.ndarray:
 # ---------------------------------------------------------------------------
 
 
-def write_10x_h5(path: Path, genes=DEFAULT_GENES, cells=DEFAULT_BARCODES, counts=None) -> Path:
+def write_10x_h5(
+    path: Path, genes=DEFAULT_GENES, cells=DEFAULT_BARCODES, counts=None
+) -> Path:
     """Write a 10x Genomics v3 ``filtered_feature_bc_matrix.h5``.
 
     Layout (as consumed by ``scanpy.read_10x_h5``)::
@@ -184,7 +186,9 @@ def write_scalefactors(path: Path, include_spot_diameter: bool = True) -> Path:
     return path
 
 
-def write_image(path: Path, height: int = 12, width: int = 16, value: int = 128) -> Path:
+def write_image(
+    path: Path, height: int = 12, width: int = 16, value: int = 128
+) -> Path:
     """Write a tiny RGB PNG that imageio can read back."""
     import imageio.v3 as iio
 
@@ -195,7 +199,9 @@ def write_image(path: Path, height: int = 12, width: int = 16, value: int = 128)
     return path
 
 
-def write_tif_image(path: Path, height: int = 10, width: int = 12, value: int = 42) -> Path:
+def write_tif_image(
+    path: Path, height: int = 10, width: int = 12, value: int = 42
+) -> Path:
     """Write a single-channel (grayscale) TIFF, like STOmics ssDNA captures."""
     import imageio.v3 as iio
 
@@ -427,7 +433,9 @@ def write_tissue_gef(
     return path
 
 
-def write_gem(path: Path, rows=(('GeneA', 0, 0, 1), ('GeneB', 1, 1, 2), ('GeneA', 2, 0, 3))) -> Path:
+def write_gem(
+    path: Path, rows=(("GeneA", 0, 0, 1), ("GeneB", 1, 1, 2), ("GeneA", 2, 0, 3))
+) -> Path:
     """Write a tiny STOmics ``.gem`` text file (geneID, x, y, MIDCount)."""
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)

@@ -16,7 +16,9 @@ from scipy.spatial.distance import pdist
 from scipy.stats import false_discovery_control
 
 
-def _cluster_medoids(adata: AnnData, cluster_key: str, use_rep: str) -> tuple[np.ndarray, list[str]]:
+def _cluster_medoids(
+    adata: AnnData, cluster_key: str, use_rep: str
+) -> tuple[np.ndarray, list[str]]:
     labels = adata.obs[cluster_key].astype(str)
     clusters = sorted(labels.unique(), key=lambda x: (len(x), x))
     emb = np.asarray(adata.obsm[use_rep])

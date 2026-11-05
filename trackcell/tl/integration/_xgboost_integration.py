@@ -71,7 +71,9 @@ def _variance_candidate_genes(
     uns = adata.uns.get(sct_key, {})
     batch_models = uns.get("batch_models", {})
     if not batch_models:
-        raise ValueError(f"Missing {sct_key} batch_models; run sctransform with batch_key first.")
+        raise ValueError(
+            f"Missing {sct_key} batch_models; run sctransform with batch_key first."
+        )
     rv_frames = []
     for batch_label, entry in batch_models.items():
         gene_attr = pd.DataFrame(entry.get("gene_attr", {})).T

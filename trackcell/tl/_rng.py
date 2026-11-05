@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Optional, Protocol, runtime_checkable
+from typing import Optional, Protocol, runtime_checkable
 
 import numpy as np
 
@@ -51,7 +51,9 @@ class _RSampleRNG:
         items = np.asarray(items)
         n = int(len(items))
         if size > n and not replace:
-            raise ValueError("Cannot take a larger sample than population when replace=False")
+            raise ValueError(
+                "Cannot take a larger sample than population when replace=False"
+            )
         if p is None:
             idx = self._rng.sample(n, int(size), replace=replace)
         else:
@@ -109,5 +111,3 @@ def make_vst_rng(seed: int, *, prefer_r: bool = True) -> VstRNG:
     if prefer_r and _RRNG_AVAILABLE:
         return _RSampleRNG(seed)
     return _NumpyRNG(seed)
-
-

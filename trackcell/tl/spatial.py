@@ -16,27 +16,29 @@ logger = get_logger(__name__)
 
 # Perceptually distinct colors for up to 7 genes (ColorBrewer-inspired)
 DEFAULT_GENE_COLORS = [
-    '#e41a1c',  # Red
-    '#377eb8',  # Blue
-    '#4daf4a',  # Green
-    '#ff7f00',  # Orange
-    '#984ea3',  # Purple
-    '#a65628',  # Brown
-    '#f781bf',  # Pink
+    "#e41a1c",  # Red
+    "#377eb8",  # Blue
+    "#4daf4a",  # Green
+    "#ff7f00",  # Orange
+    "#984ea3",  # Purple
+    "#a65628",  # Brown
+    "#f781bf",  # Pink
 ]
 
 
 def _hex_to_rgb(hex_color: str) -> tuple:
     """Convert hex color string to (R, G, B) tuple in [0, 1]."""
-    h = hex_color.lstrip('#')
-    return tuple(int(h[i:i+2], 16) / 255.0 for i in (0, 2, 4))
+    h = hex_color.lstrip("#")
+    return tuple(int(h[i : i + 2], 16) / 255.0 for i in (0, 2, 4))
 
 
 def _rgb_to_hex(r: float, g: float, b: float) -> str:
     """Convert (R, G, B) in [0, 1] to hex string."""
+
     def clamp(v):
         return max(0, min(255, int(round(v * 255))))
-    return f'#{clamp(r):02x}{clamp(g):02x}{clamp(b):02x}'
+
+    return f"#{clamp(r):02x}{clamp(g):02x}{clamp(b):02x}"
 
 
 def _multigene_facet(
@@ -49,7 +51,7 @@ def _multigene_facet(
     ncols: int = 3,
     figsize: Optional[tuple] = None,
     edges_width: float = 0.3,
-    edges_color: str = '#cccccc30',
+    edges_color: str = "#cccccc30",
     alpha: float = 0.8,
     show: bool = True,
     ax=None,
@@ -79,7 +81,7 @@ def _multigene_facet(
             ax_i = axes_flat[i]
             # Single-hue colormap: white → gene color
             gene_cmap = LinearSegmentedColormap.from_list(
-                f'_{gene}', ['#fafafa', color]
+                f"_{gene}", ["#fafafa", color]
             )
 
             # Extract per-cell values (respecting ``layer``) for percentile
@@ -88,7 +90,7 @@ def _multigene_facet(
             values = adata[:, gene].X
             if layer is not None:
                 values = adata[:, gene].layers[layer]
-            if hasattr(values, 'toarray'):
+            if hasattr(values, "toarray"):
                 values = values.toarray()
             values = np.asarray(values, dtype=float).ravel()
             finite = values[np.isfinite(values)]
@@ -100,11 +102,12 @@ def _multigene_facet(
 
             plot_key = gene
             if layer is not None:
-                plot_key = f'__facet_{gene}'
+                plot_key = f"__facet_{gene}"
                 adata.obs[plot_key] = values
                 temp_keys.append(plot_key)
 
             from trackcell.pl.plot import spatial_cell
+
             spatial_cell(
                 adata,
                 color=plot_key,
@@ -119,7 +122,7 @@ def _multigene_facet(
                 alpha=alpha,
                 library_id=library_id,
             )
-            ax_i.set_title(gene, fontsize=12, fontweight='bold')
+            ax_i.set_title(gene, fontsize=12, fontweight="bold")
     finally:
         for key in temp_keys:
             if key in adata.obs.columns:
@@ -128,31 +131,31 @@ def _multigene_facet(
     # Hide unused axes
     for j in range(n_genes, len(axes_flat)):
         axes_flat[j].set_visible(False)
-    
+
     fig.tight_layout(rect=[0, 0, 1, 1])
-    
+
     if show:
         plt.show()
-    
+
     return axes
 
 
 def multigene_blend(
     adata,
     genes: List[str],
-    mode: str = 'blend',
+    mode: str = "blend",
     colors: Optional[List[str]] = None,
     layer: Optional[str] = None,
     vmin_percentile: float = 1.0,
     vmax_percentile: float = 99.0,
     gamma: float = 1.0,
-    background: str = '#e0e0e0',
-    key_added: str = 'multigene_blend',
+    background: str = "#e0e0e0",
+    key_added: str = "multigene_blend",
     # Facet-specific
     ncols: int = 3,
     figsize: Optional[tuple] = None,
     edges_width: float = 0.3,
-    edges_color: str = '#cccccc30',
+    edges_color: str = "#cccccc30",
     alpha_facet: float = 0.8,
     show: bool = True,
     ax=None,
@@ -161,14 +164,14 @@ def multigene_blend(
 ):
     """
     Multi-gene co-expression visualization with two modes.
-    
+
     **Mode 'blend'** (default): Computes blended hex colors by weighted RGB averaging
     of per-gene base colors. The result is a hex color per cell stored in
     ``adata.obs[key_added]``, usable with ``spatial_cell(color=key_added)``.
-    
+
     **Mode 'facet'**: Draws faceted subplots, one gene per panel, each using
     a single-hue colormap (white → gene color). Returns matplotlib axes.
-    
+
     Parameters
     ----------
     adata : AnnData
@@ -193,7 +196,7 @@ def multigene_blend(
         obs column name for blend mode output.
     inplace : bool
         If True (blend), stores in adata.obs. If False, returns Series.
-    
+
     **Facet-specific parameters:**
     ncols : int
         Number of columns in facet grid (default 3).
@@ -211,12 +214,12 @@ def multigene_blend(
         Pre-existing axes to plot on.
     library_id : str, optional
         Library id passed to spatial_cell.
-    
+
     Returns
     -------
     blend mode: pd.Series or None
     facet mode: np.ndarray of matplotlib.Axes
-    
+
     Examples
     --------
     >>> import trackcell as tcl
@@ -233,13 +236,13 @@ def multigene_blend(
     """
     n_genes = len(genes)
     if n_genes < 2:
-        raise ValueError(f'Need at least 2 genes, got {n_genes}')
-    
+        raise ValueError(f"Need at least 2 genes, got {n_genes}")
+
     # Validate genes
     missing = [g for g in genes if g not in adata.var_names]
     if missing:
-        raise ValueError(f'Genes not found in adata.var_names: {missing}')
-    
+        raise ValueError(f"Genes not found in adata.var_names: {missing}")
+
     # Default colors
     if colors is None:
         if n_genes <= len(DEFAULT_GENE_COLORS):
@@ -251,48 +254,52 @@ def multigene_blend(
             from matplotlib.colors import to_hex
 
             cmap = colormaps.get_cmap("tab20" if n_genes <= 20 else "hsv")
-            colors = [
-                to_hex(cmap(i / max(n_genes, 1))) for i in range(n_genes)
-            ]
+            colors = [to_hex(cmap(i / max(n_genes, 1))) for i in range(n_genes)]
     elif len(colors) != n_genes:
         raise ValueError(
-            f'colors length ({len(colors)}) must match genes length ({n_genes})'
+            f"colors length ({len(colors)}) must match genes length ({n_genes})"
         )
-    
-    if mode == 'facet':
+
+    if mode == "facet":
         return _multigene_facet(
-            adata=adata, genes=genes, colors=colors,
-            layer=layer, vmin_percentile=vmin_percentile,
+            adata=adata,
+            genes=genes,
+            colors=colors,
+            layer=layer,
+            vmin_percentile=vmin_percentile,
             vmax_percentile=vmax_percentile,
-            ncols=ncols, figsize=figsize,
-            edges_width=edges_width, edges_color=edges_color,
-            alpha=alpha_facet, show=show, ax=ax, library_id=library_id,
+            ncols=ncols,
+            figsize=figsize,
+            edges_width=edges_width,
+            edges_color=edges_color,
+            alpha=alpha_facet,
+            show=show,
+            ax=ax,
+            library_id=library_id,
         )
-    
-    if mode != 'blend':
-        raise ValueError(
-            f"Unknown mode '{mode}'. Valid modes: 'blend', 'facet'."
-        )
-    
+
+    if mode != "blend":
+        raise ValueError(f"Unknown mode '{mode}'. Valid modes: 'blend', 'facet'.")
+
     # ── Blend mode ──
     if n_genes > 7:
         warnings.warn(
-            f'{n_genes} genes may produce muddy blends. '
+            f"{n_genes} genes may produce muddy blends. "
             f'Consider using <= 7 genes or mode="facet".'
         )
-    
+
     # ── Extract expression matrix ──
     X = adata[:, genes].X if layer is None else adata[:, genes].layers[layer]
-    if hasattr(X, 'toarray'):
+    if hasattr(X, "toarray"):
         X = X.toarray()
     else:
         X = np.asarray(X, dtype=float)
-    
+
     n_cells = X.shape[0]
-    
+
     # ── Convert base colors to RGB ──
     base_rgb = np.array([_hex_to_rgb(c) for c in colors])  # (n_genes, 3)
-    
+
     # ── Per-gene normalization (percentile clipping) ──
     X_norm = np.zeros_like(X)
     for j in range(n_genes):
@@ -304,18 +311,18 @@ def multigene_blend(
             X_norm[:, j] = (col_clipped - vmin) / (vmax - vmin)
         else:
             X_norm[:, j] = 0.0
-    
+
     # ── Weighted RGB blending ──
     # weight_i = norm_expr_i / (sum(norm_expr) + eps)
     # RGB = Σ(weight_i * base_rgb_i)
     total = X_norm.sum(axis=1, keepdims=True)  # (n_cells, 1)
     weights = np.divide(X_norm, total, where=total > 0)  # (n_cells, n_genes)
     rgb = weights @ base_rgb  # (n_cells, 3)
-    
+
     # ── Gamma correction ──
     if gamma != 1.0:
         rgb = np.power(rgb, gamma)
-    
+
     # ── Convert to hex ──
     hex_colors = []
     for i in range(n_cells):
@@ -323,26 +330,28 @@ def multigene_blend(
             hex_colors.append(_rgb_to_hex(rgb[i, 0], rgb[i, 1], rgb[i, 2]))
         else:
             hex_colors.append(background)
-    
+
     result = pd.Series(hex_colors, index=adata.obs_names, name=key_added)
 
     # ── Store metadata ──
     params = {
-        'genes': genes,
-        'colors': colors,
-        'vmin_percentile': vmin_percentile,
-        'vmax_percentile': vmax_percentile,
-        'gamma': gamma,
-        'background': background,
-        'n_unique_colors': result.nunique(),
+        "genes": genes,
+        "colors": colors,
+        "vmin_percentile": vmin_percentile,
+        "vmax_percentile": vmax_percentile,
+        "gamma": gamma,
+        "background": background,
+        "n_unique_colors": result.nunique(),
     }
     result.attrs.update(params)
     if inplace:
         adata.obs[key_added] = result
-        adata.uns[f'{key_added}_params'] = params
+        adata.uns[f"{key_added}_params"] = params
         logger.info(
             '[multigene_blend] %s genes → %s unique colors in adata.obs["%s"]',
-            n_genes, f'{result.nunique():,}', key_added,
+            n_genes,
+            f"{result.nunique():,}",
+            key_added,
         )
         return None
 
@@ -394,17 +403,18 @@ def _resolve_labeldist_scalefactors(
 
     resolved_hires_scale = hires_scale
     if resolved_hires_scale is None:
-        resolved_hires_scale = (
-            scalefactors.get("tissue_hires_scalef")
-            or scalefactors.get("regist_target_img_scalef")
-        )
+        resolved_hires_scale = scalefactors.get(
+            "tissue_hires_scalef"
+        ) or scalefactors.get("regist_target_img_scalef")
     if resolved_hires_scale is not None and (
         not np.isfinite(resolved_hires_scale) or resolved_hires_scale <= 0
     ):
         raise ValueError("`hires_scale` must be positive when provided.")
 
-    return library_id, float(resolved_mpp), (
-        float(resolved_hires_scale) if resolved_hires_scale is not None else None
+    return (
+        library_id,
+        float(resolved_mpp),
+        (float(resolved_hires_scale) if resolved_hires_scale is not None else None),
     )
 
 
@@ -461,15 +471,15 @@ def hd_labeldist(
 ):
     """
     Compute the distance from every cell to the nearest cell annotated with a specific label (10x HD data).
-    
+
     Distances are reported both in the pixel coordinate system stored in `.obsm["spatial"]`
     (SpaceRanger target/hires layer) and in microns using the scalefactors embedded in
     `adata.uns["spatial"]`.
-    
+
     By default, the function preserves the previous auto-detection heuristic for
     hires vs full-res coordinates. For reproducible distances, pass
     ``coordinate_system='fullres'`` or ``coordinate_system='hires'`` explicitly.
-    
+
     Parameters
     ----------
     adata : sc.AnnData
@@ -499,7 +509,7 @@ def hd_labeldist(
         Override the value stored in scalefactors.
     hires_scale : float, optional
         Override `tissue_hires_scalef` / `regist_target_img_scalef`.
-    
+
     Returns
     -------
     pandas.DataFrame | None
@@ -516,21 +526,21 @@ def hd_labeldist(
     coordinate_system = coordinate_system.lower()
     if coordinate_system not in {"auto", "fullres", "hires"}:
         raise ValueError("`coordinate_system` must be 'auto', 'fullres', or 'hires'.")
-    
+
     coords = adata.obsm["spatial"]
     if coords is None or len(coords) == 0:
         raise ValueError("Spatial coordinates are empty.")
-    
+
     mask_label = (adata.obs[groupby] == label).to_numpy()
     if not mask_label.any():
         raise ValueError(f"No observations with label `{label}` were found.")
-    
+
     coords_all = np.asarray(coords, dtype=float)
     if coords_all.ndim != 2 or coords_all.shape[1] < 2:
         raise ValueError("`adata.obsm['spatial']` must be an n_obs x >=2 array.")
     coords_all = coords_all[:, :2]
     coords_label = coords_all[mask_label]
-    
+
     # Compute distances using selected method
     if method == "kdtree":
         # Method 1: KDTree (recommended for large datasets)
@@ -540,16 +550,18 @@ def hd_labeldist(
     elif method == "cdist":
         # Method 2: cdist (faster for small datasets, but memory-intensive)
         # Memory: O(n*m), Time: O(n*m)
-        dist_matrix = cdist(coords_all, coords_label, metric='euclidean')
+        dist_matrix = cdist(coords_all, coords_label, metric="euclidean")
         dist_px = dist_matrix.min(axis=1)
     else:
         raise ValueError(f"Unknown method: {method}. Choose 'kdtree' or 'cdist'.")
-    
-    resolved_library_id, resolved_mpp, resolved_hires_scale = _resolve_labeldist_scalefactors(
-        adata,
-        library_id=library_id,
-        microns_per_pixel=microns_per_pixel,
-        hires_scale=hires_scale,
+
+    resolved_library_id, resolved_mpp, resolved_hires_scale = (
+        _resolve_labeldist_scalefactors(
+            adata,
+            library_id=library_id,
+            microns_per_pixel=microns_per_pixel,
+            hires_scale=hires_scale,
+        )
     )
 
     resolved_coordinate_system = coordinate_system
@@ -569,7 +581,7 @@ def hd_labeldist(
         dist_um = dist_px * (resolved_mpp / resolved_hires_scale)
     else:
         dist_um = dist_px * resolved_mpp
-    
+
     col_px = f"{label}_px"
     col_um = f"{label}_dist"
     params = {
@@ -582,13 +594,13 @@ def hd_labeldist(
         "microns_per_pixel": resolved_mpp,
         "hires_scale": resolved_hires_scale,
     }
-    
+
     if inplace:
         adata.obs[col_px] = dist_px
         adata.obs[col_um] = dist_um
         adata.uns[f"{label}_dist_params"] = params
         return None
-    
+
     result = pd.DataFrame({col_px: dist_px, col_um: dist_um}, index=adata.obs.index)
     result.attrs["params"] = params
     return result

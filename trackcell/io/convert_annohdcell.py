@@ -17,7 +17,6 @@ from typing import Optional, Union
 from pathlib import Path
 import warnings
 from multiprocessing import Pool, cpu_count
-from functools import partial
 
 from .serialize import GEOMETRY_KEYS, save_h5ad
 from .._logging import get_logger
@@ -34,8 +33,11 @@ def _bin_half_size_pixels(
     return 1.0
 
 
-def bins_to_cell_polygon(bin_coords: np.ndarray, bin_size_um: float = 2.0,
-                         microns_per_pixel: Optional[float] = None) -> Polygon:
+def bins_to_cell_polygon(
+    bin_coords: np.ndarray,
+    bin_size_um: float = 2.0,
+    microns_per_pixel: Optional[float] = None,
+) -> Polygon:
     """
     Create a polygon geometry from bin coordinates using convex hull.
 
@@ -62,12 +64,14 @@ def bins_to_cell_polygon(bin_coords: np.ndarray, bin_size_um: float = 2.0,
     if len(bin_coords) == 1:
         # Single bin - create a small square around it.
         x, y = bin_coords[0]
-        return Polygon([
-            (x - half_size, y - half_size),
-            (x + half_size, y - half_size),
-            (x + half_size, y + half_size),
-            (x - half_size, y + half_size)
-        ])
+        return Polygon(
+            [
+                (x - half_size, y - half_size),
+                (x + half_size, y - half_size),
+                (x + half_size, y + half_size),
+                (x - half_size, y + half_size),
+            ]
+        )
 
     # Multiple bins - use convex hull. Colinear bins produce a LineString, so
     # buffer non-polygon hulls into a small valid polygon.
@@ -114,7 +118,7 @@ def convert_annohdcell_to_trackcell(
     labels_key: str = "labels_joint",
     bin_size_um: float = 2.0,
     create_polygons: bool = True,
-    buffer_polygons: bool = True
+    buffer_polygons: bool = True,
 ) -> sc.AnnData:
     """
     Convert annohdcell 2μm bin h5ad to trackcell-compatible cell-level h5ad.
@@ -186,10 +190,14 @@ def convert_annohdcell_to_trackcell(
 
     # Check required fields
     if labels_key not in adata_bin.obs.columns:
-        raise ValueError(f"Column '{labels_key}' not found in .obs. Available columns: {adata_bin.obs.columns.tolist()}")
+        raise ValueError(
+            f"Column '{labels_key}' not found in .obs. Available columns: {adata_bin.obs.columns.tolist()}"
+        )
 
     if "spatial" not in adata_bin.obsm:
-        raise ValueError("'spatial' not found in .obsm. Cannot extract bin coordinates.")
+        raise ValueError(
+            "'spatial' not found in .obsm. Cannot extract bin coordinates."
+        )
 
     # Filter out unassigned bins (label == 0)
     assigned_mask = adata_bin.obs[labels_key] != 0
@@ -208,9 +216,14 @@ def convert_annohdcell_to_trackcell(
     if "spatial" in adata_bin.uns:
         for key in adata_bin.uns["spatial"]:
             if "scalefactors" in adata_bin.uns["spatial"][key]:
-                microns_per_pixel = adata_bin.uns["spatial"][key]["scalefactors"].get("microns_per_pixel")
+                microns_per_pixel = adata_bin.uns["spatial"][key]["scalefactors"].get(
+                    "microns_per_pixel"
+                )
                 if microns_per_pixel is not None:
-                    logger.info("Using microns_per_pixel = %s from input h5ad", microns_per_pixel)
+                    logger.info(
+                        "Using microns_per_pixel = %s from input h5ad",
+                        microns_per_pixel,
+                    )
                     break
 
     # Create cell-to-bin mapping matrix
@@ -222,8 +235,7 @@ def convert_annohdcell_to_trackcell(
     # Build sparse matrix: rows = cells, cols = bins
     n_bins = adata_bin.n_obs
     cell_to_bin = csr_matrix(
-        (np.ones(n_bins), (cell_indices, np.arange(n_bins))),
-        shape=(n_cells, n_bins)
+        (np.ones(n_bins), (cell_indices, np.arange(n_bins))), shape=(n_cells, n_bins)
     )
 
     # Aggregate expression matrix
@@ -244,12 +256,14 @@ def convert_annohdcell_to_trackcell(
     logger.info("Creating cell-level AnnData...")
     adata_cell = sc.AnnData(
         X=X_cell,
-        obs=pd.DataFrame({
-            "cellid": [f"cellid_{int(label):09d}-1" for label in cell_labels],
-            "object_id": cell_labels,
-            "bin_count": bin_counts
-        }),
-        var=adata_bin.var.copy()
+        obs=pd.DataFrame(
+            {
+                "cellid": [f"cellid_{int(label):09d}-1" for label in cell_labels],
+                "object_id": cell_labels,
+                "bin_count": bin_counts,
+            }
+        ),
+        var=adata_bin.var.copy(),
     )
     adata_cell.obs_names = adata_cell.obs["cellid"]
 
@@ -270,7 +284,9 @@ def convert_annohdcell_to_trackcell(
             # Create polygon
             try:
                 if buffer_polygons and microns_per_pixel is not None:
-                    polygon = bins_to_cell_polygon(bin_coords, bin_size_um, microns_per_pixel)
+                    polygon = bins_to_cell_polygon(
+                        bin_coords, bin_size_um, microns_per_pixel
+                    )
                 else:
                     polygon = bins_to_cell_polygon(bin_coords, bin_size_um, None)
                 geometries.append(polygon)
@@ -288,10 +304,7 @@ def convert_annohdcell_to_trackcell(
         adata_cell.obs["geometry"] = geometry_wkt
 
         # Create GeoDataFrame for .uns
-        gdf = gpd.GeoDataFrame(
-            geometry=geometries,
-            index=adata_cell.obs_names
-        )
+        gdf = gpd.GeoDataFrame(geometry=geometries, index=adata_cell.obs_names)
 
         # Initialize .uns["spatial"] structure
         if "spatial" not in adata_cell.uns:
@@ -317,24 +330,40 @@ def convert_annohdcell_to_trackcell(
 
             # Copy images
             if "images" in input_spatial:
-                adata_cell.uns["spatial"][sample]["images"] = input_spatial["images"].copy()
+                adata_cell.uns["spatial"][sample]["images"] = input_spatial[
+                    "images"
+                ].copy()
 
             # Copy scalefactors
             if "scalefactors" in input_spatial:
-                adata_cell.uns["spatial"][sample]["scalefactors"] = input_spatial["scalefactors"].copy()
+                adata_cell.uns["spatial"][sample]["scalefactors"] = input_spatial[
+                    "scalefactors"
+                ].copy()
 
                 # Update spot_diameter_fullres to reflect cell size
-                if "spot_diameter_fullres" in adata_cell.uns["spatial"][sample]["scalefactors"]:
+                if (
+                    "spot_diameter_fullres"
+                    in adata_cell.uns["spatial"][sample]["scalefactors"]
+                ):
                     mean_bin_count = bin_counts.mean()
                     diameter_scale = np.sqrt(mean_bin_count)
-                    original_diameter = adata_cell.uns["spatial"][sample]["scalefactors"]["spot_diameter_fullres"]
-                    adata_cell.uns["spatial"][sample]["scalefactors"]["spot_diameter_fullres"] = original_diameter * diameter_scale
-                    logger.info("Scaled spot_diameter_fullres by %.2fx (mean bin_count = %.1f)",
-                                diameter_scale, mean_bin_count)
+                    original_diameter = adata_cell.uns["spatial"][sample][
+                        "scalefactors"
+                    ]["spot_diameter_fullres"]
+                    adata_cell.uns["spatial"][sample]["scalefactors"][
+                        "spot_diameter_fullres"
+                    ] = (original_diameter * diameter_scale)
+                    logger.info(
+                        "Scaled spot_diameter_fullres by %.2fx (mean bin_count = %.1f)",
+                        diameter_scale,
+                        mean_bin_count,
+                    )
 
             # Copy binsize if present
             if "binsize" in input_spatial:
-                adata_cell.uns["spatial"][sample]["binsize"] = None  # Cell-level, not bin-level
+                adata_cell.uns["spatial"][sample][
+                    "binsize"
+                ] = None  # Cell-level, not bin-level
 
             break  # Only copy from first sample
 
@@ -363,7 +392,7 @@ def add_geometries_to_annohdcell_output(
     labels_key: str = "labels_joint",
     bin_size_um: float = 2.0,
     buffer_polygons: bool = True,
-    n_jobs: int = -1
+    n_jobs: int = -1,
 ) -> sc.AnnData:
     """
     Add polygon geometries to annohdcell's final cell h5ad using bin-level data.
@@ -437,21 +466,27 @@ def add_geometries_to_annohdcell_output(
 
     # Check required fields in bin h5ad
     if labels_key not in adata_bin.obs.columns:
-        raise ValueError(f"Column '{labels_key}' not found in bin h5ad .obs. Available: {adata_bin.obs.columns.tolist()}")
+        raise ValueError(
+            f"Column '{labels_key}' not found in bin h5ad .obs. Available: {adata_bin.obs.columns.tolist()}"
+        )
 
     if "spatial" not in adata_bin.obsm:
         raise ValueError("'spatial' not found in bin h5ad .obsm")
 
     # Check required fields in cell h5ad
     if "object_id" not in adata_cell.obs.columns:
-        raise ValueError("Column 'object_id' not found in cell h5ad .obs. This should be the cell label ID.")
+        raise ValueError(
+            "Column 'object_id' not found in cell h5ad .obs. This should be the cell label ID."
+        )
 
     # Get microns_per_pixel from scalefactors
     microns_per_pixel = None
     if "spatial" in adata_bin.uns:
         for key in adata_bin.uns["spatial"]:
             if "scalefactors" in adata_bin.uns["spatial"][key]:
-                microns_per_pixel = adata_bin.uns["spatial"][key]["scalefactors"].get("microns_per_pixel")
+                microns_per_pixel = adata_bin.uns["spatial"][key]["scalefactors"].get(
+                    "microns_per_pixel"
+                )
                 if microns_per_pixel is not None:
                     logger.info("Using microns_per_pixel = %s", microns_per_pixel)
                     break
@@ -491,7 +526,9 @@ def add_geometries_to_annohdcell_output(
     for idx, label in enumerate(cell_labels):
         cell_label_to_obs_idx[label] = idx
         if label not in cell_to_bins:
-            warnings.warn(f"Cell {label} has no bins assigned, skipping geometry creation")
+            warnings.warn(
+                f"Cell {label} has no bins assigned, skipping geometry creation"
+            )
             continue
 
         bin_indices = cell_to_bins[label]
@@ -534,10 +571,7 @@ def add_geometries_to_annohdcell_output(
         adata_cell.obs.loc[cell_id, "geometry"] = wkt_str
 
     # Create GeoDataFrame directly from Shapely objects (no WKT round-trip)
-    gdf = gpd.GeoDataFrame(
-        geometry=geometries,
-        index=cell_ids_with_geom
-    )
+    gdf = gpd.GeoDataFrame(geometry=geometries, index=cell_ids_with_geom)
 
     # Initialize .uns["spatial"] structure if needed
     if "spatial" not in adata_cell.uns:
@@ -555,13 +589,23 @@ def add_geometries_to_annohdcell_output(
             input_spatial = adata_bin.uns["spatial"][input_sample]
 
             # Copy images if not present
-            if "images" in input_spatial and "images" not in adata_cell.uns["spatial"][sample]:
-                adata_cell.uns["spatial"][sample]["images"] = input_spatial["images"].copy()
+            if (
+                "images" in input_spatial
+                and "images" not in adata_cell.uns["spatial"][sample]
+            ):
+                adata_cell.uns["spatial"][sample]["images"] = input_spatial[
+                    "images"
+                ].copy()
                 logger.info("Copied tissue images from bin h5ad")
 
             # Copy scalefactors if not present
-            if "scalefactors" in input_spatial and "scalefactors" not in adata_cell.uns["spatial"][sample]:
-                adata_cell.uns["spatial"][sample]["scalefactors"] = input_spatial["scalefactors"].copy()
+            if (
+                "scalefactors" in input_spatial
+                and "scalefactors" not in adata_cell.uns["spatial"][sample]
+            ):
+                adata_cell.uns["spatial"][sample]["scalefactors"] = input_spatial[
+                    "scalefactors"
+                ].copy()
                 logger.info("Copied scalefactors from bin h5ad")
 
             break
@@ -573,8 +617,11 @@ def add_geometries_to_annohdcell_output(
         save_h5ad(adata_cell, output_h5ad_path)
 
     logger.info("Geometry addition complete!")
-    logger.info("Output: %s cells × %s genes with geometries",
-                adata_cell.n_obs, adata_cell.n_vars)
+    logger.info(
+        "Output: %s cells × %s genes with geometries",
+        adata_cell.n_obs,
+        adata_cell.n_vars,
+    )
 
     return adata_cell
 
@@ -633,15 +680,8 @@ def restore_geometries(adata: sc.AnnData, sample: Optional[str] = None) -> sc.An
                 geometries = geom_data["geometry"].apply(
                     lambda g: wkt.loads(g) if isinstance(g, str) else g
                 )
-                gdf = gpd.GeoDataFrame(
-                    geometry=geometries,
-                    index=geom_data.index
-                )
+                gdf = gpd.GeoDataFrame(geometry=geometries, index=geom_data.index)
                 adata.uns["spatial"][s][geom_key] = gdf
-                logger.info(
-                    "Restored %s %s for sample '%s'",
-                    len(gdf), geom_key, s
-                )
+                logger.info("Restored %s %s for sample '%s'", len(gdf), geom_key, s)
 
     return adata
-

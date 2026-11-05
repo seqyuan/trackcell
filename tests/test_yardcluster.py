@@ -85,7 +85,9 @@ def test_yard_pipeline_produces_clusters():
 def test_spatial_cluster_auto_mode():
     pytest.importorskip("leidenalg")
     adata = _make_ring_adata(n_per_ring=25, n_genes=40)
-    spatial_cluster(adata, mode="auto", preprocess=False, k_spatial=8, n_pcs=10, resolution=0.5)
+    spatial_cluster(
+        adata, mode="auto", preprocess=False, k_spatial=8, n_pcs=10, resolution=0.5
+    )
     assert "yardcluster_celltype" in adata.obs
     assert "yardcluster_domain" in adata.obs
 
@@ -141,7 +143,9 @@ def test_merge_clusters_de():
 def test_merge_clusters_de_guard_skips_expensive_merge():
     adata = AnnData(X=np.random.default_rng(2).normal(size=(9, 5)).astype(np.float32))
     adata.obs["cluster"] = ["0", "1", "2"] * 3
-    adata.obsm["X_test"] = np.random.default_rng(3).normal(size=(9, 2)).astype(np.float32)
+    adata.obsm["X_test"] = (
+        np.random.default_rng(3).normal(size=(9, 2)).astype(np.float32)
+    )
 
     with pytest.warns(UserWarning, match="Skipping DE-guided cluster merge"):
         out_key = merge_clusters_de(
@@ -215,8 +219,12 @@ def test_expression_source_sct_integrated_smoke():
     adata.obs["batch"] = ["A"] * 25 + ["B"] * 25
     n = adata.n_obs
     g = 20
-    adata.obsm["X_sct_prep"] = np.random.default_rng(0).normal(size=(n, g)).astype(np.float32)
-    adata.obsm["X_sct_integrated"] = np.random.default_rng(1).normal(size=(n, 10)).astype(np.float32)
+    adata.obsm["X_sct_prep"] = (
+        np.random.default_rng(0).normal(size=(n, g)).astype(np.float32)
+    )
+    adata.obsm["X_sct_integrated"] = (
+        np.random.default_rng(1).normal(size=(n, 10)).astype(np.float32)
+    )
     adata.uns["sct_prep"] = {"anchor_features": [f"g{i}" for i in range(g)]}
 
     spatial_cluster(
@@ -241,7 +249,9 @@ def test_cosphi_gradient_matches_directional_matmul():
     coords = adata.obsm["spatial"]
     weights = build_spatial_weights(coords, k=8)
     X = np.asarray(adata.X, dtype=np.float64)
-    G = compute_neighborhood_gradient_cosphi(X, coords, weights, k_gradient=8, chunk_size=10)
+    G = compute_neighborhood_gradient_cosphi(
+        X, coords, weights, k_gradient=8, chunk_size=10
+    )
     dir_w = _build_cosphi_directional_weights(coords, weights)
     G_ref = dir_w @ X
     np.testing.assert_allclose(G, G_ref, rtol=1e-5, atol=1e-5)
@@ -250,7 +260,9 @@ def test_cosphi_gradient_matches_directional_matmul():
 def test_auto_mode_defaults_use_gradient():
     pytest.importorskip("leidenalg")
     adata = _make_ring_adata(n_per_ring=20, n_genes=30)
-    spatial_cluster(adata, mode="auto", preprocess=False, k_spatial=6, n_pcs=8, resolution=0.5)
+    spatial_cluster(
+        adata, mode="auto", preprocess=False, k_spatial=6, n_pcs=8, resolution=0.5
+    )
     params = adata.uns["yardcluster_params"]
     assert params["use_gradient"] is True
     assert "yardcluster_features_G" in adata.obsm

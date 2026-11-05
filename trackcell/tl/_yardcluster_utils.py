@@ -162,13 +162,17 @@ def spatial_stratified_sketch_indices(
 
     selected = list(dict.fromkeys(selected))
     if len(selected) < n_sketch:
-        remaining = np.setdiff1d(np.arange(n_obs), np.array(selected, dtype=int), assume_unique=False)
+        remaining = np.setdiff1d(
+            np.arange(n_obs), np.array(selected, dtype=int), assume_unique=False
+        )
         extra = min(n_sketch - len(selected), len(remaining))
         if extra > 0:
             selected.extend(rng.choice(remaining, size=extra, replace=False).tolist())
 
     if len(selected) > n_sketch:
-        selected = rng.choice(np.array(selected, dtype=int), size=n_sketch, replace=False).tolist()
+        selected = rng.choice(
+            np.array(selected, dtype=int), size=n_sketch, replace=False
+        ).tolist()
 
     return np.asarray(selected, dtype=np.int64)
 

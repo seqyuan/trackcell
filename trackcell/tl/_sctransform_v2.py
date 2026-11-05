@@ -58,7 +58,9 @@ def apply_vst_flavor_settings(
     if vst_flavor is None:
         return settings
     if vst_flavor != "v2":
-        raise ValueError(f"Unsupported vst_flavor: {vst_flavor}. Only 'v2' is implemented.")
+        raise ValueError(
+            f"Unsupported vst_flavor: {vst_flavor}. Only 'v2' is implemented."
+        )
     settings.update(
         {
             "method": resolve_v2_step1_method(v2_backend),
@@ -330,7 +332,9 @@ def build_poisson_gene_tables(
     var = pd.Series(row_var_sparse(umi), index=genes)
     overdispersion = var - amean
     all_poisson = genes[(overdispersion <= 0) | (amean < 1e-3)]
-    step1_poisson = genes_step1.intersection(all_poisson)
+    step1_poisson = genes_step1.intersection(  # noqa: F841  (unused; v2 review R-06)
+        all_poisson
+    )
     inf_theta = model_pars.index[~np.isfinite(model_pars["theta"])]
     poisson_step1 = genes_step1.intersection(all_poisson.union(inf_theta))
 

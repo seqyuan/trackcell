@@ -11,7 +11,7 @@ __version__ = "0.4.0"
 __author__ = "Zan Yuan"
 __email__ = "yfinddream@gmail.com"
 
-from . import _logging
+from . import _logging  # noqa: F401  (imported for its NullHandler side effect)
 from . import io
 from . import pl
 from . import tl

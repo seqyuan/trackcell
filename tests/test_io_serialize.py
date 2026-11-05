@@ -41,9 +41,7 @@ def test_save_h5ad_roundtrip_restores_geometries(tmp_path):
     path = tcl.io.save_h5ad(adata, tmp_path / "sample.h5ad")
 
     # In-memory objects are restored after the write.
-    assert isinstance(
-        adata.uns["spatial"]["sample"]["geometries"], gpd.GeoDataFrame
-    )
+    assert isinstance(adata.uns["spatial"]["sample"]["geometries"], gpd.GeoDataFrame)
     assert isinstance(
         adata.uns["spatial"]["sample"]["nucleus_geometries"], gpd.GeoDataFrame
     )
@@ -63,12 +61,8 @@ def test_save_h5ad_roundtrip_restores_geometries(tmp_path):
 def test_flatten_geometries_copy_does_not_mutate_input():
     adata = _make_adata()
     flat = tcl.io.flatten_geometries(adata)
-    assert isinstance(
-        flat.uns["spatial"]["sample"]["geometries"], pd.DataFrame
-    )
-    assert isinstance(
-        adata.uns["spatial"]["sample"]["geometries"], gpd.GeoDataFrame
-    )
+    assert isinstance(flat.uns["spatial"]["sample"]["geometries"], pd.DataFrame)
+    assert isinstance(adata.uns["spatial"]["sample"]["geometries"], gpd.GeoDataFrame)
 
 
 def test_spatial_cell_reads_restored_geometries(tmp_path):

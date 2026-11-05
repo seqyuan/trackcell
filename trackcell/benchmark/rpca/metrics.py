@@ -39,7 +39,9 @@ def matrix_gene_corr(
     return out
 
 
-def batch_offsets(batch_labels: list[str], batch_sizes: dict[str, int]) -> dict[str, int]:
+def batch_offsets(
+    batch_labels: list[str], batch_sizes: dict[str, int]
+) -> dict[str, int]:
     offsets: dict[str, int] = {}
     off = 0
     for label in batch_labels:
@@ -48,7 +50,9 @@ def batch_offsets(batch_labels: list[str], batch_sizes: dict[str, int]) -> dict[
     return offsets
 
 
-def _local_pairs_r_style(anchors: pd.DataFrame) -> set[tuple[tuple[int, int], tuple[int, int]]]:
+def _local_pairs_r_style(
+    anchors: pd.DataFrame,
+) -> set[tuple[tuple[int, int], tuple[int, int]]]:
     pairs: set[tuple[tuple[int, int], tuple[int, int]]] = set()
     for row in anchors.itertuples(index=False):
         a = (int(row.dataset1) - 1, int(row.cell1) - 1)
