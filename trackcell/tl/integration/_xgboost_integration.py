@@ -127,8 +127,8 @@ def _residual_matrix(
             cell_attr=vst_out["cell_attr"],
         )
         rows = np.where(mask.to_numpy())[0]
-        for j, gene in enumerate(overlap):
-            out[rows, gene_to_col[gene]] = res.iloc[j].to_numpy()
+        for gene in overlap:
+            out[rows, gene_to_col[gene]] = res.loc[gene].to_numpy()
     return out
 
 

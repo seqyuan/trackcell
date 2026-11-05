@@ -19,6 +19,24 @@ Unreleased
   ``tests/test_integrate_data.py::test_weights_decrease_with_distance``.
 * ``integrate_pair`` now emits a ``warning`` when fewer query cells carry
   anchors than ``k_weight``, instead of silently narrowing the weight kernel.
+* ``tl._sctransform.get_residuals`` labelled residual rows with the *requested*
+  gene order but filled them in ``var_names`` order, so whenever
+  ``genes != umi_genes`` — i.e. any ``sctransform(residual_features=[...])``
+  call with a user-ordered marker panel — every residual was attached to the
+  wrong gene, silently. Rows are now selected by position from ``umi_genes``;
+  duplicate gene names raise instead of mismatching, and
+  ``_xgboost_integration`` indexes residuals by label rather than position.
+* ``io.concat_atera_rois`` stored per-ROI offsets as a dict of ``tuple`` in
+  ``uns['atera']['offsets']``. anndata has no serializer for ``tuple``, so the
+  merged object could never be written with ``save_h5ad``/``write_h5ad``.
+  Offsets are now ``float64`` arrays of length 2.
+* ``io.serialize`` geometry round trips: a missing polygon no longer aborts the
+  write (``None`` in an object column raised ``TypeError``; it is now stored as
+  an empty string and read back as ``None``), every non-geometry column is
+  preserved (attribute columns and the active column order used to be dropped),
+  and ``GeoDataFrame.crs`` survives via a ``<key>__crs`` sidecar. The WKT codec
+  now lives in one place — ``io.restore_geometries`` delegates to
+  ``serialize.restore_geometries`` instead of keeping a second, lossier copy.
 
 **Changed**:
 

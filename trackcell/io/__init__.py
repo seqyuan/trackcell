@@ -13,9 +13,8 @@ from .read_data import (
 from .convert_annohdcell import (
     convert_annohdcell_to_trackcell,
     add_geometries_to_annohdcell_output,
-    restore_geometries,
 )
-from .serialize import flatten_geometries, save_h5ad
+from .serialize import flatten_geometries, restore_geometries, save_h5ad
 from .read_sto import read_sto_cellbin, read_sto_bin
 from .read_atera import (
     add_wkt_geometry,

@@ -76,3 +76,74 @@ def test_spatial_cell_reads_restored_geometries(tmp_path):
         restored, color="celltype", library_id="sample", show=False
     )
     assert ax is not None
+
+
+def test_save_h5ad_roundtrip_preserves_attribute_columns(tmp_path):
+    """Non-geometry columns must survive; they used to be dropped silently."""
+    adata = _make_adata()
+    gdf = adata.uns["spatial"]["sample"]["geometries"]
+    gdf["celltype"] = ["A", "B"]
+    gdf["area"] = [1.0, 1.0]
+    gdf["classification"] = ["tumor", "stroma"]
+    adata.uns["spatial"]["sample"]["geometries"] = gdf
+
+    path = tcl.io.save_h5ad(adata, tmp_path / "attrs.h5ad")
+    restored = tcl.io.restore_geometries(ad.read_h5ad(path))
+    out = restored.uns["spatial"]["sample"]["geometries"]
+
+    assert list(out.columns) == list(gdf.columns)
+    assert out["celltype"].tolist() == ["A", "B"]
+    np.testing.assert_allclose(out["area"].to_numpy(dtype=float), [1.0, 1.0])
+    assert out["classification"].tolist() == ["tumor", "stroma"]
+
+
+def test_save_h5ad_roundtrip_handles_missing_geometry(tmp_path):
+    """A cell without a segmentation outline must not abort the write.
+
+    ``None`` cannot live in an object column that anndata has to write, so it is
+    stored as an empty string and read back as ``None``.
+    """
+    adata = _make_adata()
+    adata.uns["spatial"]["sample"]["geometries"] = gpd.GeoDataFrame(
+        {"geometry": [_square(0, 0), None]},
+        geometry="geometry",
+        index=["c0", "c1"],
+    )
+
+    path = tcl.io.save_h5ad(adata, tmp_path / "missing.h5ad")
+    restored = tcl.io.restore_geometries(ad.read_h5ad(path))
+    gdf = restored.uns["spatial"]["sample"]["geometries"]
+
+    assert isinstance(gdf, gpd.GeoDataFrame)
+    assert list(gdf.index) == ["c0", "c1"]
+    assert gdf.loc["c0", "geometry"] is not None
+    assert gdf.loc["c1", "geometry"] is None
+    np.testing.assert_allclose(gdf.loc["c0", "geometry"].bounds, (0, 0, 1, 1))
+
+
+def test_save_h5ad_roundtrip_preserves_crs(tmp_path):
+    adata = _make_adata()
+    gdf = adata.uns["spatial"]["sample"]["geometries"].set_crs("EPSG:4326")
+    adata.uns["spatial"]["sample"]["geometries"] = gdf
+
+    path = tcl.io.save_h5ad(adata, tmp_path / "crs.h5ad")
+    restored = tcl.io.restore_geometries(ad.read_h5ad(path))
+
+    out = restored.uns["spatial"]["sample"]["geometries"]
+    assert out.crs is not None
+    assert out.crs.to_epsg() == 4326
+    # The sidecar key is consumed, not left behind as stray uns content.
+    assert not any(k.endswith("__crs") for k in restored.uns["spatial"]["sample"])
+
+
+def test_save_h5ad_does_not_leak_crs_sidecar_into_memory(tmp_path):
+    adata = _make_adata()
+    gdf = adata.uns["spatial"]["sample"]["geometries"].set_crs("EPSG:3857")
+    adata.uns["spatial"]["sample"]["geometries"] = gdf
+
+    tcl.io.save_h5ad(adata, tmp_path / "crs2.h5ad")
+
+    info = adata.uns["spatial"]["sample"]
+    assert not any(k.endswith("__crs") for k in info)
+    assert isinstance(info["geometries"], gpd.GeoDataFrame)
+    assert info["geometries"].crs.to_epsg() == 3857

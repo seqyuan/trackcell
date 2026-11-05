@@ -700,3 +700,30 @@ def test_unzip_support_and_bad_paths(tmp_path, official_bundle):
     (run / "ROI_A").symlink_to(official_bundle)
     with pytest.raises(FileNotFoundError, match="run directory"):
         tcl.io.read_atera(run)
+
+
+def test_concat_rois_output_is_writable(official_bundle, tmp_path):
+    """The merged object must survive ``save_h5ad``.
+
+    ``uns['atera']['offsets']`` used to be a dict of ``tuple``, which anndata
+    refuses to serialize — the merged AnnData could never be written, so the
+    whole "merge ROIs, then save" workflow was impossible.
+    """
+    a = tcl.io.read_atera(official_bundle, sample="ROI1")
+    b = tcl.io.read_atera(official_bundle, sample="ROI2")
+    merged = tcl.io.concat_atera_rois(
+        {"ROI1": a, "ROI2": b},
+        offsets={"ROI1": (0, 0), "ROI2": (1000, 500)},
+        index_unique="-",
+    )
+
+    offsets = merged.uns["atera"]["offsets"]
+    for name in ("ROI1", "ROI2"):
+        assert isinstance(offsets[name], np.ndarray)
+        assert offsets[name].shape == (2,)
+
+    path = tcl.io.save_h5ad(merged, tmp_path / "merged.h5ad")
+    back = ad.read_h5ad(path)
+    np.testing.assert_allclose(back.uns["atera"]["offsets"]["ROI2"], [1000.0, 500.0])
+    # anndata returns string lists as arrays on read-back; compare by value.
+    assert list(back.uns["atera"]["merged_rois"]) == ["ROI1", "ROI2"]

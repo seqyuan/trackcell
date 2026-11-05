@@ -1083,11 +1083,38 @@ def get_residuals(
 
     regressor_data = _prepare_regressor_data(vst_out, cell_attr)
     model_pars = _combined_model_pars(vst_out)
-    target_genes = pd.Index(
-        [g for g in genes if g in model_pars.index and g in umi_genes]
-    )
-    umi_sub = umi[np.isin(umi_genes, target_genes), :]
-    genes_arr = umi_genes[np.isin(umi_genes, target_genes)].to_numpy()
+
+    genes = pd.Index(genes)
+    umi_genes = pd.Index(umi_genes)
+
+    # Row order matters: ``umi`` rows are addressed by ``umi_genes``, but the
+    # returned frame is indexed by ``genes``. Building the row subset with a
+    # boolean mask over ``umi_genes`` (as an earlier version did) silently
+    # permuted the residuals whenever the caller requested a different order
+    # than ``var_names`` — which is the normal case for ``residual_features``.
+    # Resolve positions explicitly instead so rows and labels always agree.
+    keep = genes.isin(model_pars.index) & genes.isin(umi_genes)
+    target_genes = genes[keep]
+
+    if not target_genes.is_unique:
+        duplicated = target_genes[target_genes.duplicated()].unique().tolist()
+        raise ValueError(
+            "genes must be unique; got duplicates: "
+            f"{duplicated[:5]}{' ...' if len(duplicated) > 5 else ''}"
+        )
+    if not umi_genes.is_unique:
+        raise ValueError(
+            "umi_genes (var_names) must be unique to align residuals; call "
+            "``adata.var_names_make_unique()`` first."
+        )
+
+    if len(target_genes) == 0:
+        return pd.DataFrame(
+            index=pd.Index([], name=genes.name), columns=regressor_data.index
+        )
+
+    umi_sub = umi[umi_genes.get_indexer(target_genes), :]
+    genes_arr = target_genes.to_numpy()
     bin_ind = np.ceil(np.arange(1, len(genes_arr) + 1) / bin_size)
     max_bin = int(np.max(bin_ind))
     blocks = Parallel(n_jobs=cpu_count(), backend="threading")(

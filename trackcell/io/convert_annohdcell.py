@@ -11,14 +11,13 @@ import geopandas as gpd
 import pandas as pd
 import numpy as np
 from shapely.geometry import Polygon, MultiPoint, Point
-from shapely import wkt
 from scipy.sparse import csr_matrix, issparse
 from typing import Optional, Union
 from pathlib import Path
 import warnings
 from multiprocessing import Pool, cpu_count
 
-from .serialize import GEOMETRY_KEYS, save_h5ad
+from .serialize import restore_geometries as _restore_geometries, save_h5ad
 from .._logging import get_logger
 
 logger = get_logger(__name__)
@@ -634,6 +633,9 @@ def restore_geometries(adata: sc.AnnData, sample: Optional[str] = None) -> sc.An
     a regular DataFrame with WKT strings for serialization. This function converts
     them back to a GeoDataFrame for spatial visualization.
 
+    Thin wrapper around :func:`trackcell.io.serialize.restore_geometries`, which
+    owns the WKT codec. It lives here for import-path compatibility.
+
     Parameters
     ----------
     adata : sc.AnnData
@@ -659,29 +661,8 @@ def restore_geometries(adata: sc.AnnData, sample: Optional[str] = None) -> sc.An
         return adata
 
     samples = [sample] if sample is not None else list(adata.uns["spatial"].keys())
-
     for s in samples:
         if s not in adata.uns["spatial"]:
             warnings.warn(f"Sample '{s}' not found in adata.uns['spatial']")
-            continue
 
-        for geom_key in GEOMETRY_KEYS:
-            if geom_key not in adata.uns["spatial"][s]:
-                continue
-
-            geom_data = adata.uns["spatial"][s][geom_key]
-
-            # Check if it's already a GeoDataFrame
-            if isinstance(geom_data, gpd.GeoDataFrame):
-                continue
-
-            # Convert DataFrame with WKT strings to GeoDataFrame
-            if isinstance(geom_data, pd.DataFrame) and "geometry" in geom_data.columns:
-                geometries = geom_data["geometry"].apply(
-                    lambda g: wkt.loads(g) if isinstance(g, str) else g
-                )
-                gdf = gpd.GeoDataFrame(geometry=geometries, index=geom_data.index)
-                adata.uns["spatial"][s][geom_key] = gdf
-                logger.info("Restored %s %s for sample '%s'", len(gdf), geom_key, s)
-
-    return adata
+    return _restore_geometries(adata, sample)

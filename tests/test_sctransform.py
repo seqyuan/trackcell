@@ -494,3 +494,74 @@ def test_sctransform_fixed_subsample_indices():
         genes_step1=genes_step1,
     )
     assert hvg_first == adata.uns["sct"]["variable_features"]
+
+
+def _fitted_vst(adata):
+    """Return ``(vst_out, umi)`` — the full VST dict, not the ``uns['sct']`` summary."""
+    from trackcell.tl._sctransform import _as_genes_by_cells, vst
+
+    umi = _as_genes_by_cells(
+        adata.X, adata.var_names.to_list(), adata.obs_names.to_list()
+    )
+    cell_attr = pd.DataFrame(
+        {"log_umi": np.log1p(np.asarray(umi.sum(axis=0)).ravel())},
+        index=pd.Index(adata.obs_names),
+    )
+    vst_out = vst(umi, adata.var_names, pd.Index(adata.obs_names), cell_attr=cell_attr)
+    return vst_out, umi
+
+
+def test_get_residuals_row_order_follows_requested_genes():
+    """Residual rows must carry the *requested* gene name, not ``var_names`` order.
+
+    Regression test: ``get_residuals`` used to subset ``umi`` rows with a boolean
+    mask over ``umi_genes`` (var_names order) while labelling the returned frame
+    with ``genes`` order. Whenever the two differed — the normal case for
+    ``residual_features=[...]`` — every residual was attached to the wrong gene,
+    silently.
+    """
+    from trackcell.tl._sctransform import get_residuals
+
+    adata = _make_count_adata(n_cells=120, n_genes=150, seed=5)
+    sctransform(adata, n_top_genes=20, n_cells=60, n_genes=80, seed=7)
+    vst_out, umi = _fitted_vst(adata)
+
+    baseline = get_residuals(
+        vst_out,
+        umi,
+        genes=pd.Index(["g5", "g40", "g7", "g99"]),
+        umi_genes=adata.var_names,
+        cell_attr=vst_out["cell_attr"],
+    )
+
+    # Same genes, reversed request order: rows must be relabelled, not permuted.
+    shuffled = get_residuals(
+        vst_out,
+        umi,
+        genes=pd.Index(["g99", "g7", "g40", "g5"]),
+        umi_genes=adata.var_names,
+        cell_attr=vst_out["cell_attr"],
+    )
+
+    pd.testing.assert_index_equal(shuffled.index, pd.Index(["g99", "g7", "g40", "g5"]))
+    pd.testing.assert_frame_equal(shuffled.loc[baseline.index], baseline)
+    # Distinct genes must not share a row (the old bug made them permutation-equal).
+    assert not baseline.loc["g5"].equals(baseline.loc["g40"])
+
+
+def test_get_residuals_rejects_duplicate_var_names():
+    from trackcell.tl._sctransform import get_residuals
+
+    adata = _make_count_adata(n_cells=60, n_genes=80, seed=6)
+    sctransform(adata, n_top_genes=10, n_cells=40, n_genes=40, seed=3)
+    vst_out, umi = _fitted_vst(adata)
+
+    dup = pd.Index(list(adata.var_names[:-1]) + [adata.var_names[0]])
+    with pytest.raises(ValueError, match="var_names_make_unique"):
+        get_residuals(
+            vst_out,
+            umi,
+            genes=pd.Index(["g1", "g2"]),
+            umi_genes=dup,
+            cell_attr=vst_out["cell_attr"],
+        )

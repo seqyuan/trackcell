@@ -1419,8 +1419,12 @@ def concat_atera_rois(
     if spatial:
         merged.uns["spatial"] = spatial
     merged.uns.setdefault("atera", {})["merged_rois"] = list(names)
+    # ``uns`` cannot hold ``tuple`` (anndata raises ``IORegistryError`` on write),
+    # so the per-ROI translations are stored as float arrays. Layout:
+    # ``uns['atera']['offsets'][roi_name] == array([dx, dy])`` in µm.
     merged.uns["atera"]["offsets"] = {
-        k: tuple(map(float, v)) for k, v in offsets.items()
+        name: np.asarray(offset, dtype=np.float64).reshape(2)
+        for name, offset in offsets.items()
     }
     return merged
 

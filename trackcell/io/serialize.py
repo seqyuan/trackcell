@@ -7,11 +7,22 @@ HDF5 cannot serialize those objects, so ``adata.write_h5ad()`` raises
 
 Use :func:`save_h5ad` instead of ``adata.write_h5ad``.  Geometries are
 temporarily converted to WKT strings for the write and restored in memory
-afterwards.  Read the file back with :func:`~trackcell.io.restore_geometries`.
+afterwards.  Read the file back with :func:`restore_geometries`.
+
+Two round-trip properties are load-bearing and covered by tests:
+
+* **Every attribute column survives.** Cell type, area, classification and any
+  other non-geometry column is preserved; only the active ``geometry`` column
+  is stringified.
+* **Missing polygons survive.** Cells without a segmentation outline (Xenium
+  edge cells, Atera debris) are written as an empty string and read back as
+  ``None``; anndata rejects ``None`` inside an object column, so this cannot be
+  written directly.
 """
 
 from __future__ import annotations
 
+import warnings
 from collections.abc import Mapping
 from pathlib import Path
 from typing import Any, Optional, Union
@@ -19,30 +30,86 @@ from typing import Any, Optional, Union
 import geopandas as gpd
 import pandas as pd
 from anndata import AnnData
+from shapely import wkt
+
+from .._logging import get_logger
+
+logger = get_logger(__name__)
 
 GEOMETRY_KEYS = ("geometries", "nucleus_geometries")
 
+# Sidecar key holding a WKT-encoded CRS next to its geometry table. HDF5 can
+# store the string; a ``GeoDataFrame.crs`` object cannot survive ``write_h5ad``.
+CRS_SUFFIX = "__crs"
+# ``uns`` columns cannot hold ``None`` in an object column (anndata raises
+# ``TypeError: Can't implicitly convert non-string objects to strings``), so a
+# missing polygon is stored as the empty string and mapped back to ``None``.
+EMPTY_GEOMETRY = ""
+
+
+def _geometry_to_wkt(geom: Any) -> str:
+    """Encode one shapely geometry (or a missing value) as a WKT string."""
+    if geom is None:
+        return EMPTY_GEOMETRY
+    try:
+        if pd.isna(geom):
+            return EMPTY_GEOMETRY
+    except (TypeError, ValueError):
+        # shapely geometries raise on elementwise isna; that means "present".
+        pass
+    text = getattr(geom, "wkt", None)
+    if not isinstance(text, str) or not text:
+        return EMPTY_GEOMETRY
+    return text
+
+
+def _wkt_to_geometry(value: Any, *, where: str = "") -> Any:
+    """Decode a WKT string back to a shapely geometry, or ``None`` if absent."""
+    if not isinstance(value, str) or not value.strip():
+        return None
+    try:
+        return wkt.loads(value)
+    except Exception as exc:  # pragma: no cover - corrupt file
+        warnings.warn(
+            f"Could not parse WKT geometry{(' in ' + where) if where else ''}: "
+            f"{exc}",
+            RuntimeWarning,
+            stacklevel=3,
+        )
+        return None
+
 
 def _to_wkt_frame(obj: Any) -> Any:
-    """Return a WKT-backed DataFrame for a GeoDataFrame/GeoSeries, else ``obj``."""
+    """Return a WKT-backed DataFrame for a GeoDataFrame/GeoSeries, else ``obj``.
+
+    Every non-geometry column (cell type, area, classification, …) is preserved
+    — only the active ``geometry`` column is stringified. Dropping the attribute
+    columns here used to make them disappear silently on a save/load round trip.
+    """
     if isinstance(obj, gpd.GeoSeries):
         obj = gpd.GeoDataFrame({"geometry": obj}, geometry="geometry")
     if not isinstance(obj, gpd.GeoDataFrame):
         return obj
 
-    values: list[Any] = []
-    for geom in obj.geometry:
-        if geom is None:
-            values.append(None)
-            continue
-        try:
-            if pd.isna(geom):
-                values.append(None)
-                continue
-        except (TypeError, ValueError):
-            pass
-        values.append(geom.wkt)
-    return pd.DataFrame({"geometry": values}, index=obj.index)
+    columns = list(obj.columns)
+    frame = pd.DataFrame(obj.drop(columns="geometry"), copy=True)
+    frame["geometry"] = [_geometry_to_wkt(g) for g in obj.geometry]
+    return frame[columns]
+
+
+def _from_wkt_frame(frame: pd.DataFrame, *, where: str = "") -> gpd.GeoDataFrame:
+    """Rebuild a GeoDataFrame from a WKT-string DataFrame, keeping all columns."""
+    columns = list(frame.columns)
+    geoms = gpd.GeoSeries(
+        [_wkt_to_geometry(v, where=where) for v in frame["geometry"]],
+        index=frame.index,
+    )
+    gdf = gpd.GeoDataFrame(
+        pd.DataFrame(frame.drop(columns="geometry"), copy=True),
+        geometry=geoms,
+        index=frame.index,
+    )
+    return gdf[columns]
 
 
 def _spatial_samples(adata: AnnData, sample: Optional[str]) -> list[str]:
@@ -83,8 +150,13 @@ def flatten_geometries(
         if not isinstance(info, dict):
             continue
         for key in GEOMETRY_KEYS:
-            if key in info:
-                info[key] = _to_wkt_frame(info[key])
+            obj = info.get(key)
+            if not isinstance(obj, (gpd.GeoSeries, gpd.GeoDataFrame)):
+                continue
+            info[key] = _to_wkt_frame(obj)
+            crs = getattr(obj, "crs", None)
+            if crs is not None:
+                info[f"{key}{CRS_SUFFIX}"] = crs.to_wkt()
     return out
 
 
@@ -128,6 +200,7 @@ def save_h5ad(
     """
     path = Path(filename)
     backup: dict[tuple[str, str], Any] = {}
+    crs_added: list[tuple[str, str]] = []
 
     for sid in _spatial_samples(adata, None):
         info = adata.uns["spatial"][sid]
@@ -138,14 +211,74 @@ def save_h5ad(
             if isinstance(obj, gpd.GeoSeries) or isinstance(obj, gpd.GeoDataFrame):
                 backup[(sid, key)] = obj
                 info[key] = _to_wkt_frame(obj)
+                crs = getattr(obj, "crs", None)
+                if crs is not None:
+                    crs_key = f"{key}{CRS_SUFFIX}"
+                    info[crs_key] = crs.to_wkt()
+                    crs_added.append((sid, crs_key))
 
     try:
         adata.write_h5ad(path, compression=compression, **kwargs)
     finally:
         for (sid, key), obj in backup.items():
             adata.uns["spatial"][sid][key] = obj
+        for sid, crs_key in crs_added:
+            adata.uns["spatial"][sid].pop(crs_key, None)
 
     return path
 
 
-__all__ = ["GEOMETRY_KEYS", "flatten_geometries", "save_h5ad"]
+__all__ = [
+    "CRS_SUFFIX",
+    "EMPTY_GEOMETRY",
+    "GEOMETRY_KEYS",
+    "flatten_geometries",
+    "restore_geometries",
+    "save_h5ad",
+]
+
+
+def restore_geometries(adata: AnnData, sample: Optional[str] = None) -> AnnData:
+    """Restore GeoDataFrames from the WKT tables written by :func:`save_h5ad`.
+
+    Inverse of :func:`flatten_geometries`: parses ``geometry`` back into shapely
+    objects, keeps every attribute column, and re-attaches the CRS recorded in
+    the ``<key>__crs`` sidecar.
+
+    Parameters
+    ----------
+    adata
+        AnnData read back from an h5ad written with :func:`save_h5ad`.
+    sample
+        Restrict to one library id.  By default all samples are processed.
+
+    Returns
+    -------
+    AnnData
+        The same object, mutated in place, with GeoDataFrames restored.
+
+    Examples
+    --------
+    >>> import anndata as ad
+    >>> import trackcell as tcl
+    >>> tcl.io.save_h5ad(adata, "xenium.h5ad")
+    >>> adata = tcl.io.restore_geometries(ad.read_h5ad("xenium.h5ad"))
+    """
+    for sid in _spatial_samples(adata, sample):
+        info = adata.uns["spatial"][sid]
+        if not isinstance(info, dict):
+            continue
+        for key in GEOMETRY_KEYS:
+            frame = info.get(key)
+            if not isinstance(frame, pd.DataFrame) or "geometry" not in frame:
+                continue
+            gdf = _from_wkt_frame(frame, where=f"uns['spatial']['{sid}']['{key}']")
+            crs_wkt = info.pop(f"{key}{CRS_SUFFIX}", None)
+            if isinstance(crs_wkt, str) and crs_wkt:
+                try:
+                    gdf = gdf.set_crs(crs_wkt, allow_override=True)
+                except Exception:  # pragma: no cover - unknown CRS string
+                    pass
+            info[key] = gdf
+            logger.info("Restored %s %s for sample '%s'", len(gdf), key, sid)
+    return adata
