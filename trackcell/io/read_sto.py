@@ -27,6 +27,10 @@ import warnings
 import glob
 import json
 
+from .._logging import get_logger
+
+logger = get_logger(__name__)
+
 
 # Sentinel value used to pad cellBorder arrays in GEF cellbin files.
 # When a cell has fewer than 32 border vertices, remaining slots are
@@ -214,8 +218,8 @@ def _load_tissue_image(
         import imageio.v3 as iio
         img = iio.imread(path)
         img = _ensure_rgb(img)
-        print(f"[STO] Loaded tissue image: {path.name}"
-              f" ({img.shape[0]}×{img.shape[1]})")
+        logger.info("[STO] Loaded tissue image: %s (%d×%d)",
+                    path.name, img.shape[0], img.shape[1])
         return img
     if image_path is not None:
         image_path = Path(image_path).resolve()
@@ -409,7 +413,7 @@ def read_sto_cellbin(
         t0 = time.time()
         cell = cb['cell'][:]
         n_cells = len(cell)
-        print(f"[STO cellbin] {n_cells:,} cells [{time.time() - t0:.1f}s]")
+        logger.info("[STO cellbin] %s cells [%.1fs]", f"{n_cells:,}", time.time() - t0)
 
         # ── 3. Read cell borders → polygons ──
         t0 = time.time()
@@ -443,8 +447,9 @@ def read_sto_cellbin(
                     n_fallback += 1
             polygons[i] = poly
 
-        print(f"[STO cellbin] Borders: {n_valid:,} valid polygons, "
-              f"{n_fallback:,} fallback [{time.time() - t0:.1f}s]")
+        logger.info("[STO cellbin] Borders: %s valid polygons, "
+                    "%s fallback [%.1fs]",
+                    f"{n_valid:,}", f"{n_fallback:,}", time.time() - t0)
 
         # ── 4. Read gene metadata ──
         t0 = time.time()
@@ -454,15 +459,16 @@ def read_sto_cellbin(
         gene_names = np.array([gn.decode('utf-8') if isinstance(gn, bytes) else str(gn)
                                for gn in gene_names_bytes])
         n_genes = len(gene_names)
-        print(f"[STO cellbin] {n_genes:,} genes [{time.time() - t0:.1f}s]")
+        logger.info("[STO cellbin] %s genes [%.1fs]", f"{n_genes:,}", time.time() - t0)
 
         # ── 5. Build expression matrix ──
         t0 = time.time()
         cell_exp = cb['cellExp'][:]
         exp_matrix = _build_expression_matrix_from_cell_exp(cell, cell_exp, n_genes, n_cells)
         del cell_exp
-        print(f"[STO cellbin] Expression matrix: {exp_matrix.shape} "
-              f"({exp_matrix.nnz / 1e6:.1f}M non-zero) [{time.time() - t0:.1f}s]")
+        logger.info("[STO cellbin] Expression matrix: %s "
+                    "(%.1fM non-zero) [%.1fs]",
+                    exp_matrix.shape, exp_matrix.nnz / 1e6, time.time() - t0)
 
         # ── 6. Additional metadata from GEF ──
         # GEF top-level attrs: resolution (nm per unit), offsetX, offsetY
@@ -565,11 +571,11 @@ def read_sto_cellbin(
         adata.uns['spatial'][sample]['scalefactors']['tissue_hires_scalef'] = 1.0
         adata.uns['spatial'][sample]['scalefactors']['tissue_lowres_scalef'] = 1.0
 
-    print(f"[STO cellbin] AnnData built [{time.time() - t0:.1f}s]")
+    logger.info("[STO cellbin] AnnData built [%.1fs]", time.time() - t0)
 
     elapsed = time.time() - t_total
-    print(f"[STO cellbin] Total: {elapsed:.1f}s")
-    print(f"  Output: {adata.n_obs:,} cells × {adata.n_vars:,} genes")
+    logger.info("[STO cellbin] Total: %.1fs", elapsed)
+    logger.info("  Output: %s cells × %s genes", f"{adata.n_obs:,}", f"{adata.n_vars:,}")
 
     return adata
 
@@ -654,7 +660,7 @@ def read_sto_bin(
         # Try to find corresponding GEF
         alt_gef = path.with_suffix('').with_suffix('.gef')
         if alt_gef.exists():
-            print(f"[STO bin] Found matching GEF: {alt_gef}, using that instead.")
+            logger.info("[STO bin] Found matching GEF: %s, using that instead.", alt_gef)
             return _read_sto_bin_from_gef(alt_gef, bin_size, sample, gene_name_index, image_path)
         # Fallback to GEM reader (may be slow for large datasets)
         warnings.warn(
@@ -724,10 +730,8 @@ def _read_sto_bin_from_gef(
         ])
         n_genes = len(gene_names)
         n_entries = len(expr)
-        print(
-            f"[STO bin] {n_entries:,} entries, {n_genes:,} genes "
-            f"[{time.time() - t0:.1f}s]"
-        )
+        logger.info("[STO bin] %s entries, %s genes [%.1fs]",
+                    f"{n_entries:,}", f"{n_genes:,}", time.time() - t0)
 
     # ── Merge bins ──
     t0 = time.time()
@@ -736,7 +740,8 @@ def _read_sto_bin_from_gef(
     bin_ids_int = (bin_x.astype(np.uint64) << 32) | bin_y.astype(np.uint64)
     unique_bins, inverse = np.unique(bin_ids_int, return_inverse=True)
     n_bins = len(unique_bins)
-    print(f"[STO bin] {n_bins:,} unique bins (size={bin_size}) [{time.time() - t0:.1f}s]")
+    logger.info("[STO bin] %s unique bins (size=%s) [%.1fs]",
+                f"{n_bins:,}", bin_size, time.time() - t0)
 
     # ── Gene index vector (the expression array is gene-ordered) ──
     t0 = time.time()
@@ -748,7 +753,7 @@ def _read_sto_bin_from_gef(
         e = s + gene_counts[g]
         if e > s:
             col_vec[s:e] = g
-    print(f"[STO bin] Gene index vector [{time.time() - t0:.1f}s]")
+    logger.info("[STO bin] Gene index vector [%.1fs]", time.time() - t0)
 
     # ── Build CSR via COO triples → sum_duplicates → CSR ──
     t0 = time.time()
@@ -758,10 +763,8 @@ def _read_sto_bin_from_gef(
         dtype=np.float32,
     )
     exp_matrix = coo  # csr_matrix() from COO triplets already handles duplicates
-    print(
-        f"[STO bin] CSR built: {exp_matrix.shape}, "
-        f"nnz={exp_matrix.nnz:,} [{time.time() - t0:.1f}s]"
-    )
+    logger.info("[STO bin] CSR built: %s, nnz=%s [%.1fs]",
+                exp_matrix.shape, f"{exp_matrix.nnz:,}", time.time() - t0)
 
     # ── Build AnnData ──
     t0 = time.time()
@@ -812,10 +815,10 @@ def _read_sto_bin_from_gef(
         adata.uns['spatial'][sample]['scalefactors']['tissue_hires_scalef'] = 1.0
         adata.uns['spatial'][sample]['scalefactors']['tissue_lowres_scalef'] = 1.0
 
-    print(f"[STO bin] AnnData built [{time.time() - t0:.1f}s]")
+    logger.info("[STO bin] AnnData built [%.1fs]", time.time() - t0)
     elapsed = time.time() - t_total
-    print(f"[STO bin] Total: {elapsed:.1f}s")
-    print(f"  Output: {adata.n_obs:,} bins × {adata.n_vars:,} genes")
+    logger.info("[STO bin] Total: %.1fs", elapsed)
+    logger.info("  Output: %s bins × %s genes", f"{adata.n_obs:,}", f"{adata.n_vars:,}")
 
     return adata
 
@@ -862,10 +865,12 @@ def _read_sto_bin_from_gem(
             n_rows += 1
 
         if n_rows % 25_000_000 == 0:
-            print(f"[STO bin GEM] Processed {n_rows:,} rows...")
+            logger.info("[STO bin GEM] Processed %s rows...", f"{n_rows:,}")
 
-    print(f"[STO bin GEM] {n_rows:,} rows → {len(bin_gene_counts):,} bins, "
-          f"{len(gene_set):,} genes [{time.time() - t_total:.1f}s]")
+    logger.info("[STO bin GEM] %s rows → %s bins, "
+                "%s genes [%.1fs]",
+                f"{n_rows:,}", f"{len(bin_gene_counts):,}",
+                f"{len(gene_set):,}", time.time() - t_total)
 
     # ── Build sparse matrix ──
     t0 = time.time()
@@ -898,7 +903,8 @@ def _read_sto_bin_from_gem(
         dtype=np.float32,
     )
     del bin_gene_counts, data_arr, cols_arr; gc.collect()
-    print(f"[STO bin GEM] CSR: {exp_matrix.shape}, nnz={exp_matrix.nnz:,} [{time.time() - t0:.1f}s]")
+    logger.info("[STO bin GEM] CSR: %s, nnz=%s [%.1fs]",
+                exp_matrix.shape, f"{exp_matrix.nnz:,}", time.time() - t0)
 
     # ── Build AnnData ──
     t0 = time.time()
@@ -942,8 +948,8 @@ def _read_sto_bin_from_gem(
         ] = 1.0
 
     elapsed = time.time() - t_total
-    print(f"[STO bin GEM] Total: {elapsed:.1f}s")
-    print(f"  Output: {adata.n_obs:,} bins × {adata.n_vars:,} genes")
+    logger.info("[STO bin GEM] Total: %.1fs", elapsed)
+    logger.info("  Output: %s bins × %s genes", f"{adata.n_obs:,}", f"{adata.n_vars:,}")
     return adata
 
 

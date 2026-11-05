@@ -9,6 +9,10 @@ from scipy.spatial.distance import cdist
 from typing import Optional, List
 import warnings
 
+from .._logging import get_logger
+
+logger = get_logger(__name__)
+
 
 # Perceptually distinct colors for up to 7 genes (ColorBrewer-inspired)
 DEFAULT_GENE_COLORS = [
@@ -336,9 +340,9 @@ def multigene_blend(
     if inplace:
         adata.obs[key_added] = result
         adata.uns[f'{key_added}_params'] = params
-        print(
-            f'[multigene_blend] {n_genes} genes → '
-            f'{result.nunique():,} unique colors in adata.obs["{key_added}"]'
+        logger.info(
+            '[multigene_blend] %s genes → %s unique colors in adata.obs["%s"]',
+            n_genes, f'{result.nunique():,}', key_added,
         )
         return None
 

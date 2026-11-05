@@ -17,6 +17,7 @@ enrichment and differential enrichment between conditions).
 
    usage/reading
    usage/atera
+   usage/logging
    usage/annohdcell_conversion
    usage/xenium_slice_separation
    usage/visualization

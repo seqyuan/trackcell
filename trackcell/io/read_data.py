@@ -21,6 +21,10 @@ import gc
 import h5py
 from scipy import sparse as sp_sparse
 
+from .._logging import get_logger
+
+logger = get_logger(__name__)
+
 _SAMPLE_DIR_MARKERS = {
     "outs",
     "binned_outputs",
@@ -147,8 +151,8 @@ def read_hd_bin(
         try:
             adata = sc.read_10x_h5(h5_path)
         except Exception as e:
-            print(f"Warning: Could not read H5 file {h5_path}: {e}")
-            print(f"Trying to read from directory {matrix_dir_path}")
+            logger.info("Could not read H5 file %s (%s); falling back to directory %s",
+                        h5_path, e, matrix_dir_path)
             if matrix_dir_path.exists():
                 adata = sc.read_10x_mtx(matrix_dir_path)
             else:
@@ -247,7 +251,8 @@ def read_hd_bin(
         hires_img = iio.imread(datapath / hires_image_file)
         lowres_img = iio.imread(datapath / lowres_image_file)
     except FileNotFoundError as e:
-        print(f"Warning: Could not load tissue images: {e}")
+        warnings.warn(f"Could not load tissue images ({e}); plotting will fall back to point-only rendering.",
+                      RuntimeWarning, stacklevel=2)
         hires_img = None
         lowres_img = None
     
@@ -260,7 +265,8 @@ def read_hd_bin(
         with open(datapath / scalefactors_file, 'r', encoding='utf-8') as file:
             scalefactor = json.load(file)
     except FileNotFoundError as e:
-        print(f"Warning: Could not load scalefactors: {e}")
+        warnings.warn(f"Could not load scalefactors ({e}); image-overlay scaling will be unavailable.",
+                      RuntimeWarning, stacklevel=2)
         scalefactor = {}
     
     # Store images and scalefactors
@@ -460,7 +466,8 @@ def read_hd_cellseg(
         hires_img = iio.imread(datapath / hires_image_file)
         lowres_img = iio.imread(datapath / lowres_image_file)
     except FileNotFoundError as e:
-        print(f"Warning: Could not load tissue images: {e}")
+        warnings.warn(f"Could not load tissue images ({e}); plotting will fall back to point-only rendering.",
+                      RuntimeWarning, stacklevel=2)
         hires_img = None
         lowres_img = None
     
@@ -473,7 +480,8 @@ def read_hd_cellseg(
         with open(datapath / scalefactors_file, 'r', encoding='utf-8') as file:
             scalefactor = json.load(file)
     except FileNotFoundError as e:
-        print(f"Warning: Could not load scalefactors: {e}")
+        warnings.warn(f"Could not load scalefactors ({e}); image-overlay scaling will be unavailable.",
+                      RuntimeWarning, stacklevel=2)
         scalefactor = {}
     
     # Add spot_diameter_fullres if missing (required by scanpy's sc.pl.spatial)

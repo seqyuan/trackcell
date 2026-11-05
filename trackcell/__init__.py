@@ -11,8 +11,9 @@ __version__ = "0.3.47"
 __author__ = "Zan Yuan"
 __email__ = "yfinddream@gmail.com"
 
+from . import _logging
 from . import io
 from . import pl
 from . import tl
 
-__all__ = ["io", "pl", "tl"] 
+__all__ = ["io", "pl", "tl"]
