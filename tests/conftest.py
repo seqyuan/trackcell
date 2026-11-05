@@ -4,12 +4,17 @@ The builders in this module produce *minimal but structurally faithful*
 imitations of real vendor output layouts (10x SpaceRanger HD, STOmics GEF).
 Nothing here reaches the network and every bundle is written into
 ``tmp_path`` so tests stay hermetic and fast.
+
+This module also enforces the documented contract that heavy benchmark tests
+are *skipped* (not failed) when the external parity data is absent — see
+:func:`pytest_collection_modifyitems`.
 """
 
 from __future__ import annotations
 
 import gzip
 import json
+import os
 from pathlib import Path
 
 import h5py
@@ -17,6 +22,40 @@ import numpy as np
 import pandas as pd
 import pytest
 from scipy import sparse as sp_sparse
+
+# ---------------------------------------------------------------------------
+# Benchmark-data gate
+# ---------------------------------------------------------------------------
+#
+# ``@pytest.mark.slow`` is used for tests that need the external R/Seurat
+# benchmark exports (see ``trackcell/benchmark/sct/data.py``). Several of those
+# tests read CSVs directly instead of guarding on the data root, so a clean
+# checkout used to produce `FileNotFoundError` failures rather than skips —
+# directly contradicting README/CONTRIBUTING ("skipped when it is absent") and
+# discouraging anyone from running the parity suite at all. Gate them centrally.
+
+
+def _benchmark_root() -> Path:
+    env = os.environ.get("TRACKCELL_BENCHMARK_ROOT")
+    if env:
+        return Path(env).expanduser()
+    return Path.home() / "trackcell_benchmark"
+
+
+def pytest_collection_modifyitems(config, items):
+    root = _benchmark_root()
+    if root.is_dir():
+        return
+    skip = pytest.mark.skip(
+        reason=(
+            f"benchmark data absent at {root}; set TRACKCELL_BENCHMARK_ROOT to "
+            "run the R/Seurat parity suite (see CONTRIBUTING.md)"
+        )
+    )
+    for item in items:
+        if "slow" in item.keywords:
+            item.add_marker(skip)
+
 
 # ---------------------------------------------------------------------------
 # Canned identifiers

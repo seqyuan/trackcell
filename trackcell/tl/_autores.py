@@ -119,7 +119,7 @@ def sweep_resolutions(
             _leiden_with_seed(adata, res, neighbors_key, key, random_state + run)
             labels.append(adata.obs[key].astype(str).to_numpy())
 
-        n_clusters = int(np.median([len(np.unique(l)) for l in labels]))
+        n_clusters = int(np.median([len(np.unique(lbl)) for lbl in labels]))
         if n_runs > 1:
             stability = float(
                 np.mean(

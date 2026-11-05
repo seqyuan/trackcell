@@ -1,6 +1,15 @@
 [flake8]
 max-line-length = 88
-extend-ignore = E203, W503
+# E203/W503: whitespace rules that conflict with black (black is the formatter of
+# record). E501: line length is enforced by black, not flake8, so that a single
+# tool owns wrapping and "local green == CI green" stays true.
+extend-ignore = E203, W503, E501
+# E402 is structural in these files: the matplotlib backend (or ``sys.path``) must
+# be set *before* the imports that depend on it, so imports cannot sit at the top.
+per-file-ignores =
+    tests/test_multigene_blend.py: E402
+    tests/test_region_selector.py: E402
+    scripts/run_yardcluster_benchmark.py: E402
 exclude =
     .git,
     __pycache__,

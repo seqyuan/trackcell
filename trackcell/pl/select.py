@@ -34,15 +34,14 @@ from shapely.geometry import Polygon, Point
 from shapely import wkt
 
 from .._logging import get_logger
-
-logger = get_logger(__name__)
-
 from .plot import (
     spatial_cell,
     spatial_squarebin,
     _resolve_library_id,
     _sync_geometries_to_obs,
 )
+
+logger = get_logger(__name__)
 
 ModeType = Literal["auto", "cellbin", "squarebin"]
 SelectorMode = Literal["rectangle", "ellipse", "lasso"]

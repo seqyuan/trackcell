@@ -21,21 +21,28 @@
 6. 推送：`git push origin main && git push origin vX.Y.Z`
 7. 等待 GitHub Actions `auto-release.yml` 完成（约 1.5 分钟）
 
-### 可选：CI 版本一致性检查
+### 发版门禁（已自动化，无需手工校验）
 
-可在 `auto-release.yml` 的 `publish-to-pypi` job 中添加：
+`publish-to-pypi` job 现在会执行：
 
-```yaml
-- name: Verify version consistency
-  run: |
-    PYPROJ_VERSION=$(grep 'version = "' pyproject.toml | head -1 | sed 's/.*"\(.*\)".*/\1/')
-    INIT_VERSION=$(grep '__version__' trackcell/__init__.py | sed "s/.*\"\(.*\)\".*/\1/")
-    if [ "$PYPROJ_VERSION" != "$INIT_VERSION" ]; then
-      echo "ERROR: pyproject.toml version ($PYPROJ_VERSION) != __init__.py version ($INIT_VERSION)"
-      exit 1
-    fi
-    echo "✓ Versions consistent: $PYPROJ_VERSION"
+```bash
+TAG_VERSION="${GITHUB_REF#refs/tags/v}"
+python scripts/check_package.py --expect-version "$TAG_VERSION"
 ```
+
+它同时校验三件事，任一不符即中止发布：
+
+| 校验 | 覆盖面 |
+|---|---|
+| **git tag ↔ `pyproject.toml` 版本** | 上面那个 `--expect-version`，**唯一能抓到漏改版本号的检查** |
+| `pyproject.toml` ↔ `trackcell/__init__.py` | 两者都漏改时一致，所以必须叠加 tag 校验 |
+| wheel METADATA ↔ 源码版本 / extras / license | 防止 `dist/` 残留旧 wheel |
+
+本地可提前自查：`python scripts/check_package.py --expect-version 0.5.0`（先 `poetry build`）。
+
+> 历史提示：本文件曾把这段检查写成「**可选**，**可在** workflow 中添加」。该 YAML 早已实装；
+> 而真正的漏洞不在脚本内部（它比的是同源的两个值，永远通过），而在 **tag 从未进入任何比较**。
+> 现已补上。
 
 ## Coding Style
 

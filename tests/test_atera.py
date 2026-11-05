@@ -169,7 +169,6 @@ def _write_transcripts_zarr(root: Path) -> None:
     grid.attrs["grid_size"] = 2000.0
 
     gene_to_index = {gene: i for i, gene in enumerate(GENES)}
-    n = len(TX_ROWS)
     location = np.array([[r[3], r[4], 0.0] for r in TX_ROWS], dtype=np.float32)
     quality = np.array([[r[1]] for r in TX_ROWS], dtype=np.float16)
     cell_ids = np.array(

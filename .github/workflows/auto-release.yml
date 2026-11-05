@@ -101,7 +101,14 @@ jobs:
         run: poetry build
 
       - name: Verify version consistency, extras, and license
-        run: python scripts/check_package.py
+        # ``GITHUB_REF`` is ``refs/tags/vX.Y.Z``. This is the only value that can
+        # disagree with the source version, so it must be checked explicitly:
+        # otherwise a forgotten bump silently publishes a Release whose notes
+        # tell users to ``pip install`` a version that does not exist (or just
+        # fails with an opaque PyPI 400).
+        run: |
+          TAG_VERSION="${GITHUB_REF#refs/tags/v}"
+          python scripts/check_package.py --expect-version "$TAG_VERSION"
 
       - name: Fast tests
         run: poetry run pytest -m "not slow" -q

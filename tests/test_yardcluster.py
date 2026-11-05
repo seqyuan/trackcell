@@ -10,8 +10,6 @@ from trackcell.tl._spatial_graph import (
     build_spatial_weights,
     compute_neighborhood_gradient,
     compute_neighborhood_gradient_cosphi,
-    compute_neighborhood_mean,
-    mix_embeddings,
 )
 from trackcell.tl._cluster_merge import merge_clusters_de
 from trackcell.tl.spatial_cluster import (

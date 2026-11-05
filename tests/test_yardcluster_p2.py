@@ -1,7 +1,5 @@
 """Tests for YardCluster P2 utilities and options."""
 
-import importlib
-
 import numpy as np
 import pytest
 from anndata import AnnData

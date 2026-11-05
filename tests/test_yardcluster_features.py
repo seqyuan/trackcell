@@ -2,7 +2,6 @@
 
 import numpy as np
 import pytest
-import scipy.sparse as sps
 from anndata import AnnData
 
 from trackcell.tl._spatial_graph import (

@@ -20,6 +20,23 @@ Unreleased
 * ``integrate_pair`` now emits a ``warning`` when fewer query cells carry
   anchors than ``k_weight``, instead of silently narrowing the weight kernel.
 
+**Changed**:
+
+* ``tests/conftest.py`` skips every ``@pytest.mark.slow`` test when the
+  benchmark data root is absent. A clean checkout previously produced ten
+  ``FileNotFoundError`` failures for ``pytest -m slow`` despite README and
+  CONTRIBUTING both promising skips.
+* CI now runs the *same* ``flake8 trackcell tests scripts`` command documented
+  in CONTRIBUTING (previously it ran two narrow ``--select`` subsets, so the
+  documented command was permanently red with 122 findings). ``.flake8``
+  ignores ``E501`` (black owns wrapping) and grants ``E402`` only to the three
+  files where the matplotlib backend must be configured before importing
+  pyplot.
+* ``scripts/check_package.py`` gains ``--expect-version``. The release workflow
+  now passes the triggering git tag, which is the only value that can disagree
+  with ``pyproject.toml`` — the previous checks compared artifacts built from
+  the same source and therefore could never fail.
+
 
 Version 0.4.0
 -------------

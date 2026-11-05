@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from pathlib import Path
 
 import numpy as np
 import pandas as pd
@@ -12,14 +11,11 @@ from ._sct_benchmark_data import (
     BENCHMARK_ROOT,
     DEFAULT_SAMPLE,
     load_seurat_parity_with_cell_attr,
-    load_tcl_filtered_adata,
-    load_tcl_filtered_umi,
 )
 from trackcell.benchmark.sct.r_exports import (
     align_r_gene_list,
     coerce_genes_log_gmean,
     load_r_vst_export,
-    read_r_gmean_series,
 )
 from trackcell.tl._sctransform import (
     _row_gmean_sparse,
@@ -80,7 +76,6 @@ def test_row_gmean_sparse_matches_rowwise_formula(shape):
 @pytest.mark.slow
 def test_python_genes_log_gmean_matches_r_golden():
     umi, genes, _cells, _cell_attr = _load_sample_umi()
-    export = load_r_vst_export(BENCHMARK_ROOT / "steps/r_sct_stepwise" / SAMPLE)
     ga = pd.read_csv(
         BENCHMARK_ROOT / "steps/r_sct_stepwise" / SAMPLE / "gene_attr.csv", index_col=0
     )

@@ -26,6 +26,10 @@ poetry run pytest -m "not slow" -q
 TRACKCELL_BENCHMARK_ROOT=/path/to/tcl_test poetry run pytest
 ```
 
+Without `TRACKCELL_BENCHMARK_ROOT` every `@pytest.mark.slow` test is **skipped**
+(this is enforced centrally in `tests/conftest.py`, not per-file), so
+`poetry run pytest` is always runnable on a clean checkout.
+
 New behavior needs a test. IO readers are tested with synthetic vendor bundles
 built in `tests/conftest.py`; prefer extending those fixtures over shipping real
 data.
@@ -34,9 +38,13 @@ data.
 
 ```bash
 poetry run black --check trackcell tests scripts   # formatting (line length 88)
-poetry run flake8 trackcell                        # config in .flake8
+poetry run flake8 trackcell tests scripts          # config in .flake8
 poetry run mypy trackcell                          # scoped type checks
 ```
+
+These are the **exact** commands CI runs — if they pass locally, CI's lint jobs
+pass. `E501` is ignored in `.flake8` because black owns line wrapping; running a
+second opinion on line length would only produce perpetual disagreements.
 
 Conventions worth knowing:
 

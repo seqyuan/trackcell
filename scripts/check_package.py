@@ -6,12 +6,19 @@ Checks
 1. ``pyproject.toml`` version matches ``trackcell.__version__``.
 2. The built wheel declares every optional extra with its dependencies.
 3. The wheel carries the MIT license metadata.
+4. Optional: a caller-supplied version (e.g. the git tag that triggered the
+   release) matches ``pyproject.toml``.
+
+Check 4 is the one that actually catches a forgotten version bump. Checks 1 and
+3 compare artifacts built from the same source, so they agree by construction
+and never fire in ``publish-to-pypi``; the tag is the only value that can
+disagree.
 
 Usage::
 
-    python scripts/check_package.py [path/to/package.whl]
+    python scripts/check_package.py [path/to/package.whl] [--expect-version X.Y.Z]
 
-With no argument the most recent wheel in ``dist/`` is used.
+With no wheel argument the most recent wheel in ``dist/`` is used.
 """
 
 from __future__ import annotations
@@ -132,11 +139,33 @@ def check_wheel(
 
 
 def main(argv: list[str]) -> int:
+    args = list(argv[1:])
+    expect_version: str | None = None
+    if "--expect-version" in args:
+        idx = args.index("--expect-version")
+        if idx + 1 >= len(args):
+            print("ERROR: --expect-version requires a value", file=sys.stderr)
+            return 2
+        expect_version = args[idx + 1].lstrip("v")
+        del args[idx : idx + 2]
+    args = [a for a in args if a.strip()]
+
     errors: list[str] = []
     source_version = check_versions(errors)
 
-    if len(argv) > 1:
-        wheels = [Path(argv[1])]
+    if expect_version is not None and source_version is not None:
+        if expect_version == source_version:
+            print(f"tag/release version OK: {expect_version}")
+        else:
+            _fail(
+                f"release version {expect_version!r} (git tag) != source version "
+                f"{source_version!r}. Bump ``pyproject.toml`` and "
+                "``trackcell/__init__.py`` before tagging.",
+                errors,
+            )
+
+    if len(args) > 0:
+        wheels = [Path(args[0])]
     else:
         wheels = [Path(p) for p in sorted(glob.glob(str(ROOT / "dist" / "*.whl")))]
         if not wheels:

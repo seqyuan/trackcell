@@ -29,7 +29,6 @@ import time
 from pathlib import Path
 
 import anndata as ad
-import numpy as np
 import scanpy as sc
 
 REPO = Path(__file__).resolve().parents[1]

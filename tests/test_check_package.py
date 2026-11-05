@@ -60,3 +60,36 @@ def test_matching_wheel_passes(tmp_path: Path) -> None:
     check_package.check_wheel(wheel, errors, expected_version="0.0.1")
 
     assert errors == []
+
+
+def test_expect_version_mismatch_fails(tmp_path: Path, monkeypatch, capsys) -> None:
+    """A git tag that disagrees with pyproject must fail the release job.
+
+    This is the only check that can catch a forgotten version bump: the wheel
+    and pyproject versions always agree because they come from one source.
+    """
+    wheel = _write_fake_wheel(tmp_path, version="0.4.0")
+    monkeypatch.setattr(check_package, "check_versions", lambda errors: "0.4.0")
+
+    rc = check_package.main(
+        ["check_package.py", str(wheel), "--expect-version", "0.5.0"]
+    )
+
+    assert rc == 1
+    assert "release version '0.5.0'" in capsys.readouterr().out
+
+
+def test_expect_version_match_passes(tmp_path: Path, monkeypatch) -> None:
+    wheel = _write_fake_wheel(tmp_path, version="0.4.0")
+    monkeypatch.setattr(check_package, "check_versions", lambda errors: "0.4.0")
+
+    rc = check_package.main(
+        ["check_package.py", str(wheel), "--expect-version", "v0.4.0"]
+    )
+
+    assert rc == 0
+
+
+def test_expect_version_requires_a_value(tmp_path: Path) -> None:
+    rc = check_package.main(["check_package.py", "--expect-version"])
+    assert rc == 2
