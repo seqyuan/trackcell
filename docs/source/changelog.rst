@@ -1,8 +1,14 @@
 Changelog
 
 
-Unreleased
-----------
+Version 0.4.1
+-------------
+
+**Upgrade note**: every ``integrate_rpca`` / ``integrate_sct_rpca`` /
+``integrate_pair`` result changes. Anchor weighting was inverted (see *Fixed*),
+so integrated embeddings, UMAPs and cluster labels produced by 0.4.0 are not
+comparable to 0.4.1. Re-run integration rather than mixing outputs from the two
+versions.
 
 **Fixed**:
 
