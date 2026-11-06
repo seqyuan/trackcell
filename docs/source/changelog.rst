@@ -1,8 +1,12 @@
 Changelog
 
 
-Unreleased
-----------
+Version 0.4.2
+-------------
+
+**Upgrade note**: ``vst(do_regularize=False)`` now returns real residuals
+where 0.4.1 returned NaN, and ``integrate_pair_xgb`` applies a larger (and
+correct) correction. Re-run affected analyses rather than mixing versions.
 
 **Fixed**:
 
