@@ -47,11 +47,22 @@ rrng = { version = ">=0.1.0,<0.2.0", optional = true }
 xgboost = { version = ">=2.0,<3.0", optional = true }
 
 [tool.poetry.group.dev.dependencies]
-pytest = "^7.0.0"
+# Dev tooling is pinned to the exact versions used locally, so CI, pre-commit
+# (`.pre-commit-config.yaml`) and a developer's environment all run the same
+# formatter and the same linter. Those three used to disagree:
+#
+#   tool     pyproject (old)   pre-commit (old)   local
+#   black    >=26.0,<27.0      24.10.0            26.10.1
+#   flake8   ^6.0.0            7.1.1              7.4.1
+#   pytest   ^7.0.0            -                  9.0.2
+#
+# With black pinned differently in two places, "pre-commit reformats what CI
+# just accepted" is not a risk, it is the expected outcome.
+pytest = "^9.0"
 coverage = "^7.0"
-black = ">=26.0,<27.0"
-flake8 = "^6.0.0"
-mypy = "^1.0.0"
+black = "26.10.1"
+flake8 = "7.4.1"
+mypy = "^2.4"
 
 [tool.poetry.group.docs.dependencies]
 sphinx = "^5.0.0"

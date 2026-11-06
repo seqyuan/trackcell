@@ -28,6 +28,17 @@ correct) correction. Re-run affected analyses rather than mixing versions.
   including a units hint when ``eps`` is more than 25x the median
   nearest-neighbour spacing of a single surviving cluster.
 
+**Changed**:
+
+* Development tooling is now pinned to the exact versions used locally, in all
+  three places that run it. ``black`` was pinned ``>=26.0,<27.0`` in
+  ``pyproject.toml`` but ``24.10.0`` in ``.pre-commit-config.yaml``; ``flake8``
+  was ``^6.0.0`` in one place and ``7.1.1`` in the other, while the maintainer
+  ran ``7.4.1``; ``pytest`` was ``^7.0.0`` against a local ``9.0.2``. Two
+  formatter versions in one repository make "pre-commit reformats what CI just
+  accepted" an expected outcome rather than a risk. ``pyproject.toml``,
+  ``.pre-commit-config.yaml`` and CONTRIBUTING now name the same versions.
+
 
 Version 0.4.1
 -------------

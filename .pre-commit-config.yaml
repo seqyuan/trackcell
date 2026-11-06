@@ -1,18 +1,25 @@
 # Hooks run on staged files. Install once with: pip install pre-commit && pre-commit install
+#
+# Keep every ``rev`` equal to the version pinned in pyproject.toml's [dev]
+# group. Two different black/flake8 versions in one repo guarantees
+# "pre-commit rewrites files that CI accepted" (and vice versa), which is
+# exactly the kind of gate mismatch the CI/Docs alignment fixed elsewhere.
 repos:
   - repo: https://github.com/psf/black
-    rev: 24.10.0
+    rev: 26.10.1
     hooks:
       - id: black
 
   - repo: https://github.com/PyCQA/autoflake
-    rev: v2.3.1
+    rev: v2.4.0
     hooks:
       - id: autoflake
         args: [--remove-all-unused-imports, --ignore-init-module-imports, --in-place]
 
   - repo: https://github.com/pycqa/flake8
-    rev: 7.1.1
+    rev: 7.4.1
     hooks:
       - id: flake8
+        # ``.flake8`` at the repo root is the single source of truth, so the
+        # hook, CI, and CONTRIBUTING all run identical rules.
         additional_dependencies: []
