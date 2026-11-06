@@ -1,6 +1,7 @@
 """Tests for SCT RPCA integration."""
 
 import numpy as np
+import pandas as pd
 import pytest
 import scanpy as sc
 import scipy.sparse as sps
@@ -373,3 +374,55 @@ def test_release_sct_integration_cache_then_integrate_rpca():
         rtol=1e-5,
         atol=1e-5,
     )
+
+
+def test_integrate_pair_xgb_reconstructs_full_shift(monkeypatch):
+    """The xgb correction must restore ``pca.mean_``, not just the residual part.
+
+    ``delta = y_pred @ pca.components_`` is the projection onto the score space
+    without the mean, and the mean *is* the bulk of a batch shift. With a
+    predictor that outputs zeros, ``inverse_transform`` must return exactly the
+    mean of the anchor deltas — that is the term the old code dropped.
+    """
+    pytest.importorskip("xgboost")
+
+    from trackcell.tl.integration import _xgboost_integration as xgb_mod
+
+    class _ZeroRegressor:
+        def fit(self, x, y):  # noqa: D401 - test double
+            self.n_out = np.asarray(y).shape[1]
+            return self
+
+        def predict(self, x):
+            return np.zeros((len(x), self.n_out))
+
+    class _ZeroMulti:
+        def __init__(self, *a, **k):
+            pass
+
+        def fit(self, x, y):
+            self.n_out = np.asarray(y).shape[1]
+            return self
+
+        def predict(self, x):
+            return np.zeros((len(x), self.n_out))
+
+    monkeypatch.setattr(xgb_mod, "_require_xgboost", lambda: None)
+    monkeypatch.setattr(xgb_mod, "MultiOutputRegressor", _ZeroMulti)
+
+    rng = np.random.default_rng(3)
+    n_ref, n_query, n_feat = 60, 80, 12
+    data_ref = rng.normal(0, 1, (n_ref, n_feat))
+    data_query = rng.normal(0, 1, (n_query, n_feat))
+
+    cell1 = rng.integers(0, n_ref, 40)
+    cell2 = rng.integers(0, n_query, 40)
+    anchors = pd.DataFrame({"cell1": cell1, "cell2": cell2, "score": np.ones(40)})
+
+    out = xgb_mod.integrate_pair_xgb(data_ref, data_query, anchors, n_delta_pcs=5)
+    expected = data_query + (data_query[cell2] - data_ref[cell1]).mean(axis=0)
+
+    np.testing.assert_allclose(out, expected, atol=1e-10)
+    # Guard against the regression: the dropped-mean version equals the query
+    # matrix untouched under a zero predictor.
+    assert not np.allclose(out, data_query)

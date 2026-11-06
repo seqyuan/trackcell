@@ -1484,7 +1484,12 @@ def vst(
             ]
             genes_step1 = pd.Index(overdispersed)
 
-        if n_genes and n_genes < len(genes_step1):
+        # R ``sctransform::vst`` ignores ``n_genes`` when regularisation is off
+        # (``vst.R``: "do_regularize is set to FALSE, will use all genes"), because
+        # ``_reg_model_pars`` is what extrapolates step-1 parameters to the
+        # remaining genes. Without it, un-subsampled genes stay NaN and 80% of the
+        # residual matrix turns into NaN. Mirror R: keep every step-1 gene.
+        if do_regularize and n_genes and n_genes < len(genes_step1):
             genes_log_gmean_step1 = genes_log_gmean.loc[genes_step1]
             sampling_prob = _dds(genes_log_gmean_step1)
             genes_step1 = pd.Index(
@@ -1583,6 +1588,24 @@ def vst(
             )
         else:
             model_pars_fit, outliers = model_pars.reindex(genes), None
+            missing = (
+                model_pars_fit["theta"].isna() if "theta" in model_pars_fit else None
+            )
+            if missing is not None and missing.all():
+                raise ValueError(
+                    "do_regularize=False left every gene without a fitted model. "
+                    "Check min_cells / exclude_poisson filters, or set "
+                    "do_regularize=True."
+                )
+            if missing is not None and missing.any():
+                warnings.warn(
+                    f"do_regularize=False: {int(missing.sum())} of "
+                    f"{len(missing)} gene(s) have no fitted model and will "
+                    "produce NaN residuals. They were filtered out by "
+                    "min_cells / exclude_poisson before step 1.",
+                    RuntimeWarning,
+                    stacklevel=2,
+                )
 
     regressor_data = _build_design_matrix(cell_attr, model_str)
     model_str_nonreg = ""

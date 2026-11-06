@@ -1,6 +1,30 @@
 Changelog
 
 
+Unreleased
+----------
+
+**Fixed**:
+
+* ``tl._sctransform.vst(do_regularize=False)`` ignored R's rule that ``n_genes``
+  is dropped when regularisation is off (``sctransform::vst``: "will use all
+  genes"). Step 1 stayed subsampled, the extrapolation step never ran, and
+  ``model_pars_fit.reindex(genes)`` left the un-subsampled genes NaN — 80% of
+  the residual matrix in a 500-gene/``n_genes=100`` run. Step 1 now uses every
+  gene, and any gene still without a model raises instead of yielding NaN.
+* ``tl.integration._xgboost_integration.integrate_pair_xgb`` computed
+  ``delta = y_pred @ pca.components_``, which omits ``pca.mean_``. The mean *is*
+  the bulk of a batch shift, so the correction was systematically too small by
+  exactly that term. Now uses ``pca.inverse_transform``.
+* ``tl.slice_separation.dbscan_slice_labels`` failed silently in three ways:
+  non-finite coordinates surfaced as sklearn's opaque "Input contains NaN";
+  every cluster below ``min_cells`` marked 100% of cells ``debris`` without a
+  word; and a pixel-coordinate slide given a µm ``eps`` collapsed to one slice.
+  Each now raises or warns with the actual cause and the relevant numbers,
+  including a units hint when ``eps`` is more than 25x the median
+  nearest-neighbour spacing of a single surviving cluster.
+
+
 Version 0.4.1
 -------------
 

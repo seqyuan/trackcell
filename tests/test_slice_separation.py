@@ -166,3 +166,46 @@ def test_mark_colony_centroids_and_distance():
     distance_to_nearest_centroids(adata, distance_key="distance_to_nearest_gcc")
     assert "distance_to_nearest_gcc" in adata.obs
     assert (adata.obs["distance_to_nearest_gcc"] >= 0).all()
+
+
+def test_dbscan_slice_labels_rejects_nonfinite_coords():
+    pytest.importorskip("sklearn")
+    coords = _make_tma_adata(n_cores=2, cells_per_core=40)[:100].obsm["spatial"].copy()
+    coords[3, 0] = np.nan
+    with pytest.raises(ValueError, match="non-finite"):
+        dbscan_slice_labels(coords, eps=120, min_samples=5, min_cells=10)
+
+
+def test_dbscan_slice_labels_rejects_all_debris():
+    """Every cluster below ``min_cells`` must fail, not silently mark 100% debris."""
+    pytest.importorskip("sklearn")
+    coords = _make_tma_adata(n_cores=2, cells_per_core=150).obsm["spatial"]
+    with pytest.raises(ValueError, match="smaller than min_cells"):
+        dbscan_slice_labels(coords, eps=120, min_samples=5, min_cells=10**9)
+
+
+def test_dbscan_slice_labels_rejects_eps_too_small():
+    pytest.importorskip("sklearn")
+    coords = _make_tma_adata(n_cores=2, cells_per_core=150).obsm["spatial"]
+    with pytest.raises(ValueError, match="no dense region"):
+        dbscan_slice_labels(coords, eps=0.01, min_samples=5, min_cells=50)
+
+
+def test_dbscan_slice_labels_warns_when_eps_merges_everything():
+    """Pixel coordinates + a µm-scale eps collapses the whole slide into one slice."""
+    pytest.importorskip("sklearn")
+    coords = _make_tma_adata(n_cores=4, cells_per_core=150).obsm["spatial"] / 4.0
+    with pytest.warns(RuntimeWarning, match="collapsed into a single"):
+        _, slice_ids = dbscan_slice_labels(coords, eps=80, min_samples=5, min_cells=50)
+    assert len({s for s in slice_ids if s != "debris"}) == 1
+
+
+def test_dbscan_slice_labels_quiet_for_correctly_scaled_input():
+    pytest.importorskip("sklearn")
+    import warnings as _warnings
+
+    coords = _make_tma_adata(n_cores=4, cells_per_core=150).obsm["spatial"]
+    with _warnings.catch_warnings():
+        _warnings.simplefilter("error", RuntimeWarning)
+        _, slice_ids = dbscan_slice_labels(coords, eps=120, min_samples=5, min_cells=50)
+    assert len({s for s in slice_ids if s != "debris"}) == 4

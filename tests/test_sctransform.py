@@ -565,3 +565,42 @@ def test_get_residuals_rejects_duplicate_var_names():
             umi_genes=dup,
             cell_attr=vst_out["cell_attr"],
         )
+
+
+def test_do_regularize_false_keeps_all_genes():
+    """``do_regularize=False`` must not leave 80% of residuals as NaN.
+
+    R ``sctransform::vst`` drops ``n_genes`` when regularisation is off ("will
+    use all genes"), because ``reg_model_pars`` is what extrapolates step-1
+    parameters to the genes that were not subsampled. Without that, every
+    un-subsampled gene kept a NaN model and the residuals followed.
+    """
+    from trackcell.tl._sctransform import vst
+
+    rng = np.random.default_rng(0)
+    n_genes, n_cells = 500, 300
+    umi = sps.csr_matrix(
+        rng.poisson(rng.uniform(0.5, 8.0, (n_genes, n_cells))).astype(np.float64)
+    )
+    genes = pd.Index([f"g{i}" for i in range(n_genes)])
+    cells = pd.Index([f"c{i}" for i in range(n_cells)])
+    cell_attr = pd.DataFrame(
+        {"log_umi": np.log1p(np.asarray(umi.sum(axis=0)).ravel())}, index=cells
+    )
+
+    out = vst(
+        umi,
+        genes,
+        cells,
+        cell_attr=cell_attr,
+        n_genes=100,
+        n_cells=150,
+        do_regularize=False,
+        return_corrected_umi=False,
+        min_cells=1,
+    )
+
+    model_pars = out["model_pars_fit"]
+    assert len(model_pars) == n_genes
+    assert not model_pars["theta"].isna().any()
+    assert np.isnan(out["y"].to_numpy()).mean() == 0.0

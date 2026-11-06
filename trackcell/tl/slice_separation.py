@@ -12,6 +12,7 @@ Two CCHD use cases share the same sklearn DBSCAN backend:
 
 from __future__ import annotations
 
+import warnings
 from pathlib import Path
 from typing import Optional, Sequence, Union
 
@@ -46,6 +47,25 @@ def _spatial_coords(adata: AnnData, spatial_key: str = "spatial") -> np.ndarray:
     if coords.ndim != 2 or coords.shape[1] != 2:
         raise ValueError(f"Expected N×2 spatial coordinates, got shape {coords.shape}")
     return coords
+
+
+def _median_nn_spacing(coords: np.ndarray, max_points: int = 5000) -> float:
+    """Median nearest-neighbour distance, estimated on a subsample.
+
+    Used only for a units sanity check, so a 5000-point subsample is plenty and
+    keeps the cost negligible even for million-cell slides.
+    """
+    from scipy.spatial import cKDTree
+
+    if len(coords) < 2:
+        return float("nan")
+    if len(coords) > max_points:
+        idx = np.random.default_rng(0).choice(len(coords), max_points, replace=False)
+        sample = coords[idx]
+    else:
+        sample = coords
+    dists, _ = cKDTree(sample).query(sample, k=2)
+    return float(np.median(dists[:, 1]))
 
 
 def dbscan_slice_labels(
@@ -101,11 +121,50 @@ def dbscan_slice_labels(
             np.array([], dtype=object),
         )
 
+    # sklearn's own error for non-finite input ("Input contains NaN") does not
+    # point at the reader that produced it; fail here with the actual cause.
+    if not np.isfinite(coords).all():
+        bad = int((~np.isfinite(coords)).any(axis=1).sum())
+        raise ValueError(
+            f"Spatial coordinates contain {bad} non-finite row(s) out of "
+            f"{len(coords)}. DBSCAN cannot run on NaN/inf; filter or impute "
+            "those cells first."
+        )
+
     clustering = DBSCAN(eps=eps, min_samples=min_samples, n_jobs=n_jobs)
     labels = clustering.fit_predict(coords)
 
     cluster_sizes = pd.Series(labels[labels >= 0]).value_counts()
     valid_clusters = cluster_sizes[cluster_sizes >= min_cells].index.tolist()
+
+    if cluster_sizes.empty:
+        raise ValueError(
+            f"DBSCAN with eps={eps} and min_samples={min_samples} found no dense "
+            f"region among {len(coords)} cells. eps is likely too small for the "
+            "coordinate units — check whether your coordinates are in µm or in "
+            "pixels."
+        )
+    if not valid_clusters:
+        raise ValueError(
+            f"Every DBSCAN cluster is smaller than min_cells={min_cells}; all "
+            f"{len(coords)} cells would be labelled '{debris_label}'. Largest "
+            f"cluster has {int(cluster_sizes.max())} cells. Check eps "
+            f"({eps}) against the actual spacing of the coordinates, or lower "
+            "min_cells."
+        )
+
+    if len(valid_clusters) == 1:
+        spacing = _median_nn_spacing(coords)
+        if np.isfinite(spacing) and spacing > 0 and eps > 25 * spacing:
+            warnings.warn(
+                f"eps={eps} is {eps / spacing:.0f}x the median nearest-neighbour "
+                f"spacing ({spacing:.3g}), so every core collapsed into a single "
+                f"slice holding {int(cluster_sizes.loc[valid_clusters[0]])} of "
+                f"{len(coords)} cells. If the coordinates are in pixels rather "
+                "than µm, eps must be scaled accordingly.",
+                RuntimeWarning,
+                stacklevel=2,
+            )
 
     if sort_spatial and valid_clusters:
         cluster_info = []

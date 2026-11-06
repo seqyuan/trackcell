@@ -246,5 +246,8 @@ def integrate_pair_xgb(
     )
     reg.fit(x_train, y_scores)
     y_pred = reg.predict(data_query)
-    delta = y_pred @ pca.components_
+    # ``inverse_transform`` = ``scores @ components_ + mean_``. Projecting with
+    # ``@ components_`` alone drops the mean, which is precisely the bulk of a
+    # batch shift — the correction would come out systematically too small.
+    delta = pca.inverse_transform(y_pred)
     return data_query + delta
