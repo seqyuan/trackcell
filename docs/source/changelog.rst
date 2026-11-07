@@ -27,6 +27,26 @@ correct) correction. Re-run affected analyses rather than mixing versions.
   Each now raises or warns with the actual cause and the relevant numbers,
   including a units hint when ``eps`` is more than 25x the median
   nearest-neighbour spacing of a single surviving cluster.
+* ``tl._gene_utils.build_gene_alias_lookup`` let the first gene to claim a
+  ``.N``/``-N`` alias keep it, so with both ``A.1`` and ``A-1`` present the real
+  ``A-1`` resolved to ``A.1`` — a different gene, silently. Exact names now win
+  over aliases, and ``align_gene_list`` deduplicates with a set instead of an
+  O(n^2) membership scan.
+* ``tl._nhood.diff_nhood_enrichment(pvalues=True)`` produced anti-conservative
+  p-values: a category absent from one condition became NaN after reindexing,
+  and ``NaN >= x`` is always False, so the count never incremented for those
+  cells. Values now use the ``(count+1)/(n_perms+1)`` estimator (p can no longer
+  be 0) and a Benjamini-Hochberg matrix is returned as ``pvalue_adj``.
+* ``io.read_sto_*`` left duplicate GEF gene symbols in ``var_names``, which makes
+  ``get_loc`` return a *slice*: ``X[mask, slice]`` silently becomes an (n, k)
+  matrix and plotting fails somewhere unrelated. Duplicates are renamed with a
+  numeric suffix, warned about, and the original symbols kept in
+  ``var['gene_symbol']``.
+* ``io.read_sto_bin`` packed bin ids as ``(x << 32) | y`` after casting to
+  ``uint64``. GEF coordinates are relative to an origin that is not always the
+  array corner, so a negative bin index wrapped to ~4.29e9 and produced
+  nonsense bin centres. The packing now shifts to a non-negative origin and
+  unshifts when decoding, so negative coordinates stay exact.
 
 **Changed**:
 

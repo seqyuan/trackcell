@@ -31,6 +31,48 @@ from .._logging import get_logger
 logger = get_logger(__name__)
 
 
+def _unique_gene_index(
+    gene_names: np.ndarray, *, source: str
+) -> tuple[pd.Index, Optional[pd.Series]]:
+    """Return a unique gene index, plus the raw symbols if duplicates were found.
+
+    STOmics GEF files routinely carry duplicate gene symbols (multi-mapping
+    probes, placeholder rows). Leaving them as ``var_names`` makes
+    ``adata.var_names.get_loc(gene)`` return a *slice* instead of a position, so
+    ``X[mask, slice]`` silently becomes an (n, k) matrix and plotting fails far
+    from the cause. Indexing must stay positional-safe.
+    """
+    names = np.asarray([str(g) for g in gene_names], dtype=object)
+    if len(pd.Index(names).unique()) == len(names):
+        return pd.Index(names), None
+
+    taken = set(names)
+    seen: dict[str, int] = {}
+    out: list[str] = []
+    n_dup = 0
+    for name in names:
+        if name not in seen:
+            seen[name] = 0
+            out.append(name)
+            continue
+        n_dup += 1
+        suffix = 1
+        while f"{name}-{suffix}" in taken or f"{name}-{suffix}" in seen:
+            suffix += 1
+        seen[name] = suffix
+        out.append(f"{name}-{suffix}")
+
+    warnings.warn(
+        f"{source}: {n_dup} duplicate gene symbol(s) renamed with a numeric "
+        "suffix (e.g. 'Gapdh-1'). The original symbols are kept in "
+        "``adata.var['gene_symbol']``; index ``adata.var_names`` positionally "
+        "or deduplicate upstream if you need 'Gapdh' to stay unambiguous.",
+        RuntimeWarning,
+        stacklevel=3,
+    )
+    return pd.Index(out), pd.Series(names, index=pd.Index(out), name="gene_symbol")
+
+
 # Sentinel value used to pad cellBorder arrays in GEF cellbin files.
 # When a cell has fewer than 32 border vertices, remaining slots are
 # filled with int16 max (32767).
@@ -550,7 +592,12 @@ def read_sto_cellbin(
     )
 
     if gene_name_index:
-        var = pd.DataFrame(index=gene_names)
+        gene_index, raw_symbols = _unique_gene_index(
+            gene_names, source="read_sto_cellbin"
+        )
+        var = pd.DataFrame(index=gene_index)
+        if raw_symbols is not None:
+            var["gene_symbol"] = raw_symbols
     else:
         var = pd.DataFrame(index=np.arange(n_genes).astype(str))
 
@@ -803,7 +850,23 @@ def _read_sto_bin_from_gef(
     t0 = time.time()
     bin_x = (xs // bin_size).astype(np.int64)
     bin_y = (ys // bin_size).astype(np.int64)
-    bin_ids_int = (bin_x.astype(np.uint64) << 32) | bin_y.astype(np.uint64)
+    # Pack (x, y) into one int64 key. GEF coordinates are relative to an origin
+    # that is not always the array corner, so bin indices can be negative;
+    # casting a negative to uint64 before shifting wraps around and produced
+    # bin ids at ~4.29e9 with garbage centres. Shift to a non-negative origin
+    # first and remember the shift so the centres stay exact.
+    bin_x_origin = int(bin_x.min()) if len(bin_x) else 0
+    bin_y_origin = int(bin_y.min()) if len(bin_y) else 0
+    bin_x_shifted = bin_x - min(bin_x_origin, 0)
+    bin_y_shifted = bin_y - min(bin_y_origin, 0)
+    if bin_x_shifted.max(initial=0) >= 2**32 or bin_y_shifted.max(initial=0) >= 2**32:
+        raise ValueError(
+            "Binned coordinates exceed 32 bits; the GEF span is implausibly "
+            "large for the requested bin_size."
+        )
+    bin_ids_int = (bin_x_shifted.astype(np.uint64) << 32) | bin_y_shifted.astype(
+        np.uint64
+    )
     unique_bins, inverse = np.unique(bin_ids_int, return_inverse=True)
     n_bins = len(unique_bins)
     logger.info(
@@ -842,15 +905,21 @@ def _read_sto_bin_from_gef(
 
     # ── Build AnnData ──
     t0 = time.time()
-    bin_x_unique = (unique_bins >> 32).astype(np.int64)
-    bin_y_unique = (unique_bins & 0xFFFFFFFF).astype(np.int64)
+    bin_x_unique = (unique_bins >> 32).astype(np.int64) + min(bin_x_origin, 0)
+    bin_y_unique = (unique_bins & 0xFFFFFFFF).astype(np.int64) + min(bin_y_origin, 0)
 
     if sample is None:
         sample = path.stem.split(".")[0]
 
     obs = pd.DataFrame(index=unique_bins.astype(str))
     adata = sc.AnnData(X=exp_matrix, obs=obs)
-    adata.var_names = gene_names if gene_name_index else np.arange(n_genes).astype(str)
+    if gene_name_index:
+        gene_index, raw_symbols = _unique_gene_index(gene_names, source="read_sto_bin")
+        adata.var_names = gene_index
+        if raw_symbols is not None:
+            adata.var["gene_symbol"] = raw_symbols
+    else:
+        adata.var_names = np.arange(n_genes).astype(str)
     adata.obs.index.name = "bin_id"
 
     center_x = (bin_x_unique * bin_size + bin_size // 2).astype(np.float64)

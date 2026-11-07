@@ -18,6 +18,30 @@ from anndata import AnnData
 _DEFAULT_CONN_KEY = "spatial_connectivities"
 
 
+def _bh_adjust(pvalue: pd.DataFrame) -> pd.DataFrame:
+    """Benjamini-Hochberg FDR over the flattened (cluster x cluster) p-values.
+
+    A permutation matrix is dozens-to-hundreds of simultaneous tests; without
+    correction every cell of the heatmap invites over-reading. Computed over
+    finite entries only, so the shape and NaN layout of the input survive.
+    """
+    values = pvalue.to_numpy(dtype=np.float64, copy=True)
+    finite = np.isfinite(values)
+    if not finite.any():
+        return pd.DataFrame(values, index=pvalue.index, columns=pvalue.columns)
+
+    flat = values[finite]
+    order = np.argsort(flat)
+    n = flat.size
+    ranked = flat[order] * n / np.arange(1, n + 1)
+    # Step-up monotonicity: adjusted p is the running minimum from the largest.
+    ranked = np.minimum(np.minimum.accumulate(ranked[::-1])[::-1], 1.0)
+    adjusted = np.empty_like(flat)
+    adjusted[order] = ranked
+    values[finite] = adjusted
+    return pd.DataFrame(values, index=pvalue.index, columns=pvalue.columns)
+
+
 def _as_binary(adj: sps.spmatrix) -> sps.csr_matrix:
     adj = adj.tocsr().astype(bool).astype(np.float64)
     return adj
@@ -388,6 +412,13 @@ def diff_nhood_enrichment(
         n1 = len(libs1)
 
         # Two-sided permutation test: p = P(|perm_diff| >= |obs_diff|).
+        #
+        # ``perm_diff`` / ``obs_diff`` are reindexed onto the full category list,
+        # so a category absent from one condition yields NaN. Comparing NaN
+        # yields False and never increments the counter, which biased every
+        # such entry towards a spuriously small p-value. Missing categories have
+        # no links on either side, so their difference is genuinely 0.
+        obs_abs = np.nan_to_num(np.abs(obs_diff.values), nan=0.0, posinf=np.inf)
         counts = np.zeros_like(obs_diff.values, dtype=np.float64)
         for _ in range(n_perms):
             perm = rng.permutation(all_libs)
@@ -402,14 +433,16 @@ def diff_nhood_enrichment(
                 permuted_cond,
                 log_fold_change=log_fold_change,
             )
-            with np.errstate(invalid="ignore"):
-                counts += (np.abs(perm_diff.values) >= np.abs(obs_diff.values)).astype(
-                    np.float64
-                )
+            perm_abs = np.nan_to_num(np.abs(perm_diff.values), nan=0.0, posinf=np.inf)
+            counts += (perm_abs >= obs_abs).astype(np.float64)
 
-        pvalue = counts / n_perms
+        # +1 correction: with a finite number of permutations, p == 0 is not
+        # attainable; (0+1)/(n+1) is the standard estimator and keeps the value
+        # usable by multiple-testing correction.
+        pvalue = (counts + 1.0) / (n_perms + 1.0)
         pvalue = pd.DataFrame(pvalue, index=obs_diff.index, columns=obs_diff.columns)
         result[result_key]["pvalue"] = pvalue
+        result[result_key]["pvalue_adj"] = _bh_adjust(pvalue)
 
     if copy:
         return result

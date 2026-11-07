@@ -23,9 +23,19 @@ def _gene_suffix_aliases(name: str) -> list[str]:
 
 
 def build_gene_alias_lookup(target_genes: pd.Index) -> dict[str, str]:
-    """Map gene names and suffix aliases to canonical names in ``target_genes``."""
+    """Map gene names and suffix aliases to canonical names in ``target_genes``.
+
+    Exact names always win over aliases. A single ``setdefault`` pass made the
+    first gene to claim an alias keep it, so with both ``A.1`` and ``A-1``
+    present the real ``A-1`` was silently resolved to ``A.1`` — the wrong gene.
+    """
     lookup: dict[str, str] = {}
-    for gene in map(str, target_genes):
+    genes = [str(g) for g in target_genes]
+    # Pass 1: every real name maps to itself, so aliases can never shadow one.
+    for gene in genes:
+        lookup[gene] = gene
+    # Pass 2: aliases only fill the gaps left by pass 1.
+    for gene in genes:
         for alias in _gene_suffix_aliases(gene):
             lookup.setdefault(alias, gene)
     return lookup
@@ -56,10 +66,12 @@ def align_gene_list(genes: Sequence[str], target_genes: pd.Index) -> list[str]:
     """Align a list of gene names to standard names in ``target_genes``."""
     lookup = build_gene_alias_lookup(target_genes)
     out: list[str] = []
+    seen: set[str] = set()
     for gene in genes:
         matched = _gene_name_alias(str(gene), lookup)
-        if matched is not None and matched not in out:
+        if matched is not None and matched not in seen:
             out.append(matched)
+            seen.add(matched)
     return out
 
 

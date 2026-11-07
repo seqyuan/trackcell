@@ -1,6 +1,7 @@
 """Tests for CellCharter-inspired YardCluster features."""
 
 import numpy as np
+import pandas as pd
 import pytest
 from anndata import AnnData
 
@@ -147,6 +148,34 @@ def test_diff_nhood_enrichment_with_pvalues():
     assert "pvalue" in res["Case_Ctr"]
     pv = res["Case_Ctr"]["pvalue"].values
     assert ((pv >= 0) & (pv <= 1) | np.isnan(pv)).all()
+    # Permutation p-values use the (count+1)/(n+1) estimator, so 0 is not
+    # attainable — otherwise a downstream "p < 0.001" filter is meaningless.
+    assert (pv > 0).all()
+    # Multiple-testing correction is provided alongside the raw matrix.
+    assert "pvalue_adj" in res["Case_Ctr"]
+    adj = res["Case_Ctr"]["pvalue_adj"].values
+    assert (adj >= pv - 1e-12).all()
+    assert (adj <= 1.0 + 1e-12).all()
+
+
+def test_bh_adjust_matches_statsmodels():
+    from statsmodels.stats.multitest import multipletests
+
+    from trackcell.tl._nhood import _bh_adjust
+
+    p = pd.DataFrame([[0.001, 0.01], [0.02, 0.5]], index=["a", "b"], columns=["a", "b"])
+    adj = _bh_adjust(p)
+    _, expected, _, _ = multipletests(p.to_numpy().ravel(), method="fdr_bh")
+    np.testing.assert_allclose(adj.to_numpy().ravel(), expected)
+
+
+def test_bh_adjust_keeps_nan_layout():
+    from trackcell.tl._nhood import _bh_adjust
+
+    p = pd.DataFrame([[0.01, np.nan], [0.2, 0.4]])
+    adj = _bh_adjust(p)
+    assert np.isnan(adj.iloc[0, 1])
+    assert np.isfinite(adj.iloc[0, 0])
 
 
 def test_sweep_and_select_resolution():
@@ -289,3 +318,37 @@ def test_pl_nhood_enrichment_heatmap():
     ax2 = pl_diff(adata, "yardcluster", "condition", ("Case", "Ctr"), show=False)
     assert ax2 is not None
     plt.close("all")
+
+
+def test_gene_alias_lookup_exact_names_win_over_aliases():
+    """A real gene named ``A-1`` must not resolve to the alias of ``A.1``.
+
+    A single ``setdefault`` pass let whichever gene came first claim the alias,
+    so ``align_gene_list(['A-1'])`` returned ``A.1`` — a different gene, silently.
+    """
+    from trackcell.tl._gene_utils import (
+        align_gene_list,
+        build_gene_alias_lookup,
+        resolve_gene_alias,
+    )
+
+    targets = pd.Index(["A.1", "A-1", "B", "C.2"])
+
+    lookup = build_gene_alias_lookup(targets)
+    assert lookup["A.1"] == "A.1"
+    assert lookup["A-1"] == "A-1"
+
+    assert resolve_gene_alias("A-1", targets) == "A-1"
+    assert resolve_gene_alias("A.1", targets) == "A.1"
+    assert align_gene_list(["A-1"], targets) == ["A-1"]
+
+    # When only one spelling exists, the alias still resolves to it.
+    only_dotted = pd.Index(["A.1", "B"])
+    assert resolve_gene_alias("A-1", only_dotted) == "A.1"
+
+
+def test_align_gene_list_deduplicates_matches():
+    from trackcell.tl._gene_utils import align_gene_list
+
+    targets = pd.Index(["A.1", "B"])
+    assert align_gene_list(["A.1", "A-1", "A.1"], targets) == ["A.1"]

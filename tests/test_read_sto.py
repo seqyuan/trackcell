@@ -277,3 +277,50 @@ def test_read_sto_cellbin_records_gef_offsets(tmp_path):
     np.testing.assert_allclose(
         adata.obsm["spatial"], [[100.0, 200.0], [300.0, 400.0], [500.0, 600.0]]
     )
+
+
+def test_read_sto_bin_negative_coords_do_not_wrap(tmp_path):
+    """Negative bin indices must not wrap through uint64.
+
+    GEF coordinates are relative to an origin that is not always the array
+    corner. Casting a negative bin index to uint64 before the ``(x << 32) | y``
+    packing produced ids around 4.29e9 with nonsense centres.
+    """
+    from tests.conftest import write_tissue_gef
+
+    path = write_tissue_gef(
+        tmp_path / "neg" / "B000001.tissue.gef",
+        entries=((-4, -4, 1), (-2, -2, 2), (0, 0, 3), (2, 2, 4)),
+    )
+    adata = read_sto_bin(path, bin_size=2)
+
+    xs = adata.obsm["spatial"][:, 0]
+    ys = adata.obsm["spatial"][:, 1]
+    assert xs.min() >= -10 and xs.max() <= 10
+    assert ys.min() >= -10 and ys.max() <= 10
+    np.testing.assert_allclose(sorted(xs), [-3.0, -1.0, 1.0, 3.0])
+    np.testing.assert_allclose(sorted(ys), [-3.0, -1.0, 1.0, 3.0])
+
+
+def test_read_sto_bin_deduplicates_gene_symbols(tmp_path):
+    """Duplicate symbols are renamed and kept in ``var['gene_symbol']``.
+
+    A duplicated ``var_names`` entry makes ``get_loc`` return a slice, so
+    ``X[mask, slice]`` becomes an (n, k) matrix and plotting fails somewhere
+    unrelated. The index has to stay positional-safe.
+    """
+    from tests.conftest import write_tissue_gef
+
+    path = write_tissue_gef(
+        tmp_path / "dup" / "B000001.tissue.gef",
+        entries=((0, 0, 1), (2, 0, 2), (4, 0, 3)),
+        genes=("Gapdh", "Actb", "Gapdh"),
+    )
+    with pytest.warns(RuntimeWarning, match="duplicate gene symbol"):
+        adata = read_sto_bin(path, bin_size=2)
+
+    assert adata.var_names.is_unique
+    assert "Gapdh" in adata.var_names and "Gapdh-1" in adata.var_names
+    assert list(adata.var["gene_symbol"]) == ["Gapdh", "Actb", "Gapdh"]
+    # get_loc must return a position, never a slice.
+    assert isinstance(adata.var_names.get_loc("Gapdh"), (int, np.integer))
