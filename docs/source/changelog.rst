@@ -1,6 +1,114 @@
 Changelog
 
 
+Version 0.4.3
+-------------
+
+**Upgrade note** — four of these change results, not only error messages:
+
+* ``tl.diff_nhood_enrichment(pvalues=True)`` — p-values are now
+  ``(count+1)/(n_perms+1)`` and missing cluster pairs no longer collapse to
+  zero, so pairs that used to look significant may stop being so. A
+  ``pvalue_adj`` (Benjamini-Hochberg) matrix is returned alongside; report that
+  rather than the raw matrix.
+* ``tl.sweep_resolutions`` / ``tl.spatial_cluster`` — the Leiden fallback path
+  now uses ``n_iterations=2`` like the primary path. Only affects environments
+  without ``python-igraph``; stability scores from such a sweep are not
+  comparable with 0.4.2.
+* ``io.read_sto_bin`` — bins with negative coordinates now decode to the correct
+  centres instead of ~4.29e11. Anything derived from those coordinates must be
+  rebuilt.
+* ``io.read_xenium_cellseg`` — matrix/metadata overlap below 90% now raises
+  rather than returning a silently truncated object. A load that used to
+  "work" and now fails has genuinely inconsistent inputs.
+
+**Fixed**:
+
+* ``tl._gene_utils.build_gene_alias_lookup`` let the first gene to claim a
+  ``.N``/``-N`` alias keep it, so with both ``A.1`` and ``A-1`` present the real
+  ``A-1`` resolved to ``A.1`` — a different gene, silently. Exact names now win
+  over aliases, and ``align_gene_list`` deduplicates with a set instead of an
+  O(n^2) membership scan.
+* ``tl._nhood.diff_nhood_enrichment(pvalues=True)`` produced anti-conservative
+  p-values: a category absent from one condition became NaN after reindexing,
+  and ``NaN >= x`` is always False, so the count never incremented for those
+  cells. Values now use the ``(count+1)/(n_perms+1)`` estimator (p can no longer
+  be 0) and a Benjamini-Hochberg matrix is returned as ``pvalue_adj``.
+* ``io.read_sto_*`` left duplicate GEF gene symbols in ``var_names``, which makes
+  ``get_loc`` return a *slice*: ``X[mask, slice]`` silently becomes an (n, k)
+  matrix and plotting fails somewhere unrelated. Duplicates are renamed with a
+  numeric suffix, warned about, and the original symbols kept in
+  ``var['gene_symbol']``.
+* ``io.read_sto_bin`` packed bin ids as ``(x << 32) | y`` after casting to
+  ``uint64``. GEF coordinates are relative to an origin that is not always the
+  array corner, so a negative bin index wrapped to ~4.29e9 and produced nonsense
+  bin centres. The packing now shifts to a non-negative origin and unshifts when
+  decoding, so negative coordinates stay exact.
+* ``pl.spatial_cell`` classified every integer ``obs`` column as continuous, so
+  integer-coded cluster labels (``leiden`` as int8, cluster ids as int64) were
+  drawn as a viridis gradient with no legend. Columns are now classified by
+  cardinality (``Categorical``/object/bool always, integers with at most 30
+  levels), and a new ``categorical=`` argument overrides the inference either
+  way.
+* ``pl.select`` produced arbitrary ROI membership for a self-intersecting lasso
+  (tracing a region and retracing a diagonal is a normal mouse artefact): an
+  invalid polygon's ``contains`` results are undefined, and one test case
+  selected only one of the two cells the user had drawn around. The ring is now
+  repaired with ``make_valid`` before testing membership.
+* ``pl.select.RegionSelector.save`` re-initialised the whole ``obs`` column to
+  ``None`` before writing the current ROIs, so adding one ROI to an object
+  restored from a previous h5ad discarded every earlier label. Only cells inside
+  a ROI recorded in this session are overwritten now.
+* ``io.read_xenium_cellseg`` only printed a warning when the expression matrix
+  and ``cells.parquet`` disagreed, and ``verbose=False`` silenced it — a
+  partial-matrix run therefore "succeeded" with far fewer cells than expected.
+  Zero overlap raises with both id lists; below 90% raises; the remainder logs
+  at ``warning`` through the logger.
+* ``io.read_sto_cellbin`` divided by ``img.max()`` when normalising the tissue
+  image, emitting ``invalid value encountered in divide`` on a blank capture.
+  It also stored ``hires`` and ``lowres`` as the *same array object*, so the
+  h5ad carried the full image twice and mutating one changed the other. Blank
+  captures render black, and ``lowres`` is now a genuinely downsampled copy.
+* ``io.read_atera`` with ``region=`` / ``n_cells=`` (the preview path) subset the
+  object *after* building polygons and left ``uns['cell_boundaries']['cell_idx']``
+  at its pre-subset length, so every vertex offset addressed the wrong cell —
+  silently, since the geometry table itself was trimmed correctly.
+* ``io.read_sto_*`` resolved an ambiguous GEF directory by taking
+  ``candidates[0]`` in ``glob`` order, which is filesystem-dependent: the same
+  directory could yield a different chip on a different machine. Candidates are
+  sorted by name and the warning names all of them.
+* ``tl._autores`` / ``tl.spatial_cluster`` fell back from the igraph Leiden
+  backend on ``(ImportError, TypeError, ValueError)``. A parameter error was
+  therefore retried on a second backend instead of surfacing, and the fallback
+  ran with leidenalg's default ``n_iterations`` (-1 vs 2) — so a resolution
+  sweep could compare clusters from two different algorithms and report the
+  difference as stability. Only ``ImportError`` triggers a fallback now, both
+  branches use ``n_iterations=2``, and the switch warns.
+
+**Changed**:
+
+* Development tooling is now pinned to the exact versions used locally, in all
+  three places that run it. ``black`` was pinned ``>=26.0,<27.0`` in
+  ``pyproject.toml`` but ``24.10.0`` in ``.pre-commit-config.yaml``; ``flake8``
+  was ``^6.0.0`` in one place and ``7.1.1`` in the other, while the maintainer
+  ran ``7.4.1``; ``pytest`` was ``^7.0.0`` against a local ``9.0.2``. Two
+  formatter versions in one repository make "pre-commit reformats what CI just
+  accepted" an expected outcome rather than a risk.
+* The wheel no longer bundles ``trackcell/benchmark`` — 2592 lines of
+  development scaffolding (including two ``.R`` scripts) with zero imports from
+  library code. It was 20 of 64 wheel entries and 12.5% of the package, and it
+  skewed every coverage number. ``scripts/check_package.py`` now fails if it
+  reappears.
+* Optional-dependency upper bounds were guesses that the maintainer's own
+  environment already violated: ``python-igraph<1.0`` against an installed
+  1.0.0, ``harmonypy<1.0`` against 2.1.0. CI therefore installed versions nobody
+  had run. Bounds widened to the majors actually in use.
+* ``trackcell/py.typed`` contained ``partial``, which has meaning only for
+  stub-only distributions; mypy only checks that the file exists. Emptied.
+* Coverage ratchets added for ``io/serialize.py`` (>= 70%) and
+  ``io/convert_annohdcell.py`` (>= 12%, a floor that can only move up).
+
+
 Version 0.4.2
 -------------
 
@@ -27,94 +135,6 @@ correct) correction. Re-run affected analyses rather than mixing versions.
   Each now raises or warns with the actual cause and the relevant numbers,
   including a units hint when ``eps`` is more than 25x the median
   nearest-neighbour spacing of a single surviving cluster.
-* ``tl._gene_utils.build_gene_alias_lookup`` let the first gene to claim a
-  ``.N``/``-N`` alias keep it, so with both ``A.1`` and ``A-1`` present the real
-  ``A-1`` resolved to ``A.1`` — a different gene, silently. Exact names now win
-  over aliases, and ``align_gene_list`` deduplicates with a set instead of an
-  O(n^2) membership scan.
-* ``tl._nhood.diff_nhood_enrichment(pvalues=True)`` produced anti-conservative
-  p-values: a category absent from one condition became NaN after reindexing,
-  and ``NaN >= x`` is always False, so the count never incremented for those
-  cells. Values now use the ``(count+1)/(n_perms+1)`` estimator (p can no longer
-  be 0) and a Benjamini-Hochberg matrix is returned as ``pvalue_adj``.
-* ``io.read_sto_*`` left duplicate GEF gene symbols in ``var_names``, which makes
-  ``get_loc`` return a *slice*: ``X[mask, slice]`` silently becomes an (n, k)
-  matrix and plotting fails somewhere unrelated. Duplicates are renamed with a
-  numeric suffix, warned about, and the original symbols kept in
-  ``var['gene_symbol']``.
-* ``io.read_sto_bin`` packed bin ids as ``(x << 32) | y`` after casting to
-  ``uint64``. GEF coordinates are relative to an origin that is not always the
-  array corner, so a negative bin index wrapped to ~4.29e9 and produced
-  nonsense bin centres. The packing now shifts to a non-negative origin and
-  unshifts when decoding, so negative coordinates stay exact.
-* ``pl.spatial_cell`` classified every integer ``obs`` column as continuous, so
-  integer-coded cluster labels (``leiden`` as int8, cluster ids as int64) were
-  drawn as a viridis gradient with no legend. Columns are now classified by
-  cardinality (``Categorical``/object/bool always, integers with at most 30
-  levels), and a new ``categorical=`` argument overrides the inference either
-  way.
-* ``pl.select`` produced arbitrary ROI membership for a self-intersecting lasso
-  (tracing a region and retracing a diagonal is a normal mouse artefact): an
-  invalid polygon's ``contains`` results are undefined, and one test case
-  selected only one of the two cells the user had drawn around. The ring is now
-  repaired with ``make_valid`` before testing membership.
-* ``pl.select.RegionSelector.save`` re-initialised the whole ``obs`` column to
-  ``None`` before writing the current ROIs, so adding one ROI to an object
-  restored from a previous h5ad discarded every earlier label. Only cells inside
-  a ROI recorded in this session are overwritten now.
-* ``io.read_xenium_cellseg`` only printed a warning when the expression matrix
-  and ``cells.parquet`` disagreed, and ``verbose=False`` silenced it — a
-  partial-matrix run therefore "succeeded" with far fewer cells than expected.
-  Zero overlap raises with both id lists; below 90% raises; the remainder logs
-  at ``warning`` through the logger.
-* ``io.read_sto_cellbin`` divided by ``img.max()`` when normalising the tissue
-  image, emitting ``invalid value encountered in divide`` on a blank capture.
-  It also stored ``hires`` and ``lowres`` as the *same array object*, so the
-  h5ad carried the full image twice and mutating one changed the other.
-  Blank captures render black, and ``lowres`` is now a genuinely downsampled
-  copy.
-* The wheel no longer bundles ``trackcell/benchmark`` — 2592 lines of
-  development scaffolding (including two ``.R`` scripts) with zero imports from
-  library code. It was 20 of 64 wheel entries and 12.5% of the package, and it
-  skewed every coverage number. ``scripts/check_package.py`` now fails if it
-  reappears. Tests keep importing it from the checkout.
-* Optional-dependency upper bounds were guesses that the maintainer's own
-  environment already violated: ``python-igraph<1.0`` against an installed
-  1.0.0, ``harmonypy<1.0`` against 2.1.0. CI therefore installed versions the
-  maintainer never ran. Bounds widened to the majors actually in use.
-* ``trackcell/py.typed`` contained ``partial``, which has meaning only for
-  stub-only distributions; mypy only checks that the file exists. Emptied, which
-  is the correct marker for an inline-typed package.
-* Coverage ratchets added for ``io/serialize.py`` (>= 70%, currently 87%) and
-  ``io/convert_annohdcell.py`` (>= 12%, currently 12% — a floor that can only
-  move up). The previously ratcheted files were ``read_data`` and ``read_sto``
-  only, so the third IO module with a README tutorial was unguarded.
-* ``io.read_atera`` with ``region=`` / ``n_cells=`` (the preview path) subset the
-  object *after* building polygons and left ``uns['cell_boundaries']['cell_idx']``
-  at its pre-subset length, so every vertex offset addressed the wrong cell —
-  silently, since the geometry table itself was trimmed correctly.
-* ``io.read_sto_*`` resolved an ambiguous GEF directory by taking
-  ``candidates[0]`` in ``glob`` order, which is filesystem-dependent: the same
-  directory could yield a different chip on a different machine. Candidates are
-  sorted by name and the warning names all of them.
-* ``tl._autores`` / ``tl.spatial_cluster`` fell back from the igraph Leiden
-  backend on ``(ImportError, TypeError, ValueError)``. A parameter error was
-  therefore retried on a second backend instead of surfacing, and the fallback
-  ran with leidenalg's default ``n_iterations`` (-1 vs 2) — so a resolution
-  sweep could compare clusters from two different algorithms and report the
-  difference as stability. Only ``ImportError`` triggers a fallback now, both
-  branches use ``n_iterations=2``, and the switch warns.
-
-**Changed**:
-
-* Development tooling is now pinned to the exact versions used locally, in all
-  three places that run it. ``black`` was pinned ``>=26.0,<27.0`` in
-  ``pyproject.toml`` but ``24.10.0`` in ``.pre-commit-config.yaml``; ``flake8``
-  was ``^6.0.0`` in one place and ``7.1.1`` in the other, while the maintainer
-  ran ``7.4.1``; ``pytest`` was ``^7.0.0`` against a local ``9.0.2``. Two
-  formatter versions in one repository make "pre-commit reformats what CI just
-  accepted" an expected outcome rather than a risk. ``pyproject.toml``,
-  ``.pre-commit-config.yaml`` and CONTRIBUTING now name the same versions.
 
 
 Version 0.4.1
@@ -159,6 +179,7 @@ versions.
   and ``GeoDataFrame.crs`` survives via a ``<key>__crs`` sidecar. The WKT codec
   now lives in one place — ``io.restore_geometries`` delegates to
   ``serialize.restore_geometries`` instead of keeping a second, lossier copy.
+
 
 **Changed**:
 
