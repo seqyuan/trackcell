@@ -174,3 +174,8 @@ ehthumbs.db
 Desktop.ini 
 # Local agent tooling state (may contain credentials)
 .annovibe/
+
+# Internal code-review notes (audit reports, remediation plans).
+# Kept local: they quote file:line evidence about known defects and are not
+# part of the published documentation under docs/source/.
+docs/review/
