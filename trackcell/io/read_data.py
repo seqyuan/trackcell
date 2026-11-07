@@ -729,11 +729,32 @@ def read_xenium_cellseg(
     obs_index = pd.Index(barcodes, name="cell_id")
 
     common_cells = obs_index.intersection(cells_df.index)
-    if len(common_cells) != n_cells:
-        log(
-            f"  Warning: {len(common_cells):,}/{n_cells:,} cells matched between "
-            f"expression and metadata"
+    n_matched = len(common_cells)
+    if n_matched == 0:
+        raise ValueError(
+            "No cell IDs match between the expression matrix and "
+            f"{cells_path.name} ({n_cells:,} matrix cells, "
+            f"{len(cells_df):,} metadata rows). Check that both come from the "
+            "same run and that the IDs share the same dtype/format "
+            f"(matrix: {obs_index[:3].tolist()}, metadata: "
+            f"{cells_df.index[:3].tolist()})."
         )
+    if n_matched != n_cells:
+        # A silent subset is how a partial-matrix run turns into a "successful"
+        # load carrying far fewer cells than the user expects. Say so loudly, and
+        # through the logger so ``verbose=False`` cannot make it disappear.
+        fraction = n_matched / n_cells
+        message = (
+            f"[Xenium] {n_matched:,}/{n_cells:,} cells ({fraction:.1%}) matched "
+            "between expression and metadata; the rest are dropped."
+        )
+        if fraction < 0.9:
+            raise ValueError(
+                message + " Refusing to continue below 90% — this usually means the "
+                "matrix and cells.parquet come from different runs or use "
+                "different cell-id formats."
+            )
+        logger.warning(message)
 
     # Build row index map for subsetting the matrix
     row_mask = obs_index.isin(common_cells)

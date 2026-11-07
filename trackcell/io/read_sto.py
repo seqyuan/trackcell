@@ -256,9 +256,18 @@ def _load_tissue_image(
             img = np.stack([img] * 3, axis=-1)
         elif img.ndim == 3 and img.shape[2] == 1:
             img = np.repeat(img, 3, axis=2)
-        # Normalize to uint8-safe range if needed
+        # Normalize to uint8-safe range if needed. A blank capture (all zeros)
+        # used to divide by zero and hand back NaN pixels that later render as
+        # a black frame with no hint about why.
         if img.dtype != np.uint8:
-            img = (img / img.max() * 255).clip(0, 255).astype(np.uint8)
+            peak = float(np.nanmax(img)) if img.size else 0.0
+            if not np.isfinite(peak) or peak <= 0:
+                logger.warning(
+                    "Tissue image has no signal (max=%s); rendering it black.",
+                    peak,
+                )
+                return np.zeros((*img.shape[:2], 3), dtype=np.uint8)
+            img = (img / peak * 255).clip(0, 255).astype(np.uint8)
         return img
 
     def _read_and_convert(path: Path) -> np.ndarray:
@@ -658,9 +667,14 @@ def read_sto_cellbin(
     # ── 10. Load tissue image (optional) ──
     tissue_img = _load_tissue_image(image_path, gef_dir=gef_path.parent)
     if tissue_img is not None:
+        # ``hires`` and ``lowres`` used to reference the *same array object*, so
+        # h5ad stored the full image twice and mutating one visibly changed the
+        # other. Derive a genuinely smaller lowres copy by striding.
+        step = max(1, min(tissue_img.shape[0], tissue_img.shape[1]) // 512)
+        lowres = tissue_img[::step, ::step].copy() if step > 1 else tissue_img.copy()
         adata.uns["spatial"][sample]["images"] = {
             "hires": tissue_img,
-            "lowres": tissue_img,
+            "lowres": lowres,
         }
         # Update scalefactors based on image dimensions
         # STOmics images are registered to sequencing coordinates,

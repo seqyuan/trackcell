@@ -97,3 +97,37 @@ def test_infer_sample_from_spaceranger_layout(path, expected):
 )
 def test_classification_name_handles_dicts_and_lists(value, expected):
     assert _classification_name(value) == expected
+
+
+def test_read_xenium_rejects_no_matching_cell_ids(tmp_path):
+    """Zero overlap between matrix barcodes and cells.parquet must raise.
+
+    The reader used to emit a ``print`` that ``verbose=False`` swallowed, then
+    return an AnnData with zero observations as if the load had succeeded.
+    """
+    _write_xenium_fixture(tmp_path)
+    pd.DataFrame(
+        {
+            "cell_id": ["otherA-1", "otherB-1"],
+            "x_centroid": [1.0, 2.0],
+            "y_centroid": [1.0, 2.0],
+        }
+    ).to_parquet(tmp_path / "cells.parquet")
+
+    with pytest.raises(ValueError, match="No cell IDs match"):
+        read_xenium_cellseg(tmp_path, sample="sample", verbose=False)
+
+
+def test_read_xenium_rejects_partial_overlap_below_threshold(tmp_path):
+    _write_xenium_fixture(tmp_path)
+    # 3 matrix cells, only 1 present in metadata -> 33% match.
+    pd.DataFrame(
+        {
+            "cell_id": ["c1-1"],
+            "x_centroid": [1.0],
+            "y_centroid": [1.0],
+        }
+    ).to_parquet(tmp_path / "cells.parquet")
+
+    with pytest.raises(ValueError, match="Refusing to continue below 90%"):
+        read_xenium_cellseg(tmp_path, sample="sample", verbose=False)

@@ -47,6 +47,32 @@ correct) correction. Re-run affected analyses rather than mixing versions.
   array corner, so a negative bin index wrapped to ~4.29e9 and produced
   nonsense bin centres. The packing now shifts to a non-negative origin and
   unshifts when decoding, so negative coordinates stay exact.
+* ``pl.spatial_cell`` classified every integer ``obs`` column as continuous, so
+  integer-coded cluster labels (``leiden`` as int8, cluster ids as int64) were
+  drawn as a viridis gradient with no legend. Columns are now classified by
+  cardinality (``Categorical``/object/bool always, integers with at most 30
+  levels), and a new ``categorical=`` argument overrides the inference either
+  way.
+* ``pl.select`` produced arbitrary ROI membership for a self-intersecting lasso
+  (tracing a region and retracing a diagonal is a normal mouse artefact): an
+  invalid polygon's ``contains`` results are undefined, and one test case
+  selected only one of the two cells the user had drawn around. The ring is now
+  repaired with ``make_valid`` before testing membership.
+* ``pl.select.RegionSelector.save`` re-initialised the whole ``obs`` column to
+  ``None`` before writing the current ROIs, so adding one ROI to an object
+  restored from a previous h5ad discarded every earlier label. Only cells inside
+  a ROI recorded in this session are overwritten now.
+* ``io.read_xenium_cellseg`` only printed a warning when the expression matrix
+  and ``cells.parquet`` disagreed, and ``verbose=False`` silenced it — a
+  partial-matrix run therefore "succeeded" with far fewer cells than expected.
+  Zero overlap raises with both id lists; below 90% raises; the remainder logs
+  at ``warning`` through the logger.
+* ``io.read_sto_cellbin`` divided by ``img.max()`` when normalising the tissue
+  image, emitting ``invalid value encountered in divide`` on a blank capture.
+  It also stored ``hires`` and ``lowres`` as the *same array object*, so the
+  h5ad carried the full image twice and mutating one changed the other.
+  Blank captures render black, and ``lowres`` is now a genuinely downsampled
+  copy.
 
 **Changed**:
 

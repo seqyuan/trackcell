@@ -128,6 +128,31 @@ def _process_background_image(spatial_info, img_key, data_coords_range=None):
     return img, img_extent
 
 
+# Integer-coded categories (``leiden`` as int8, cluster ids as int64) are
+# indistinguishable from a continuous integer column by dtype alone. ``40``
+# leiden clusters are categorical; ``40_000`` total_counts are not. Decide by
+# cardinality and let the caller override with ``categorical=``.
+_MAX_INTEGER_LEVELS = 30
+
+
+def _looks_categorical(series, *, max_levels: int = _MAX_INTEGER_LEVELS) -> bool:
+    """Decide whether an ``obs`` column should be drawn as categories.
+
+    Dtype alone is not enough: pandas stores ``leiden`` output as integers, and
+    treating that as continuous drops the legend and renders a viridis gradient
+    over cluster ids.
+    """
+    dtype = getattr(series, "dtype", None)
+    if isinstance(dtype, pd.CategoricalDtype):
+        return True
+    if pd.api.types.is_bool_dtype(series) or pd.api.types.is_object_dtype(series):
+        return True
+    if pd.api.types.is_integer_dtype(series):
+        n_levels = pd.Series(series).nunique(dropna=True)
+        return 0 < n_levels <= max_levels
+    return False
+
+
 def _draw_categorical_edges(
     ax: plt.Axes,
     temp_gdf: gpd.GeoDataFrame,
@@ -758,6 +783,7 @@ def spatial_cell(
     ylabel: Optional[str] = "spatial 2",
     show_ticks: bool = False,
     invert_y: bool = True,
+    categorical: Optional[bool] = None,
     **kwargs,
 ):
     """
@@ -844,6 +870,12 @@ def spatial_cell(
         Whether to invert the y-axis so spatial coordinates increase from top to bottom
         (image convention, matching the H&E background). Set to ``False`` to use
         Cartesian convention (y increases from bottom to top).
+    categorical : bool, optional
+        Force categorical (legend) or continuous (colorbar) rendering of ``color``.
+        By default the choice is inferred: ``Categorical``/object/bool dtypes are
+        categorical, and integer columns are categorical when they have at most
+        30 distinct values — which is what integer-coded cluster labels look like.
+        Pass ``categorical=False`` to colour an integer column continuously.
     **kwargs
         Additional arguments passed to GeoDataFrame.plot().
 
@@ -1290,7 +1322,13 @@ def spatial_cell(
 
         if color_key is not None:
             # plot_column is guaranteed to be color_key at this point (already validated)
-            is_categorical = not pd.api.types.is_numeric_dtype(temp_gdf[plot_column])
+            # Integer-coded categories are only distinguishable by cardinality; an
+            # explicit ``categorical=`` wins over any guess.
+            is_categorical = (
+                bool(categorical)
+                if categorical is not None
+                else _looks_categorical(temp_gdf[plot_column])
+            )
             # Detect raw hex color mode (from multigene_blend etc.)
             raw_color = _is_hex_color_series(temp_gdf[plot_column])
         else:

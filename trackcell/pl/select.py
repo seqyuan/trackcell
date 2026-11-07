@@ -447,14 +447,20 @@ class RegionSelector:
         return f"{self.roi_prefix}_{self._roi_counter}"
 
     def _save_to_adata(self, key: Optional[str] = None) -> None:
-        """Write current ROI labels to ``adata.obs`` (inplace mode)."""
+        """Write current ROI labels to ``adata.obs`` (inplace mode).
+
+        Cells belonging to a ROI recorded in this session are overwritten; every
+        other cell keeps whatever value the column already held. Re-initialising
+        the whole column to ``None`` silently discarded ROI labels restored from
+        a previous h5ad when creating one new ROI.
+        """
         key = key or self.key_added
         if key not in self.adata.obs.columns:
-            self.adata.obs[key] = None
+            self.adata.obs[key] = pd.Series(
+                [None] * self.adata.n_obs, index=self.adata.obs_names, dtype=object
+            )
+        elif not isinstance(self.adata.obs[key].dtype, object):
             self.adata.obs[key] = self.adata.obs[key].astype(object)
-        else:
-            self.adata.obs[key] = self.adata.obs[key].astype(object)
-            self.adata.obs[key] = None
         for roi_name, ids in self.rois.items():
             self.adata.obs.loc[ids, key] = roi_name
 
@@ -465,6 +471,17 @@ class RegionSelector:
     def _extract_ids(self, vertices: np.ndarray) -> list:
         """Return observation IDs whose geometries intersect the ROI polygon."""
         roi_poly = Polygon(vertices)
+        if not roi_poly.is_valid:
+            # A self-intersecting lasso produces an invalid polygon whose
+            # contains()/intersects() results are arbitrary. Repair it, and fall
+            # back to the convex hull if the repair yields an empty geometry.
+            import shapely
+
+            repaired = shapely.make_valid(roi_poly)
+            if repaired.is_empty:
+                repaired = roi_poly.convex_hull
+            logger.debug("ROI polygon was self-intersecting; repaired with make_valid")
+            roi_poly = repaired
         minx, miny, maxx, maxy = roi_poly.bounds
 
         if self.mode == "squarebin":

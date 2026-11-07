@@ -139,3 +139,56 @@ def test_spatial_cell_dual_color_draws_category_edges():
 
     assert any(isinstance(coll, LineCollection) for coll in ax.collections)
     plt.close(ax.figure)
+
+
+def test_integer_cluster_column_is_categorical():
+    """``leiden`` stored as integers must get a legend, not a viridis gradient.
+
+    ``is_categorical = not is_numeric_dtype(...)`` classified every integer
+    column as continuous, which dropped the legend and rendered cluster ids as a
+    colour ramp.
+    """
+    from trackcell.pl.plot import _looks_categorical
+
+    clusters = pd.Series([0, 1, 2, 1, 0], dtype="int8")
+    assert _looks_categorical(clusters)
+
+    counts = pd.Series(np.arange(1000, dtype="int64"))
+    assert not _looks_categorical(counts)
+
+    labels = pd.Series(["A", "B"], dtype="category")
+    assert _looks_categorical(labels)
+
+
+def test_integer_column_can_be_forced_continuous():
+    from trackcell.pl.plot import _looks_categorical
+
+    few_levels = pd.Series([0, 1, 2], dtype="int64")
+    assert _looks_categorical(few_levels)
+    assert not _looks_categorical(few_levels, max_levels=2)
+
+
+def test_spatial_cell_categorical_override():
+    adata = AnnData(
+        X=np.ones((2, 1), dtype=np.float32),
+        obs=pd.DataFrame({"cluster_int": [0, 1]}, index=["c0", "c1"]),
+        var=pd.DataFrame(index=["g0"]),
+    )
+    adata.obsm["spatial"] = np.array([[0.5, 0.5], [2.5, 0.5]])
+    adata.uns["spatial"] = {
+        "sample": {
+            "geometries": gpd.GeoDataFrame(
+                geometry=[_square(0, 0), _square(2, 0)], index=["c0", "c1"]
+            )
+        }
+    }
+
+    ax = spatial_cell(adata, color="cluster_int", library_id="sample", show=False)
+    assert ax is not None
+    assert ax.get_legend() is not None  # categorical -> legend
+
+    # Forcing continuous must render a colorbar instead of a legend.
+    ax2 = spatial_cell(
+        adata, color="cluster_int", library_id="sample", show=False, categorical=False
+    )
+    assert ax2 is not None

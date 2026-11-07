@@ -7,6 +7,8 @@ Every bundle is synthesised in ``tests/conftest.py`` with the exact
 group/dataset/dtype structure the readers consume.
 """
 
+import warnings
+
 import geopandas as gpd
 import numpy as np
 import pytest
@@ -324,3 +326,51 @@ def test_read_sto_bin_deduplicates_gene_symbols(tmp_path):
     assert list(adata.var["gene_symbol"]) == ["Gapdh", "Actb", "Gapdh"]
     # get_loc must return a position, never a slice.
     assert isinstance(adata.var_names.get_loc("Gapdh"), (int, np.integer))
+
+
+def test_blank_tissue_image_does_not_emit_nan(tmp_path):
+    """A blank non-uint8 capture (max == 0) must not divide by zero into NaN."""
+    import imageio.v3 as iio
+
+    from tests.conftest import write_cellbin_gef
+
+    cut_dir = tmp_path / "C57_7" / "041.cellcut"
+    cut_dir.mkdir(parents=True)
+    gep = write_cellbin_gef(cut_dir / "B000001.cellbin.gef")
+    # 16-bit all-zero image: the reader normalises non-uint8 input by peak.
+    blank = tmp_path / "C57_7" / "03.register" / "blank.tif"
+    blank.parent.mkdir(parents=True, exist_ok=True)
+    iio.imwrite(blank, np.zeros((8, 8), dtype=np.uint16))
+
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        adata = read_sto_cellbin(gep, image_path=blank)
+
+    img = adata.uns["spatial"]["B000001"]["images"]["hires"]
+    assert img.dtype == np.uint8
+    assert img.max() == 0
+    # The old code computed 0/0 and emitted "invalid value encountered in
+    # divide"; the fix short-circuits to a black image instead.
+    invalid = [w for w in caught if "invalid value encountered" in str(w.message)]
+    assert not invalid
+
+
+def test_hires_and_lowres_are_distinct_objects(tmp_path):
+    """``hires`` and ``lowres`` must not alias one another."""
+    from tests.conftest import write_cellbin_gef, write_tif_image
+
+    cut_dir = tmp_path / "C57_7" / "041.cellcut"
+    cut_dir.mkdir(parents=True)
+    gep = write_cellbin_gef(cut_dir / "B000001.cellbin.gef")
+    big = write_tif_image(
+        tmp_path / "C57_7" / "03.register" / "big.tif",
+        height=2048,
+        width=2048,
+        value=120,
+    )
+
+    adata = read_sto_cellbin(gep, image_path=big)
+    images = adata.uns["spatial"]["B000001"]["images"]
+
+    assert images["hires"] is not images["lowres"]
+    assert images["lowres"].shape[0] < images["hires"].shape[0]
