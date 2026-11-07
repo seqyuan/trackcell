@@ -550,6 +550,8 @@ def _leiden(
         neighbors_key=neighbors_key,
         random_state=random_state,
     )
+    # Only a missing backend justifies a fallback; TypeError/ValueError are real
+    # errors. Both branches use n_iterations=2 so results stay comparable.
     try:
         sc.tl.leiden(
             adata,
@@ -558,8 +560,15 @@ def _leiden(
             n_iterations=2,
             **leiden_kw,
         )
-    except (ImportError, TypeError, ValueError):
-        sc.tl.leiden(adata, **leiden_kw)
+    except ImportError:
+        warnings.warn(
+            "python-igraph is not installed; falling back to the leidenalg "
+            "backend. Results are not directly comparable with igraph-based "
+            "runs. Install with: pip install 'trackcell[clustering]'",
+            RuntimeWarning,
+            stacklevel=2,
+        )
+        sc.tl.leiden(adata, n_iterations=2, **leiden_kw)
 
 
 def _leiden_with_optional_auto(

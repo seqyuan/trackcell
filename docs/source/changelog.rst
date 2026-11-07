@@ -89,6 +89,21 @@ correct) correction. Re-run affected analyses rather than mixing versions.
   ``io/convert_annohdcell.py`` (>= 12%, currently 12% — a floor that can only
   move up). The previously ratcheted files were ``read_data`` and ``read_sto``
   only, so the third IO module with a README tutorial was unguarded.
+* ``io.read_atera`` with ``region=`` / ``n_cells=`` (the preview path) subset the
+  object *after* building polygons and left ``uns['cell_boundaries']['cell_idx']``
+  at its pre-subset length, so every vertex offset addressed the wrong cell —
+  silently, since the geometry table itself was trimmed correctly.
+* ``io.read_sto_*`` resolved an ambiguous GEF directory by taking
+  ``candidates[0]`` in ``glob`` order, which is filesystem-dependent: the same
+  directory could yield a different chip on a different machine. Candidates are
+  sorted by name and the warning names all of them.
+* ``tl._autores`` / ``tl.spatial_cluster`` fell back from the igraph Leiden
+  backend on ``(ImportError, TypeError, ValueError)``. A parameter error was
+  therefore retried on a second backend instead of surfacing, and the fallback
+  ran with leidenalg's default ``n_iterations`` (-1 vs 2) — so a resolution
+  sweep could compare clusters from two different algorithms and report the
+  difference as stability. Only ``ImportError`` triggers a fallback now, both
+  branches use ``n_iterations=2``, and the switch warns.
 
 **Changed**:
 

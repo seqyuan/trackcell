@@ -9,6 +9,7 @@ mean pairwise ARI of its repeated runs.
 
 from __future__ import annotations
 
+import warnings
 from itertools import combinations
 from typing import Optional, Sequence
 
@@ -32,6 +33,11 @@ def _leiden_with_seed(
         neighbors_key=neighbors_key,
         random_state=int(random_state),
     )
+    # Only a *missing backend* justifies a fallback. Catching TypeError/ValueError
+    # here also swallowed genuine parameter errors, and the fallback ran with a
+    # different ``n_iterations`` (leidenalg's default is -1), so a resolution
+    # sweep could compare clusters produced by two different algorithms and call
+    # the difference "stability".
     try:
         sc.tl.leiden(
             adata,
@@ -40,8 +46,15 @@ def _leiden_with_seed(
             n_iterations=2,
             **kw,
         )
-    except (ImportError, TypeError, ValueError):
-        sc.tl.leiden(adata, flavor="leidenalg", **kw)
+    except ImportError:
+        warnings.warn(
+            "python-igraph is not installed; falling back to the leidenalg "
+            "backend. Results are not directly comparable with igraph-based "
+            "runs. Install with: pip install 'trackcell[clustering]'",
+            RuntimeWarning,
+            stacklevel=2,
+        )
+        sc.tl.leiden(adata, flavor="leidenalg", n_iterations=2, **kw)
 
 
 def sweep_resolutions(

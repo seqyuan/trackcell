@@ -519,11 +519,31 @@ def _subset_geometries(adata: ad.AnnData) -> None:
                 info[key] = gdf.loc[gdf.index.intersection(adata.obs_names)]
 
 
+def _subset_compact_boundaries(adata: ad.AnnData, mask: np.ndarray) -> None:
+    """Apply a row mask to the compact ``{vertex_*, n_vertices, cell_idx}`` tables.
+
+    ``cell_idx`` is one entry per observation, holding a *polygon* index (``-1``
+    for none). Vertex arrays are global and indexed by cumulative
+    ``n_vertices``, so they do not change when cells are dropped — only
+    ``cell_idx`` has to follow the rows. Without this, a subset kept the
+    pre-subset ``cell_idx`` and every vertex offset pointed at the wrong cell.
+    """
+    for key in ("cell_boundaries", "nucleus_boundaries"):
+        table = adata.uns.get(key)
+        if not isinstance(table, Mapping):
+            continue
+        cell_idx = table.get("cell_idx")
+        if cell_idx is None or len(cell_idx) != len(mask):
+            continue
+        table["cell_idx"] = np.asarray(cell_idx)[mask]
+
+
 def _subset_cells(adata: ad.AnnData, mask: np.ndarray) -> ad.AnnData:
     if mask.all():
         return adata
     adata = adata[mask].copy()
     _subset_geometries(adata)
+    _subset_compact_boundaries(adata, mask)
     return adata
 
 

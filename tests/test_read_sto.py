@@ -14,7 +14,11 @@ import numpy as np
 import pytest
 from shapely import wkt
 
-from trackcell.io.read_sto import read_sto_bin, read_sto_cellbin
+from trackcell.io.read_sto import (
+    _find_cellbin_gef,
+    read_sto_bin,
+    read_sto_cellbin,
+)
 from tests.conftest import (
     STO_GENES,
     sentinel_border,
@@ -374,3 +378,53 @@ def test_hires_and_lowres_are_distinct_objects(tmp_path):
 
     assert images["hires"] is not images["lowres"]
     assert images["lowres"].shape[0] < images["hires"].shape[0]
+
+
+def test_multiple_gef_files_pick_deterministically(tmp_path):
+    """Ambiguous GEF sets must resolve by name, not by filesystem order."""
+    from tests.conftest import write_cellbin_gef
+
+    d = tmp_path / "run"
+    d.mkdir()
+    write_cellbin_gef(d / "B000002.cellbin.gef")
+    write_cellbin_gef(d / "B000001.cellbin.gef")
+
+    with pytest.warns(RuntimeWarning, match="B000001.cellbin.gef"):
+        chosen = _find_cellbin_gef(d)
+
+    assert chosen.name == "B000001.cellbin.gef"
+
+    # And the choice is stable regardless of creation order.
+    d2 = tmp_path / "run2"
+    d2.mkdir()
+    write_cellbin_gef(d2 / "B000001.cellbin.gef")
+    write_cellbin_gef(d2 / "B000002.cellbin.gef")
+    with pytest.warns(RuntimeWarning):
+        assert _find_cellbin_gef(d2).name == "B000001.cellbin.gef"
+
+
+def test_leiden_fallback_only_on_missing_backend(monkeypatch):
+    """A parameter error must propagate, not silently switch backends."""
+    pytest.importorskip("leidenalg")
+    import scanpy as sc
+
+    from trackcell.tl._autores import _leiden_with_seed
+    from tests.test_sctransform import _make_count_adata
+
+    adata = _make_count_adata(n_cells=40, n_genes=20, seed=1)
+    sc.pp.normalize_total(adata, target_sum=1e4)
+    sc.pp.log1p(adata)
+    sc.pp.pca(adata, n_comps=5)
+    sc.pp.neighbors(adata, n_neighbors=5)
+
+    # TypeError is not a missing backend; it must surface.
+    calls = {"n": 0}
+
+    def boom(*a, **k):
+        calls["n"] += 1
+        raise TypeError("bad argument")
+
+    monkeypatch.setattr(sc.tl, "leiden", boom)
+    with pytest.raises(TypeError):
+        _leiden_with_seed(adata, 1.0, "neighbors", "leiden_test", 0)
+    assert calls["n"] == 1  # no fallback attempt

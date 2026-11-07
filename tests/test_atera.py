@@ -727,3 +727,28 @@ def test_concat_rois_output_is_writable(official_bundle, tmp_path):
     np.testing.assert_allclose(back.uns["atera"]["offsets"]["ROI2"], [1000.0, 500.0])
     # anndata returns string lists as arrays on read-back; compare by value.
     assert list(back.uns["atera"]["merged_rois"]) == ["ROI1", "ROI2"]
+
+
+def test_subset_cells_reindexes_compact_boundaries(official_bundle):
+    """Subsetting must apply the row mask to ``uns['cell_boundaries']['cell_idx']``.
+
+    ``cell_idx`` is one entry per observation. ``_subset_cells`` trimmed the
+    GeoDataFrame but left ``cell_idx`` at its pre-subset length, so every vertex
+    offset addressed the wrong cell after a ``region=`` / ``n_cells=`` subset.
+    """
+    adata = tcl.io.read_atera(official_bundle, sample="ROI1")
+    bounds = adata.uns["cell_boundaries"]
+    assert len(bounds["cell_idx"]) == adata.n_obs
+
+    mask = np.zeros(adata.n_obs, dtype=bool)
+    mask[:2] = True
+    # ``tcl.io.read_atera`` is the function, not the module (same shadowing as
+    # tl.sctransform), so import the helper from the module path directly.
+    from trackcell.io.read_atera import _subset_cells
+
+    sub = _subset_cells(adata, mask)
+
+    assert sub.n_obs == 2
+    sub_bounds = sub.uns["cell_boundaries"]
+    assert len(sub_bounds["cell_idx"]) == 2
+    np.testing.assert_array_equal(sub_bounds["cell_idx"], bounds["cell_idx"][:2])

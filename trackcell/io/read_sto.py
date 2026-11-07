@@ -328,6 +328,26 @@ def _load_tissue_image(
     return None
 
 
+def _pick_gef(candidates: list[Path], dirpath: Path, *, kind: str) -> Path:
+    """Choose deterministically among several GEF files in one directory.
+
+    ``glob`` order is filesystem-dependent, so picking ``candidates[0]`` made
+    "which chip did I just load" depend on how the directory happened to be
+    written. Sort by name — reproducible at least — and say which files were
+    seen so the ambiguity is visible.
+    """
+    ordered = sorted(candidates, key=lambda p: p.name)
+    if len(ordered) > 1:
+        warnings.warn(
+            f"{len(ordered)} {kind} GEF files in {dirpath} "
+            f"({', '.join(p.name for p in ordered)}); using {ordered[0].name}. "
+            "Pass the file path explicitly to choose another.",
+            RuntimeWarning,
+            stacklevel=3,
+        )
+    return ordered[0]
+
+
 def _find_cellbin_gef(dirpath: Path) -> Path:
     """Auto-discover cellbin GEF file in a directory.
 
@@ -344,11 +364,7 @@ def _find_cellbin_gef(dirpath: Path) -> Path:
             f"No cellbin GEF file found in {dirpath}. "
             f"Expected a file matching '*cellbin*.gef' or '*.gef'."
         )
-    if len(candidates) > 1:
-        warnings.warn(
-            f"Multiple GEF files found in {dirpath}, using {candidates[0].name}"
-        )
-    return candidates[0]
+    return _pick_gef(candidates, dirpath, kind="cellbin")
 
 
 def _find_tissue_gef(dirpath: Path) -> Path:
@@ -367,11 +383,7 @@ def _find_tissue_gef(dirpath: Path) -> Path:
             f"No tissue/squarebin GEF file found in {dirpath}. "
             f"Expected a file matching '*tissue*.gef' or a .gef without 'cellbin'."
         )
-    if len(candidates) > 1:
-        warnings.warn(
-            f"Multiple tissue GEF files found in {dirpath}, using {candidates[0].name}"
-        )
-    return candidates[0]
+    return _pick_gef(candidates, dirpath, kind="tissue")
 
 
 def read_sto_cellbin(
