@@ -73,6 +73,22 @@ correct) correction. Re-run affected analyses rather than mixing versions.
   h5ad carried the full image twice and mutating one changed the other.
   Blank captures render black, and ``lowres`` is now a genuinely downsampled
   copy.
+* The wheel no longer bundles ``trackcell/benchmark`` — 2592 lines of
+  development scaffolding (including two ``.R`` scripts) with zero imports from
+  library code. It was 20 of 64 wheel entries and 12.5% of the package, and it
+  skewed every coverage number. ``scripts/check_package.py`` now fails if it
+  reappears. Tests keep importing it from the checkout.
+* Optional-dependency upper bounds were guesses that the maintainer's own
+  environment already violated: ``python-igraph<1.0`` against an installed
+  1.0.0, ``harmonypy<1.0`` against 2.1.0. CI therefore installed versions the
+  maintainer never ran. Bounds widened to the majors actually in use.
+* ``trackcell/py.typed`` contained ``partial``, which has meaning only for
+  stub-only distributions; mypy only checks that the file exists. Emptied, which
+  is the correct marker for an inline-typed package.
+* Coverage ratchets added for ``io/serialize.py`` (>= 70%, currently 87%) and
+  ``io/convert_annohdcell.py`` (>= 12%, currently 12% — a floor that can only
+  move up). The previously ratcheted files were ``read_data`` and ``read_sto``
+  only, so the third IO module with a README tutorial was unguarded.
 
 **Changed**:
 

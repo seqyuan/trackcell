@@ -85,9 +85,8 @@ def check_wheel(
     whl: Path, errors: list[str], expected_version: str | None = None
 ) -> None:
     with zipfile.ZipFile(whl) as archive:
-        metadata_name = next(
-            (n for n in archive.namelist() if n.endswith("METADATA")), None
-        )
+        names = archive.namelist()
+        metadata_name = next((n for n in names if n.endswith("METADATA")), None)
         if metadata_name is None:
             _fail(f"{whl.name} has no METADATA entry", errors)
             return
@@ -136,6 +135,18 @@ def check_wheel(
         _fail(f"{whl.name} does not declare the MIT license", errors)
     else:
         print("license OK: MIT")
+
+    # ``trackcell/benchmark`` is development scaffolding and must not ship: it
+    # inflates the wheel by ~30% and pushes the coverage denominator around.
+    bundled = [n for n in names if n.startswith("trackcell/benchmark/")]
+    if bundled:
+        _fail(
+            f"{whl.name} ships {len(bundled)} benchmark file(s); they belong to "
+            "the checkout, not the distribution",
+            errors,
+        )
+    else:
+        print("benchmark scaffolding excluded from wheel")
 
 
 def main(argv: list[str]) -> int:

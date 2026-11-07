@@ -70,6 +70,11 @@ jobs:
           poetry run coverage run -m pytest -m "not slow" -q
           poetry run coverage report --include="trackcell/io/read_data.py" --fail-under=75
           poetry run coverage report --include="trackcell/io/read_sto.py" --fail-under=60
+          # convert_annohdcell has three public functions, a README tutorial and
+          # 12% coverage. Ratchet at the current floor so it can only improve;
+          # raise the number as tests are added.
+          poetry run coverage report --include="trackcell/io/convert_annohdcell.py" --fail-under=12
+          poetry run coverage report --include="trackcell/io/serialize.py" --fail-under=70
 
   integration:
     name: Integration extras (Python 3.11)
