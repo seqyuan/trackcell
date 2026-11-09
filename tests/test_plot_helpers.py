@@ -6,6 +6,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import geopandas as gpd
 from anndata import AnnData
+from scipy import sparse
 from matplotlib.collections import LineCollection
 from shapely.geometry import Polygon
 
@@ -516,4 +517,101 @@ def test_palette_from_uns_survives_anndata_category_pruning():
 
     ax = spatial_cell(sub, color="cell_group", library_id="sample", show=False)
     assert _fill_colors(ax, ["A", "C"]) == {"A": "#e41a1c", "C": "#4daf4a"}
+    plt.close(ax.figure)
+
+
+# ── categorical vs continuous must not depend on the plotted subset ──────────
+
+
+def _count_adata(counts, *, extra_obs=None):
+    """AnnData with an int32 count matrix, so a gene column stays integer."""
+    counts = np.asarray(counts, dtype=np.int32).reshape(-1, 1)
+    n = counts.shape[0]
+    obs = pd.DataFrame(
+        {"cell_group": pd.Categorical(["A"] * n)}, index=[f"c{i}" for i in range(n)]
+    )
+    for key, values in (extra_obs or {}).items():
+        obs[key] = values
+    adata = AnnData(
+        X=sparse.csr_matrix(counts) if sparse else counts,
+        obs=obs,
+        var=pd.DataFrame(index=["CCND1"]),
+    )
+    adata.obsm["spatial"] = np.array([[float(i), 0.0] for i in range(n)])
+    adata.uns["spatial"] = {
+        "sample": {
+            "geometries": gpd.GeoDataFrame(
+                geometry=[_square(float(i), 0.0) for i in range(n)],
+                index=[f"c{i}" for i in range(n)],
+            )
+        }
+    }
+    return adata
+
+
+def _is_continuous(ax):
+    """True when the polygons are coloured by a continuous ramp.
+
+    Categorical rendering adds a discrete legend; continuous rendering adds a
+    colorbar on its own axes.
+    """
+    if ax.get_legend() is not None:
+        return False
+    return any(extra is not ax for extra in ax.figure.axes)
+
+
+def test_gene_counts_with_few_levels_stay_continuous():
+    """A sparse gene in a small ROI must not become a discrete legend.
+
+    ``CCND1`` is raw int32 counts: inside a 187-cell ROI only 17 distinct values
+    remain, which tripped the integer-level heuristic and painted that panel with
+    17 discrete colors — while its neighbours, with more distinct values, stayed
+    on the continuous ramp. Reported symptom: "the first column shows cluster
+    colours instead of expression".
+    """
+    # few distinct counts => the integer heuristic would say "categorical"
+    adata = _count_adata([0, 0, 1, 2, 3, 0, 1, 0])
+
+    ax = spatial_cell(adata, color="CCND1", library_id="sample", show=False)
+    assert _is_continuous(ax)
+    plt.close(ax.figure)
+
+
+def test_gene_panels_of_different_sizes_render_the_same_way():
+    counts = [0, 0, 1, 2, 3, 0, 1, 0, 5, 9, 14, 21, 33, 50, 61, 78]
+    adata = _count_adata(counts)
+
+    small = spatial_cell(
+        adata[np.arange(8)], color="CCND1", library_id="sample", show=False
+    )
+    large = spatial_cell(adata, color="CCND1", library_id="sample", show=False)
+
+    assert _is_continuous(small) == _is_continuous(large) is True
+    plt.close("all")
+
+
+def test_integer_obs_column_near_the_threshold_does_not_flip_per_panel():
+    """An obs column with >30 levels stays continuous even when a subset has 3."""
+    n = 40
+    adata = _count_adata(np.zeros(n), extra_obs={"rare_cluster": np.arange(n)})
+
+    ax = spatial_cell(adata, color="rare_cluster", library_id="sample", show=False)
+    assert _is_continuous(ax)
+    plt.close(ax.figure)
+
+
+def test_integer_obs_column_with_few_levels_is_categorical():
+    n = 12
+    adata = _count_adata(np.zeros(n), extra_obs={"leiden": np.arange(n) % 4})
+    ax = spatial_cell(adata, color="leiden", library_id="sample", show=False)
+    assert ax.get_legend() is not None
+    plt.close(ax.figure)
+
+
+def test_gene_can_be_forced_categorical():
+    adata = _count_adata([0, 1, 2, 0, 1, 2])
+    ax = spatial_cell(
+        adata, color="CCND1", library_id="sample", show=False, categorical=True
+    )
+    assert ax.get_legend() is not None
     plt.close(ax.figure)

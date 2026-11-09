@@ -344,6 +344,36 @@ def _apply_frameon(ax, frameon: Optional[bool]):
         ax.axis("off")
 
 
+def _resolve_categorical_map(adata, colors_to_plot, categorical) -> dict:
+    """Decide categorical-vs-continuous once per ``color`` key, from the full object.
+
+    Two things went wrong when this was decided from the plotted values instead:
+
+    * A gene's raw counts are integers, so the ``_looks_categorical`` heuristic
+      (at most ``max_levels`` distinct values) fired on small ROIs — 17 distinct
+      ``CCND1`` counts in one 187-cell panel turned it into a discrete legend of
+      numbers while the neighbouring panels stayed on a continuous ramp. Same
+      argument, two different renderings in one figure.
+    * Subsetting can drop levels below the threshold, so an obs column near the
+      cutoff could also flip between panels.
+
+    Gene expression is therefore always continuous unless ``categorical=True`` is
+    passed explicitly: a gene is never a label, ``leiden``-style integer codes
+    live in ``adata.obs``.
+    """
+    resolved = {}
+    for color_key in colors_to_plot:
+        if color_key is None:
+            resolved[color_key] = False
+        elif categorical is not None:
+            resolved[color_key] = bool(categorical)
+        elif color_key in adata.obs.columns:
+            resolved[color_key] = _looks_categorical(adata.obs[color_key])
+        else:
+            resolved[color_key] = False  # gene expression
+    return resolved
+
+
 def _is_hex_color_series(series: pd.Series) -> bool:
     """Detect if a Series contains raw hex color strings (e.g., from multigene_blend)."""
     non_null = series.dropna()
@@ -992,10 +1022,15 @@ def spatial_cell(
         Cartesian convention (y increases from bottom to top).
     categorical : bool, optional
         Force categorical (legend) or continuous (colorbar) rendering of ``color``.
-        By default the choice is inferred: ``Categorical``/object/bool dtypes are
-        categorical, and integer columns are categorical when they have at most
-        30 distinct values — which is what integer-coded cluster labels look like.
-        Pass ``categorical=False`` to colour an integer column continuously.
+        By default the choice is inferred **once per key, from the full object**,
+        so every panel of a multi-panel figure renders the same way:
+        ``Categorical``/object/bool obs columns are categorical, integer obs
+        columns are categorical when they have at most 30 distinct values (what
+        integer-coded cluster labels look like), and gene expression is always
+        continuous — a gene is never a label, however few integer levels a small
+        ROI happens to contain. Pass ``categorical=True`` to colour a gene
+        categorically, or ``categorical=False`` to force an integer obs column
+        onto a continuous ramp.
     scalebar : bool, float, str, or dict, optional
         Draw a physical scale bar (e.g. 50 µm) on the plot. Options:
 
@@ -1126,6 +1161,8 @@ def spatial_cell(
                         f"Available obs keys: {list(adata.obs.columns[:10])}... "
                         f"Available var names (genes): {list(adata.var_names[:10])}..."
                     )
+
+    categorical_map = _resolve_categorical_map(adata, colors_to_plot, categorical)
 
     # Create figure if needed
     if ax is None:
@@ -1473,14 +1510,10 @@ def spatial_cell(
         color_list_for_legend = None  # Store color list for legend creation
 
         if color_key is not None:
-            # plot_column is guaranteed to be color_key at this point (already validated)
-            # Integer-coded categories are only distinguishable by cardinality; an
-            # explicit ``categorical=`` wins over any guess.
-            is_categorical = (
-                bool(categorical)
-                if categorical is not None
-                else _looks_categorical(temp_gdf[plot_column])
-            )
+            # Decided once per key from the **full** column, see
+            # ``_resolve_categorical_map`` — deciding from ``temp_gdf`` made the
+            # same gene flip to a discrete legend inside one small panel.
+            is_categorical = categorical_map[color_key]
             # Detect raw hex color mode (from multigene_blend etc.)
             raw_color = _is_hex_color_series(temp_gdf[plot_column])
         else:

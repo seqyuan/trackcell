@@ -1,5 +1,21 @@
 Changelog
 
+Version 0.4.9
+-------------
+
+**Fixed**:
+
+* ``pl.spatial_cell`` decided categorical-vs-continuous **per plotted panel**, from
+  the values that survived the subset. A gene's raw counts are integers, so the
+  integer-cardinality heuristic (at most 30 distinct values) fired inside small
+  ROIs: ``color="CCND1"`` painted the first column of a 2 x 3 grid with 17 discrete
+  colors and a legend of ``0 … 36`` while the other four panels stayed on the
+  viridis ramp — the panel read as a cluster map. The decision is now made once
+  per key from the full object, and gene expression is never treated as a label:
+  integer codes for clusters live in ``adata.obs``, a gene does not. Pass
+  ``categorical=True`` to colour a gene categorically; an obs column that is
+  deliberately integer-valued still works as before (<=30 levels => categorical).
+
 Version 0.4.8
 -------------
 
