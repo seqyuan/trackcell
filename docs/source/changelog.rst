@@ -1,5 +1,25 @@
 Changelog
 
+Version 0.4.4
+-------------
+
+**Added**:
+
+* ``pl.spatial_cell(scalebar=...)`` / ``pl.spatial_squarebin(scalebar=...)`` and
+  the standalone ``pl.add_scale_bar(ax, adata, ...)`` draw a *physical* scale bar
+  (e.g. 50 µm) on spatial plots. The length is derived from the visible extent —
+  ``scalebar=True`` picks a nice 1/2/5 × 10ⁿ value at ~18% of the width, so the
+  same object yields 500 µm when shown whole and 20 µm when zoomed into a 200 µm
+  window. Fixed lengths (``50``, ``"50um"``, ``"20px"``) and a dict of style/
+  placement options (``loc``, ``pad``, ``offset``, ``color``, ``linewidth``,
+  ``fontsize``, ``caps``, ``label``, ``frame``, …) are supported.
+* ``pl.resolve_microns_per_unit`` / ``pl.nice_scale_length`` are public helpers.
+  The µm-per-data-unit factor is inferred from ``coord_unit`` metadata (Atera and
+  trackcell readers already store µm) or ``scalefactors['microns_per_pixel']``
+  (Visium / Visium HD pixels); ``scalebar=dict(microns_per_unit=...)`` overrides.
+  Bars shorter than ~2% of the visible width warn instead of silently rendering
+  an illegible smudge.
+
 
 Version 0.4.3
 -------------
