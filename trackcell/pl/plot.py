@@ -15,6 +15,7 @@ from matplotlib.patches import Rectangle, Circle
 from matplotlib.collections import PatchCollection
 from matplotlib.cm import ScalarMappable
 from typing import Optional, Union, List
+from collections.abc import Mapping
 import warnings
 
 from .._logging import get_logger
@@ -236,6 +237,83 @@ def _draw_categorical_edges(
     # Clean up temp column
     if "_edge_cat" in temp_gdf.columns:
         del temp_gdf["_edge_cat"]
+
+
+def _palette_from_uns(adata, color_key: str) -> Optional[dict]:
+    """Build a category → color mapping from ``adata.uns['<key>_colors']``.
+
+    Follows the scanpy convention: colors are aligned to
+    ``adata.uns['<key>_categories']`` when that key exists, otherwise to the
+    categorical dtype of ``adata.obs[color_key]`` (falling back to the sorted
+    unique values for plain object/integer columns).
+
+    Returns ``None`` when the key is absent or unusable, so the caller can fall
+    back to the built-in default palette.
+    """
+    colors_key = f"{color_key}_colors"
+    if colors_key not in adata.uns:
+        return None
+
+    stored = adata.uns[colors_key]
+    if isinstance(stored, Mapping):
+        # e.g. ``io.read_atera(load_groups=True)`` stores {group: hex}
+        return {str(k): v for k, v in stored.items()}
+
+    colors = list(np.ravel(np.asarray(stored, dtype=object)))
+    categories_key = f"{color_key}_categories"
+    if categories_key in adata.uns:
+        categories = list(adata.uns[categories_key])
+    elif color_key in adata.obs.columns and isinstance(
+        adata.obs[color_key].dtype, pd.CategoricalDtype
+    ):
+        categories = list(adata.obs[color_key].cat.categories)
+    elif color_key in adata.obs.columns:
+        try:
+            categories = sorted(pd.unique(adata.obs[color_key].dropna()).tolist())
+        except TypeError:  # mixed, unorderable categories
+            return None
+    else:
+        return None
+
+    if len(categories) != len(colors):
+        warnings.warn(
+            f"Ignoring `adata.uns['{colors_key}']`: it holds {len(colors)} colors "
+            f"but `{color_key}` has {len(categories)} categories. "
+            "Using the default palette instead."
+        )
+        return None
+
+    return dict(zip(categories, colors))
+
+
+def _default_categorical_palette(categories) -> list:
+    """Default discrete colors, one per category, in category order.
+
+    The list is used both for the polygons and for the legend swatches, so the
+    two cannot drift apart. Sampling one color per category also avoids the
+    geopandas default (``tab10`` normalized to ``0..n-1``), which collapsed
+    every category past the 10th onto the same hue.
+    """
+    n = len(categories)
+    if n == 0:
+        return []
+    cmap = plt.get_cmap("tab20" if n <= 20 else ("tab20b" if n <= 40 else "hsv"))
+    return [cmap(i / n) for i in range(n)]
+
+
+def _apply_frameon(ax, frameon: Optional[bool]):
+    """Apply the ``frameon`` switch to an axes (squidpy-compatible semantics).
+
+    ``None`` leaves the axes untouched so a user-supplied ``ax`` keeps its own
+    styling. ``False`` calls ``ax.axis("off")``, which drops the frame, the
+    ticks and the axis labels; ``True`` forces the frame back on.
+    """
+    if frameon is None:
+        return
+    if frameon:
+        ax.set_frame_on(True)
+    else:
+        ax.axis("off")
 
 
 def _is_hex_color_series(series: pd.Series) -> bool:
@@ -522,6 +600,7 @@ def _apply_spatial_axis_formatting(
     show_ticks,
     force_show_ticks=False,
     invert_y=True,
+    frameon=None,
 ):
     ax.set_aspect("equal")
     if invert_y:
@@ -539,6 +618,7 @@ def _apply_spatial_axis_formatting(
     elif not show_ticks:
         ax.set_xticks([])
         ax.set_yticks([])
+    _apply_frameon(ax, frameon)
 
 
 def _infer_square_size(adata, library_id, coords, binsize=None):
@@ -782,6 +862,7 @@ def spatial_cell(
     legend: bool = True,
     xlabel: Optional[str] = "spatial 1",
     ylabel: Optional[str] = "spatial 2",
+    frameon: Optional[bool] = None,
     show_ticks: bool = False,
     invert_y: bool = True,
     categorical: Optional[bool] = None,
@@ -835,6 +916,10 @@ def spatial_cell(
         - A dictionary mapping category names to colors (e.g., {'A': 'red', 'B': 'blue'})
         - A list/array of colors that will be assigned to categories in sorted order
           (e.g., ['red', 'blue', 'green'] will assign colors to categories alphabetically)
+        - ``None`` (default): ``adata.uns['<color>_colors']`` is used when present
+          (scanpy convention, aligned via ``adata.uns['<color>_categories']``),
+          otherwise a built-in discrete palette. The same colors are used for
+          the polygons and for the legend swatches.
     img_key : str, optional
         Key in adata.uns["spatial"][library_id]["images"] for background image.
         If None, uses "hires" if available.
@@ -865,6 +950,11 @@ def spatial_cell(
         Label for the x-axis. Set to None to hide the label.
     ylabel : str, optional, default "spatial 2"
         Label for the y-axis. Set to None to hide the label.
+    frameon : bool, optional
+        Whether to draw the axes frame. ``None`` (default) leaves the axes as-is,
+        so a user-supplied ``ax`` keeps its own styling. ``False`` calls
+        ``ax.axis("off")`` — no frame, no ticks, no axis labels — matching
+        ``squidpy.pl.spatial_scatter(frameon=False)``. ``True`` forces the frame on.
     show_ticks : bool, default False
         Whether to show axis ticks and tick labels. If False, ticks are hidden.
         Note: When `color=None`, ticks are automatically shown regardless of this setting.
@@ -928,6 +1018,8 @@ def spatial_cell(
     ...     color="classification",
     ...     scalebar=dict(length="50um", loc="lower left", color="white", frame=True),
     ... )
+    >>> # Drop the axes frame (no spines, ticks or axis labels)
+    >>> tcl.pl.spatial_cell(adata, color="classification", frameon=False)
     """
     if not HAS_GEOPANDAS:
         raise ImportError(
@@ -1175,6 +1267,7 @@ def spatial_cell(
 
             # Always show ticks when color is None
             current_ax.tick_params(axis="both", which="major", labelsize=10)
+            _apply_frameon(current_ax, frameon)
 
             _maybe_add_scale_bar(current_ax, scalebar, adata, library_id)
             axes_list.append(current_ax)
@@ -1366,7 +1459,9 @@ def spatial_cell(
             raw_color = False
 
         # Process categorical data (palette, categories, etc.)
-        if color_key is not None and is_categorical:
+        # Raw hex columns (multigene_blend) carry a color per cell, not categories:
+        # building a palette for thousands of unique hex strings is pure waste.
+        if color_key is not None and is_categorical and not raw_color:
             # Get categories (prioritize Categorical's original order)
 
             if isinstance(temp_gdf[plot_column].dtype, pd.CategoricalDtype):
@@ -1376,43 +1471,52 @@ def spatial_cell(
                 # Regular column: use sorted unique values
                 categories = sorted(temp_gdf[plot_column].dropna().unique())
 
-            color_list = []
-            if palette is not None:
-                use_custom_palette = True
-                # Convert palette to color list (in categories order)
-                if isinstance(palette, dict):
-                    # Dictionary: map categories to colors
-                    # Check for missing categories and warn
-                    missing_cats = [cat for cat in categories if cat not in palette]
-                    if missing_cats:
-                        warnings.warn(
-                            f"Palette dictionary is missing colors for {len(missing_cats)} categories: "
-                            f"{missing_cats[:5]}{'...' if len(missing_cats) > 5 else ''}. "
-                            f"Using 'gray' as default color for missing categories."
-                        )
-                    color_list = [palette.get(cat, "gray") for cat in categories]
-                elif isinstance(palette, (list, np.ndarray)):
-                    # List/array: assign colors sequentially
-                    palette_array = np.asarray(palette)
-                    if len(palette_array) < len(categories):
-                        warnings.warn(
-                            f"Palette has {len(palette_array)} colors but there are "
-                            f"{len(categories)} categories. Colors will be cycled."
-                        )
-                    color_list = [
-                        palette_array[i % len(palette_array)]
-                        for i in range(len(categories))
-                    ]
-                else:
-                    raise ValueError(f"Unsupported palette type: {type(palette)}")
+            # Resolve the palette: explicit argument > ``adata.uns['<key>_colors']``
+            # (scanpy convention) > the built-in discrete palette.
+            palette_source = palette
+            if palette_source is None and color_key in adata.obs.columns:
+                palette_source = _palette_from_uns(adata, color_key)
+            if palette_source is None:
+                palette_source = _default_categorical_palette(categories)
 
-                # Create custom colormap from color list
-                custom_cmap = ListedColormap(color_list)
-                color_list_for_legend = color_list  # Store for legend
+            # Convert palette to color list (in categories order)
+            use_custom_palette = True
+            if isinstance(palette_source, dict):
+                # Dictionary: map categories to colors
+                # Check for missing categories and warn
+                missing_cats = [cat for cat in categories if cat not in palette_source]
+                if missing_cats:
+                    warnings.warn(
+                        f"Palette dictionary is missing colors for {len(missing_cats)} categories: "
+                        f"{missing_cats[:5]}{'...' if len(missing_cats) > 5 else ''}. "
+                        f"Using 'gray' as default color for missing categories."
+                    )
+                color_list = [palette_source.get(cat, "gray") for cat in categories]
+            elif isinstance(palette_source, (list, np.ndarray)):
+                # List/array: assign colors sequentially
+                palette_array = np.asarray(palette_source)
+                if len(palette_array) < len(categories):
+                    warnings.warn(
+                        f"Palette has {len(palette_array)} colors but there are "
+                        f"{len(categories)} categories. Colors will be cycled."
+                    )
+                color_list = [
+                    palette_array[i % len(palette_array)]
+                    for i in range(len(categories))
+                ]
+            else:
+                raise ValueError(f"Unsupported palette type: {type(palette_source)}")
 
-                # Convert column to Categorical type with specified categories order
-                # This ensures GeoPandas uses the correct order for color mapping
-                # GeoPandas will automatically use cat.categories for color assignment
+            # One ListedColormap of exactly len(categories) colors: geopandas
+            # normalizes codes to 0..n-1, so category i lands on color_list[i].
+            custom_cmap = ListedColormap(color_list)
+            color_list_for_legend = color_list  # Store for legend
+
+            # Pin the column to our category order so geopandas cannot re-sort
+            # it, which would silently shift every color by one category.
+            temp_gdf[plot_column] = pd.Categorical(
+                temp_gdf[plot_column], categories=categories
+            )
 
         # Prepare plot arguments for GeoDataFrame.plot()
         # ── Dual-color mode: edge_color as a column name for categorical edge coloring ──
@@ -1490,26 +1594,16 @@ def spatial_cell(
                     else:
                         raise
 
-                # Create legend manually from categories
+                # Create legend manually from categories. The swatches come from
+                # the very color list used for the colormap, so they cannot drift
+                # away from the polygon fills.
                 if legend:
                     from matplotlib.patches import Patch
 
-                    if use_custom_palette:
-                        # Use colors from stored color list (same order as categories)
-                        legend_elements = [
-                            Patch(facecolor=color_list_for_legend[i], label=str(cat))
-                            for i, cat in enumerate(categories)
-                        ]
-                    else:
-                        # Generate colors matching GeoPandas default
-                        n_cats = len(categories)
-                        default_cmap = plt.get_cmap(
-                            "tab20" if n_cats <= 20 else "tab20b"
-                        )
-                        legend_elements = [
-                            Patch(facecolor=default_cmap(i / n_cats), label=str(cat))
-                            for i, cat in enumerate(categories)
-                        ]
+                    legend_elements = [
+                        Patch(facecolor=color_list_for_legend[i], label=str(cat))
+                        for i, cat in enumerate(categories)
+                    ]
 
                     if legend_elements:
                         current_ax.legend(
@@ -1604,6 +1698,7 @@ def spatial_cell(
         elif not show_ticks:
             current_ax.set_xticks([])
             current_ax.set_yticks([])
+        _apply_frameon(current_ax, frameon)
 
         if color_key:
             current_ax.set_title(color_key)
@@ -1648,6 +1743,7 @@ def spatial_squarebin(
     xlabel: Optional[str] = "spatial 1",
     ylabel: Optional[str] = "spatial 2",
     show_ticks: bool = False,
+    frameon: Optional[bool] = None,
     crop_coord: Optional[tuple] = None,
     na_color: str = "#d3d3d3",
     rasterized: bool = False,
@@ -1680,8 +1776,9 @@ def spatial_squarebin(
         Bin size in micrometers. If ``None``, uses
         ``adata.uns['spatial'][library_id]['binsize']`` when available.
     figsize, cmap, palette, vmin, vmax, img_key, basis, alpha, alpha_img, show, ax, legend,
-    xlabel, ylabel, show_ticks
-        Behave similarly to ``spatial_cell``.
+    xlabel, ylabel, show_ticks, frameon
+        Behave similarly to ``spatial_cell``. ``palette=None`` falls back to
+        ``adata.uns['<color>_colors']`` when present.
     edges_width, edges_color
         Styling for square boundaries. Defaults favor performance by disabling edges.
     crop_coord
@@ -1799,12 +1896,18 @@ def spatial_squarebin(
                     show_ticks=True,
                     force_show_ticks=True,
                     invert_y=invert_y,
+                    frameon=frameon,
                 )
+            _apply_frameon(current_ax, frameon)
             _maybe_add_scale_bar(current_ax, scalebar, adata, library_id)
             axes_list.append(current_ax)
             continue
 
         values = _extract_color_values(adata, color_key, mask)
+
+        resolved_palette = palette
+        if resolved_palette is None and color_key in adata.obs.columns:
+            resolved_palette = _palette_from_uns(adata, color_key)
 
         _plot_squarebin_values(
             current_ax,
@@ -1812,7 +1915,7 @@ def spatial_squarebin(
             values=values,
             square_size=square_size,
             cmap=cmap,
-            palette=palette,
+            palette=resolved_palette,
             vmin=vmin,
             vmax=vmax,
             alpha=alpha,
@@ -1837,6 +1940,7 @@ def spatial_squarebin(
             show_ticks=show_ticks,
             force_show_ticks=False,
             invert_y=invert_y,
+            frameon=frameon,
         )
         current_ax.set_title(color_key)
         _maybe_add_scale_bar(current_ax, scalebar, adata, library_id)

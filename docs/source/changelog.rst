@@ -1,5 +1,46 @@
 Changelog
 
+Version 0.4.7
+-------------
+
+**Upgrade note** — the default palette for categorical columns in
+``pl.spatial_cell`` changed, so existing figures will shift color. ``palette=None``
+now honours ``adata.uns['<color>_colors']`` (scanpy convention) and otherwise uses
+one discrete color per category (``tab20`` / ``tab20b``). Previously geopandas'
+``tab10`` normalized to ``0..n-1`` was used, which gave every category past the
+10th the *same* hue — a 15-cluster plot rendered 11 distinct colors. Pass an
+explicit ``palette=`` (or store ``uns['<color>_colors']``) for byte-identical
+output to older versions.
+
+**Fixed**:
+
+* ``pl.spatial_cell`` legend swatches did not match the polygons. The fills came
+  from geopandas' default (``tab10`` sampled over ``0..n-1``) while the legend was
+  built from ``tab20``/``tab20b`` sampled over ``0..n`` — different colormap *and*
+  different sampling. On a 5-category column only the first two swatches were
+  correct, so users "fixed" their figures with an explicit palette that was never
+  needed. Fills and swatches now derive from a single color list.
+* Categorical colors could shift by one category when the plotted subset's
+  category order differed from the order the color list was built from. The
+  column is now pinned to that order (``pd.Categorical(..., categories=...)``)
+  before geopandas sees it.
+
+**Added**:
+
+* ``pl.spatial_cell(..., frameon=)`` and the same parameter on
+  ``pl.spatial_squarebin``, matching ``squidpy.pl.spatial_scatter``: ``False``
+  drops the frame, the ticks and the axis labels (``ax.axis('off')``), ``True``
+  forces the frame on, and the default ``None`` leaves a caller-supplied ``ax``
+  untouched. There was previously no way to turn the frame off from the API, and
+  passing ``frameon=`` through ``**kwargs`` reached ``PatchCollection.set()`` and
+  raised ``AttributeError``.
+* ``palette=None`` now reads ``adata.uns['<color>_colors']``, aligned through
+  ``adata.uns['<color>_categories']`` when present — so the Atera vendor palette
+  that ``io.read_atera(load_groups=True)`` stores in
+  ``uns['cell_group_colors']`` is used without being restated in every call. An
+  explicit ``palette=`` still wins, and a list whose length disagrees with the
+  category count is ignored with a warning.
+
 Version 0.4.6
 -------------
 

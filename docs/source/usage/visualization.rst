@@ -103,6 +103,45 @@ When using a list or array, colors are assigned to categories in alphabetical or
 **Note**: If the palette has fewer colors than categories, colors will be cycled.
 A warning will be issued if this occurs.
 
+**Reusing a stored palette (``adata.uns``)**
+
+When ``palette`` is left as ``None``, ``spatial_cell`` looks for
+``adata.uns['<color>_colors']`` — the scanpy convention — before falling back to
+its built-in discrete palette. Colors are aligned through
+``adata.uns['<color>_categories']`` when that key exists, otherwise through the
+categorical dtype of ``adata.obs[color]`` (or its sorted unique values):
+
+.. code-block:: python
+
+   # Store a palette once, reuse it for every plot of that column
+   adata.uns['classification_colors'] = ['#e41a1c', '#377eb8', '#4daf4a', '#984ea3']
+   adata.uns['classification_categories'] = ['Cluster-1', 'Cluster-2', 'Cluster-3', 'Cluster-4']
+
+   tcl.pl.spatial_cell(adata, color='classification')          # uses the stored palette
+   tcl.pl.spatial_cell(adata, color='classification', palette={'Cluster-1': 'black'})  # explicit wins
+
+If the stored list length disagrees with the number of categories, it is ignored
+with a warning. The same colors are always used for the polygons and for the
+legend swatches, so the two cannot disagree.
+
+Axes Frame (``frameon``)
+------------------------
+
+``frameon`` mirrors ``squidpy.pl.spatial_scatter(frameon=...)``:
+
+.. code-block:: python
+
+   # Default (None): leave the axes frame alone
+   tcl.pl.spatial_cell(adata, color='classification')
+
+   # No frame, no ticks, no axis labels -- publication-ready image
+   tcl.pl.spatial_cell(adata, color='classification', frameon=False)
+
+``frameon=None`` (the default) never touches the styling of a ``ax=`` passed by
+the caller; ``True`` forces the frame on; ``False`` calls ``ax.axis('off')``.
+Note that ``frameon`` is a real parameter and not forwarded to geopandas —
+passing it through ``**kwargs`` would reach ``PatchCollection.set()`` and raise.
+
 
 Dual-Color Visualization (Fill + Edge)
 ------------------------------------------
