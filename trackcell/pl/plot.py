@@ -18,7 +18,7 @@ from typing import Optional, Union, List
 import warnings
 
 from .._logging import get_logger
-from .scalebar import _maybe_add_scale_bar  # noqa: F401  (re-exported for convenience)
+from .scalebar import _maybe_add_scale_bar, resolve_microns_per_unit
 
 logger = get_logger(__name__)
 
@@ -1852,6 +1852,123 @@ def spatial_squarebin(
 
 # Short alias for consistency with bin-level workflows
 spatial_bin = spatial_squarebin
+
+
+def mark_circle(
+    ax: plt.Axes,
+    xy: tuple,
+    radius: float,
+    *,
+    radius_unit: str = "data",
+    adata=None,
+    library_id: Optional[str] = None,
+    microns_per_unit: Optional[float] = None,
+    edges_color: str = "red",
+    edges_width: float = 2.0,
+    linestyle: str = "--",
+    fill_color: Optional[str] = None,
+    fill_alpha: float = 0.15,
+    label: Optional[str] = None,
+    zorder: int = 100,
+    refresh: bool = True,
+    show: bool = True,
+):
+    """Mark a circular region on a spatial plot by drawing a circle.
+
+    The circular counterpart of :func:`mark_region`, intended for annotating a
+    radius-based selection (see :func:`trackcell.tl.cells_in_radius`) on an
+    overview plot. It works with any spatial plot (``spatial_cell``,
+    ``spatial_squarebin``, ``sc.pl.spatial``) regardless of ``invert_y``.
+
+    Parameters
+    ----------
+    ax : matplotlib.axes.Axes
+        Axes to draw the circle on.
+    xy : tuple of float
+        Circle center ``(x, y)`` in data coordinates — the same value passed as
+        ``center`` to :func:`trackcell.tl.cells_in_radius`.
+    radius : float
+        Circle radius, in ``radius_unit``.
+    radius_unit : {'data', 'um'}, default 'data'
+        ``'data'`` draws a circle of ``radius`` data units (correct for Atera /
+        Xenium, whose coordinates are µm). ``'um'`` converts ``radius`` from
+        micrometers using ``adata`` (or ``microns_per_unit``), which is required
+        when the coordinates are image pixels — Visium / Visium HD.
+    adata
+        AnnData used for the µm conversion when ``radius_unit='um'``. Optional if
+        ``microns_per_unit`` is given.
+    library_id : str, optional
+        Spatial library id used for the µm conversion.
+    microns_per_unit : float, optional
+        Explicit µm per data unit, overriding metadata inference.
+    edges_color : str, default 'red'
+        Color of the circle outline.
+    edges_width : float, default 2.0
+        Outline width.
+    linestyle : str, default '--'
+        Outline style.
+    fill_color : str, optional
+        Fill color. When ``None`` the circle is unfilled.
+    fill_alpha : float, default 0.15
+        Opacity of the fill when ``fill_color`` is set.
+    label : str, optional
+        Legend label for the circle (draw ``ax.legend()`` yourself).
+    zorder : int, default 100
+        Z-order, high enough to sit above polygons and above the H&E image.
+    refresh : bool, default True
+        Call ``ax.figure.canvas.draw_idle()`` after adding the patch.
+    show : bool, default True
+        Call ``plt.show()`` after adding the patch. Set ``False`` when
+        composing a multi-panel figure.
+
+    Returns
+    -------
+    matplotlib.patches.Circle
+        The patch added to the axes.
+
+    Examples
+    --------
+    >>> center, r = (4500.0, 2600.0), 150.0
+    >>> ax = tcl.pl.spatial_cell(adata, color="celltype", scalebar=True, show=False)
+    >>> tcl.pl.mark_circle(ax, center, r, radius_unit="um", adata=adata,
+    ...                    label=f"r = {r:.0f} µm")
+    >>> roi = adata[tcl.tl.cells_in_radius(adata, center, r)].copy()
+    """
+    unit = str(radius_unit).strip().lower()
+    if unit in ("um", "µm", "μm", "micron", "microns", "micrometers"):
+        mpp, _ = resolve_microns_per_unit(
+            adata,
+            library_id,
+            microns_per_unit=microns_per_unit,
+        )
+        radius_data = float(radius) / mpp
+    elif unit in ("data", "pixel", "px", "none", "unit"):
+        radius_data = float(radius)
+    else:
+        raise ValueError(f"`radius_unit` must be 'data' or 'um', got {radius_unit!r}.")
+
+    if not np.isfinite(radius_data) or radius_data <= 0:
+        raise ValueError(f"`radius` must be a positive finite number, got {radius!r}.")
+
+    circle = Circle(
+        xy=(float(xy[0]), float(xy[1])),
+        radius=radius_data,
+        linewidth=edges_width,
+        edgecolor=edges_color,
+        linestyle=linestyle,
+        facecolor=fill_color if fill_color else "none",
+        alpha=fill_alpha if fill_color else None,
+        label=label,
+        zorder=zorder,
+    )
+    ax.add_patch(circle)
+
+    if refresh and ax.figure is not None:
+        ax.figure.canvas.draw_idle()
+    if show and ax.figure is not None:
+        plt.show()
+
+    return circle
 
 
 def mark_region(

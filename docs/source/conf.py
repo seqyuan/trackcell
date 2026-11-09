@@ -199,6 +199,7 @@ nbsphinx_thumbnails = {
     "notebooks/STOmics_mouse_brain_demo": "_static/notebooks/STOmics_mouse_brain_demo.png",
     "notebooks/YardCluster_STOmics_demo": "_static/notebooks/YardCluster_STOmics_demo.png",
     "notebooks/Atera_demo": "_static/notebooks/Atera_demo.png",
+    "notebooks/Atera_spatial_roi_demo": "_static/notebooks/Atera_spatial_roi_demo.png",
 }
 
 # Pygments configuration for ipython3 lexer

@@ -6,7 +6,7 @@ import numpy as np
 import pandas as pd
 from scipy.spatial import cKDTree
 from scipy.spatial.distance import cdist
-from typing import Optional, List
+from typing import Any, List, Optional
 import warnings
 
 from .._logging import get_logger
@@ -604,3 +604,113 @@ def hd_labeldist(
     result = pd.DataFrame({col_px: dist_px, col_um: dist_um}, index=adata.obs.index)
     result.attrs["params"] = params
     return result
+
+
+def cells_in_radius(
+    adata: Any,
+    center,
+    radius: float,
+    *,
+    radius_unit: str = "um",
+    basis: str = "spatial",
+    library_id: Optional[str] = None,
+    microns_per_unit: Optional[float] = None,
+    include_boundary: bool = True,
+    return_distances: bool = False,
+) -> Any:
+    """Select cells inside a circle defined by a center point and a physical radius.
+
+    The intended workflow is to draw an overview plot, pick a point in the tissue
+    (``ax.transData.inverted()`` on a click, ``plt.ginput``, or plain coordinates),
+    and then keep every cell within a given distance of it. Because ``radius`` is
+    a *physical* length by default, the same call means the same thing on data
+    whose coordinates are µm (Xenium, Atera, MERSCOPE) and on data whose
+    coordinates are image pixels (Visium, Visium HD).
+
+    Parameters
+    ----------
+    adata
+        Annotated data object with spatial coordinates in ``adata.obsm[basis]``.
+    center : tuple of float
+        Circle center ``(x, y)`` **in the coordinate system of
+        ``adata.obsm[basis]``** — i.e. the numbers you read off the plot.
+    radius : float
+        Circle radius, in ``radius_unit``.
+    radius_unit : {'um', 'data'}, default 'um'
+        ``'um'`` interprets ``radius`` as micrometers and converts it to data
+        units through :func:`trackcell.pl.resolve_microns_per_unit`.
+        ``'data'`` uses raw ``obsm`` units, which is what you want if the
+        coordinates are already in µm and you prefer to say so explicitly.
+    basis : str, default 'spatial'
+        Key in ``adata.obsm`` holding the 2D coordinates.
+    library_id : str, optional
+        Spatial library id used for the µm conversion (defaults to the first).
+    microns_per_unit : float, optional
+        Explicit µm per data unit, overriding metadata inference.
+    include_boundary : bool, default True
+        Whether cells at ``distance == radius`` are kept (``<=`` vs ``<``).
+    return_distances : bool, default False
+        When ``True`` return ``(mask, distances)`` with distances in µm.
+
+    Returns
+    -------
+    numpy.ndarray or tuple
+        Boolean mask aligned with ``adata.obs_names``, usable directly as
+        ``adata[mask].copy()``. With ``return_distances=True``, also the
+        distance of every cell to ``center`` in µm.
+
+    Examples
+    --------
+    >>> import trackcell as tcl
+    >>> center = (4500.0, 2600.0)          # µm, read off the overview plot
+    >>> mask = tcl.tl.cells_in_radius(adata, center, radius=150)
+    >>> roi = adata[mask].copy()
+    >>> tcl.pl.spatial_cell(roi, color="celltype", scalebar=True)
+
+    Notes
+    -----
+    For Visium HD pixel coordinates ``radius=150`` means 150 µm, not 150 px:
+    ``scalefactors['microns_per_pixel']`` is applied automatically.
+    """
+    if basis not in adata.obsm:
+        raise ValueError(f"`adata.obsm['{basis}']` is required but missing.")
+
+    coords = np.asarray(adata.obsm[basis])
+    if coords.ndim != 2 or coords.shape[1] < 2:
+        raise ValueError(
+            f"`adata.obsm['{basis}']` must be an n_obs × 2 array of coordinates."
+        )
+    coords = coords[:, :2]
+
+    center_arr = np.asarray(center, dtype=float).ravel()
+    if center_arr.size != 2 or not np.all(np.isfinite(center_arr)):
+        raise ValueError(f"`center` must be two finite numbers (x, y), got {center!r}.")
+
+    radius = float(radius)
+    if not np.isfinite(radius) or radius <= 0:
+        raise ValueError(f"`radius` must be a positive finite number, got {radius!r}.")
+
+    unit = str(radius_unit).strip().lower()
+    if unit in ("um", "µm", "μm", "micron", "microns", "micrometers"):
+        # Deferred import: keeps `tl` free of an import-time dependency on `pl`.
+        from ..pl.scalebar import resolve_microns_per_unit
+
+        microns_per_unit, _ = resolve_microns_per_unit(
+            adata,
+            library_id,
+            microns_per_unit=microns_per_unit,
+        )
+    elif unit in ("data", "pixel", "px", "none", "unit"):
+        microns_per_unit = 1.0
+    else:
+        raise ValueError(f"`radius_unit` must be 'um' or 'data', got {radius_unit!r}.")
+
+    radius_data = radius / float(microns_per_unit)
+    distances = np.linalg.norm(coords - center_arr, axis=1)
+    mask = np.asarray(
+        distances <= radius_data if include_boundary else distances < radius_data
+    )
+
+    if return_distances:
+        return mask, distances * float(microns_per_unit)
+    return mask

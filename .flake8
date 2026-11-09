@@ -10,6 +10,7 @@ per-file-ignores =
     tests/test_multigene_blend.py: E402
     tests/test_region_selector.py: E402
     tests/test_scalebar.py: E402
+    tests/test_circle_roi.py: E402
     scripts/run_yardcluster_benchmark.py: E402
 exclude =
     .git,

@@ -4,7 +4,7 @@ TL (Tools) module for TrackCell package.
 This module provides utility and helper functions for single-cell and spatial transcriptomics data analysis.
 """
 
-from .spatial import hd_labeldist, multigene_blend
+from .spatial import cells_in_radius, hd_labeldist, multigene_blend
 from .spatial_cluster import (
     neighborhood_features,
     spatial_cluster,
@@ -54,6 +54,7 @@ __all__ = [
     "integrate_rpca",
     "integrate_sct_rpca",
     "hd_labeldist",
+    "cells_in_radius",
     "multigene_blend",
     "spatial_cluster",
     "spatial_neighbors",

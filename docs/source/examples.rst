@@ -24,11 +24,14 @@ This section contains example notebooks and links to usage tutorials.
     :glob:
 
     notebooks/Atera_demo
+    notebooks/Atera_spatial_roi_demo
 
 See also the usage tutorials:
 
 * :doc:`usage/atera` — Atera official Zarr, polygon visualization, streaming
   transcript point cloud, Q-score / nuclear-fraction QC, multi-ROI handling
+* :doc:`notebooks/Atera_spatial_roi_demo` — circular ROI (center + physical
+  radius) and scale bars on overview + zoom panels
 * :doc:`usage/batch_integration` — SCT + RPCA / Harmony / BBKNN batch integration
 * :doc:`usage/spatial_clustering` — YardCluster spatial domain clustering
 * :doc:`usage/xenium_slice_separation` — Xenium TMA slice separation and GC colony clustering

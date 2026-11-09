@@ -474,6 +474,15 @@ Automatic vs. fixed length
    * - ``None`` / ``False``
      - No bar (default)
 
+Accepted length units are ``µm`` / ``um``, ``micron`` / ``micrometre`` (and their
+plurals) for micrometers, and ``px`` / ``pixel`` / ``data`` for raw data units. A
+bare number always means micrometers, so ``50`` and ``"50"`` are the same request.
+Any other suffix — ``"20mm"``, ``"50nm"``, ``"3in"`` — raises ``ValueError`` instead
+of being silently read as micrometers: a bar labelled *20 µm* when 20 mm was asked
+for is wrong by a factor of 1000 and still looks perfectly drawn. The same applies
+to a misspelled ``unit=``; convert manually and pass ``microns_per_unit=`` if you
+need a scale the reader cannot infer.
+
 Styling and placement
 ~~~~~~~~~~~~~~~~~~~~~
 
@@ -523,6 +532,83 @@ composited figure.
    ax.set_aspect('equal')
    info = tcl.pl.add_scale_bar(ax, adata, length="100um", loc="lower right")
    print(info)   # {'length': 100.0, 'label': '100 µm', 'axes_fraction': 0.025, ...}
+
+
+Circular ROI (point + physical radius)
+--------------------------------------
+
+A hand-drawn polygon is hard to report and impossible to reproduce exactly. A
+circle is fully specified by a **center point and a physical radius**, so it can
+be written down in a methods section and re-run on another sample:
+
+.. code-block:: python
+
+   center = (4470.0, 2620.0)      # (x, y) in obsm['spatial'] units — µm for Atera
+   radius = 150.0                 # µm
+
+   mask = tcl.tl.cells_in_radius(adata, center, radius)
+   roi = adata[mask].copy()
+   print(mask.sum(), "cells within", radius, "µm")
+
+``center`` uses the coordinate system of ``adata.obsm['spatial']`` — the numbers
+you read off the plot — while ``radius`` is a **physical length** (µm) by
+default. On pixel-coordinate data (Visium, Visium HD)
+``scalefactors['microns_per_pixel']`` is applied automatically, so the same call
+means the same thing on both kinds of object:
+
+.. list-table::
+   :header-rows: 1
+
+   * - Object
+     - ``obsm['spatial']``
+     - ``cells_in_radius(..., 150)``
+   * - Xenium / Atera / MERSCOPE
+     - µm
+     - a 150 µm circle
+   * - Visium HD
+     - full-resolution px (0.32512 µm/px)
+     - a 150 µm (= 461 px) circle
+
+Pass ``radius_unit="data"`` to use raw data units instead, and
+``return_distances=True`` to also get each cell's distance to the center in µm.
+
+Annotate the same circle on the overview plot so readers can see where the zoom
+came from — ``mark_circle`` shares the unit semantics with ``cells_in_radius``:
+
+.. code-block:: python
+
+   fig, (ax_l, ax_r) = plt.subplots(1, 2, figsize=(15, 7))
+
+   tcl.pl.spatial_cell(adata, color="celltype", scalebar=True,
+                       legend=False, show=False, ax=ax_l)
+   tcl.pl.mark_circle(ax_l, center, radius, radius_unit="um", adata=adata,
+                      edges_color="#b91c1c", linestyle="--",
+                      label=f"ROI: r = {radius:.0f} µm", show=False)
+   ax_l.legend(loc="upper right", frameon=False)
+
+   tcl.pl.spatial_cell(roi, color="celltype", scalebar=True,
+                       legend=False, show=False, ax=ax_r)
+
+Each panel gets its own scale bar, and because the overview is ~3× wider than
+the zoom, its bar is ~3× longer — 100 µm against 50 µm here.
+
+To pick the center interactively instead of typing coordinates:
+
+.. code-block:: python
+
+   %matplotlib widget
+   ax = tcl.pl.spatial_cell(adata, color="celltype", scalebar=True, show=False)
+   center = plt.ginput(1)[0]     # click once; returns obsm coordinates
+
+.. note::
+
+   ``mark_circle`` defaults to ``radius_unit="data"`` because it is a pure
+   drawing primitive; pass ``radius_unit="um"`` together with ``adata`` (or
+   ``microns_per_unit``) whenever the two figures must agree.
+
+A complete runnable walkthrough on Atera kidney data — read, overview, circular
+ROI, multi-radius comparison and the overview+zoom composite — is in
+:doc:`../notebooks/Atera_spatial_roi_demo`.
 
 
 Interactive ROI Selection (Jupyter / matplotlib)
