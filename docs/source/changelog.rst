@@ -1,5 +1,28 @@
 Changelog
 
+Version 0.4.5
+-------------
+
+**Added**:
+
+* ``tl.cells_in_radius(adata, center, radius)`` selects cells inside a circle
+  defined by a center point and a **physical** radius. ``center`` uses
+  ``obsm['spatial']`` coordinates (what you read off the plot) while ``radius``
+  is in µm by default, so ``scalefactors['microns_per_pixel']`` is applied on
+  Visium / Visium HD pixel data — a hand-rolled Euclidean test there silently
+  measures pixels, not micrometres (3× off on a 0.32512 µm/px object).
+  ``radius_unit='data'`` opts out; ``return_distances=True`` also returns each
+  cell's distance to the center in µm.
+* ``pl.mark_circle(ax, xy, radius, ...)`` draws the matching circle on an
+  overview plot, the circular counterpart of ``pl.mark_region``. It shares the
+  unit semantics with ``tl.cells_in_radius`` (``radius_unit='um'`` +
+  ``adata``), so the annotation and the selection cannot drift apart.
+* New notebook ``notebooks/Atera_spatial_roi_demo`` and a "Circular ROI (point +
+  physical radius)" section in ``usage/visualization``: read an Atera bundle,
+  pick a center, select by radius, and plot overview + zoom with scale bars
+  whose lengths follow each panel's field of view (100 µm vs 50 µm vs 20 µm).
+
+
 Version 0.4.4
 -------------
 
