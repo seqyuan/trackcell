@@ -15,6 +15,7 @@ from .plot import (
     atera_transcript_density,
     atera_nuclear_fraction,
 )
+from .scalebar import add_scale_bar, resolve_microns_per_unit, nice_scale_length
 from .select import select_regions, RegionSelector
 
 __all__ = [
@@ -27,6 +28,9 @@ __all__ = [
     "atera_qc_summary",
     "atera_transcript_density",
     "atera_nuclear_fraction",
+    "add_scale_bar",
+    "resolve_microns_per_unit",
+    "nice_scale_length",
     "select_regions",
     "RegionSelector",
 ]

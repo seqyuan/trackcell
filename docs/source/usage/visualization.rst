@@ -413,6 +413,118 @@ further customized or removed later:
    rect.set_linewidth(3.0)
 
 
+Physical Scale Bars
+-------------------
+
+A spatial figure needs a scale bar whose **physical** length is honest: a full
+section a few millimetres across needs a 500 µm bar, while a 200 µm zoom-in
+needs a 10 µm bar. TrackCell therefore derives the bar from the data instead of
+hard-coding a pixel length.
+
+Enable it with ``scalebar=True`` on :func:`tcl.pl.spatial_cell` or
+:func:`tcl.pl.spatial_squarebin`:
+
+.. code-block:: python
+
+   # Automatic length: ~18% of the visible width, rounded to 1/2/5 x 10^n µm
+   tcl.pl.spatial_cell(adata, color="celltype", scalebar=True)
+
+   # Whole section -> 500 µm bar; 200 µm zoom-in -> 20 µm bar (same object!)
+   tcl.pl.spatial_cell(
+       adata, color="celltype", crop_coord=(4100, 4300, 2600, 2800), scalebar=True
+   )
+
+How the µm-per-unit factor is resolved
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The bar length is a physical length (µm), so TrackCell must know what one unit
+of ``adata.obsm['spatial']`` means. :func:`tcl.pl.resolve_microns_per_unit`
+decides in this order:
+
+1. an explicit ``microns_per_unit`` you pass in;
+2. ``coord_unit`` / ``spatial_units`` metadata — Atera and the trackcell readers
+   store ``'um'``, meaning coordinates are already micrometers (the factor is
+   1.0, and ``pixel_size`` is **not** applied);
+3. ``scalefactors['microns_per_pixel']`` — Visium / Visium HD coordinates are
+   full-resolution image pixels, so this factor is required;
+4. fallback ``1.0`` (assume µm), which is correct for Xenium, Atera and
+   MERSCOPE cells.
+
+If your object uses pixel coordinates but carries no scalefactors, pass the
+factor yourself::
+
+   scalebar=dict(microns_per_unit=0.2125)
+
+Automatic vs. fixed length
+~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+``scalebar=`` accepts four shapes:
+
+.. list-table::
+   :header-rows: 1
+
+   * - Value
+     - Behaviour
+   * - ``True``
+     - Auto length (``frac=0.18`` of the visible width, nice 1/2/5 value)
+   * - ``50`` / ``"50um"`` / ``"100 µm"`` / ``"20px"``
+     - Fixed length (µm by default, ``px`` for raw data units)
+   * - ``dict(...)``
+     - Keyword arguments for :func:`tcl.pl.add_scale_bar`
+   * - ``None`` / ``False``
+     - No bar (default)
+
+Styling and placement
+~~~~~~~~~~~~~~~~~~~~~
+
+Every option lives in the dict form:
+
+.. code-block:: python
+
+   tcl.pl.spatial_cell(
+       adata,
+       color="celltype",
+       scalebar=dict(
+           length="50um",          # or "auto" / 50 / "20px"
+           loc="lower left",       # lower right (default), upper left, center right, ...
+           pad=0.03,               # inset from the axes border (axes fraction)
+           offset=(8, 8),          # extra shift in points
+           frac=0.18,              # auto length as a fraction of the visible width
+           color="white",          # bar + label colour
+           linewidth=3,            # bar thickness (points)
+           fontsize=11,
+           caps=True, cap_size=8,  # end caps: |----|
+           label="50 µm",          # custom text (default '<length> µm')
+           label_position="above", # auto / above / below / none
+           frame=True,             # translucent box for busy H&E backgrounds
+           frame_color="white", frame_alpha=0.85,
+           zorder=20,
+       ),
+   )
+
+Standalone use on any matplotlib axes
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The bar is drawn in **axes coordinates**, so it stays valid after axis
+inversion (``invert_y``), cropping and ``bbox_inches='tight'`` saving. Use it on
+any matplotlib axes — a plain scatter, a gene-expression panel, or a manually
+composited figure.
+
+.. note::
+
+   Bars shorter than ~2% of the visible width trigger a warning: a 10 µm bar in a
+   300 µm window is physically correct but barely legible — pick a longer
+   ``length`` or raise ``frac``.
+
+.. code-block:: python
+
+   fig, ax = plt.subplots(figsize=(6, 6))
+   ax.scatter(*adata.obsm['spatial'].T, s=1)
+   ax.set_aspect('equal')
+   info = tcl.pl.add_scale_bar(ax, adata, length="100um", loc="lower right")
+   print(info)   # {'length': 100.0, 'label': '100 µm', 'axes_fraction': 0.025, ...}
+
+
 Interactive ROI Selection (Jupyter / matplotlib)
 --------------------------------------------------
 

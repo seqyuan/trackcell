@@ -18,6 +18,7 @@ from typing import Optional, Union, List
 import warnings
 
 from .._logging import get_logger
+from .scalebar import _maybe_add_scale_bar  # noqa: F401  (re-exported for convenience)
 
 logger = get_logger(__name__)
 
@@ -784,6 +785,7 @@ def spatial_cell(
     show_ticks: bool = False,
     invert_y: bool = True,
     categorical: Optional[bool] = None,
+    scalebar: Optional[Union[bool, float, str, dict]] = None,
     **kwargs,
 ):
     """
@@ -876,6 +878,26 @@ def spatial_cell(
         categorical, and integer columns are categorical when they have at most
         30 distinct values — which is what integer-coded cluster labels look like.
         Pass ``categorical=False`` to colour an integer column continuously.
+    scalebar : bool, float, str, or dict, optional
+        Draw a physical scale bar (e.g. 50 µm) on the plot. Options:
+
+        - ``None``/``False`` (default): no scale bar;
+        - ``True``: automatic length, ~18% of the visible width, rounded to a
+          "nice" value (1/2/5 × 10ⁿ µm). Because it follows the visible extent,
+          the same tissue gets 500 µm when shown whole and 10 µm when zoomed in;
+        - a number: fixed length in µm;
+        - a string such as ``"50um"``, ``"100 µm"`` or ``"20px"``: fixed length;
+        - a dict of keyword arguments forwarded to :func:`trackcell.pl.add_scale_bar`,
+          e.g. ``dict(length="auto", loc="lower left", color="white",
+          frame=True, fontsize=12, offset=(8, 8))``. Useful keys: ``loc``
+          (e.g. ``"lower right"``, ``"upper left"``, ``"center right"``),
+          ``pad``/``offset``, ``frac``, ``color``, ``linewidth``, ``fontsize``,
+          ``caps``, ``label``, ``label_position``, ``frame``/``frame_color``,
+          and ``microns_per_unit`` to override unit inference.
+
+        The µm-per-data-unit factor is inferred from the object: ``coord_unit``
+        metadata (Atera / trackcell readers, already µm) or
+        ``scalefactors['microns_per_pixel']`` (Visium / Visium HD pixels).
     **kwargs
         Additional arguments passed to GeoDataFrame.plot().
 
@@ -898,6 +920,14 @@ def spatial_cell(
     >>> tcl.pl.spatial_cell(adata, color="classification", groups=["Cluster-1", "Cluster-2"])
     >>> # Plot only H&E image (no cell polygons)
     >>> tcl.pl.spatial_cell(adata, color=None)
+    >>> # Add a physical scale bar (auto length follows the visible extent)
+    >>> tcl.pl.spatial_cell(adata, color="classification", scalebar=True)
+    >>> # Fixed 50 µm bar in the lower left, white with a backing box
+    >>> tcl.pl.spatial_cell(
+    ...     adata,
+    ...     color="classification",
+    ...     scalebar=dict(length="50um", loc="lower left", color="white", frame=True),
+    ... )
     """
     if not HAS_GEOPANDAS:
         raise ImportError(
@@ -1146,6 +1176,7 @@ def spatial_cell(
             # Always show ticks when color is None
             current_ax.tick_params(axis="both", which="major", labelsize=10)
 
+            _maybe_add_scale_bar(current_ax, scalebar, adata, library_id)
             axes_list.append(current_ax)
             continue  # Skip to next color or finish
 
@@ -1577,6 +1608,7 @@ def spatial_cell(
         if color_key:
             current_ax.set_title(color_key)
 
+        _maybe_add_scale_bar(current_ax, scalebar, adata, library_id)
         axes_list.append(current_ax)
 
     if show:
@@ -1621,6 +1653,7 @@ def spatial_squarebin(
     rasterized: bool = False,
     invert_y: bool = True,
     shape: str = "circle",
+    scalebar: Optional[Union[bool, float, str, dict]] = None,
     **kwargs,
 ):
     """
@@ -1663,6 +1696,10 @@ def spatial_squarebin(
         Set to ``False`` to use Cartesian convention (y increases from bottom to top).
     shape
         Shape of each bin marker. ``'circle'`` (default) or ``'square'``.
+    scalebar
+        Draw a physical scale bar; see :func:`spatial_cell` and
+        :func:`trackcell.pl.add_scale_bar`. ``True`` picks an automatic length from
+        the *cropped* visible extent, so ``crop_coord`` zoom-ins get shorter bars.
     **kwargs
         Reserved for future extensions. Currently unused.
     """
@@ -1763,6 +1800,7 @@ def spatial_squarebin(
                     force_show_ticks=True,
                     invert_y=invert_y,
                 )
+            _maybe_add_scale_bar(current_ax, scalebar, adata, library_id)
             axes_list.append(current_ax)
             continue
 
@@ -1801,6 +1839,7 @@ def spatial_squarebin(
             invert_y=invert_y,
         )
         current_ax.set_title(color_key)
+        _maybe_add_scale_bar(current_ax, scalebar, adata, library_id)
         axes_list.append(current_ax)
 
     if show:
