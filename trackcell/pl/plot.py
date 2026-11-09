@@ -239,13 +239,38 @@ def _draw_categorical_edges(
         del temp_gdf["_edge_cat"]
 
 
+def _as_uns_mapping(stored):
+    """Return ``stored`` as a plain dict if it is (or wraps) a mapping, else ``None``.
+
+    ``AnnData`` packs a dict living in ``.uns`` into a 0-d object array as soon as
+    the object is subset or copied, so ``isinstance(stored, Mapping)`` alone misses
+    the vendor palette that :func:`trackcell.io.read_atera` writes —
+    ``adata[mask].copy().uns['cell_group_colors']`` is an ndarray of length 1 whose
+    only element is the dict.
+    """
+    if isinstance(stored, Mapping):
+        return {str(k): v for k, v in stored.items()}
+    try:
+        arr = np.asarray(stored, dtype=object).ravel()
+    except Exception:  # ragged / non-array input
+        return None
+    if arr.size == 1 and isinstance(arr[0], Mapping):
+        return {str(k): v for k, v in arr[0].items()}
+    return None
+
+
 def _palette_from_uns(adata, color_key: str) -> Optional[dict]:
     """Build a category → color mapping from ``adata.uns['<key>_colors']``.
 
-    Follows the scanpy convention: colors are aligned to
-    ``adata.uns['<key>_categories']`` when that key exists, otherwise to the
-    categorical dtype of ``adata.obs[color_key]`` (falling back to the sorted
-    unique values for plain object/integer columns).
+    Colors are aligned positionally, scanpy/squidpy style, choosing the first
+    candidate category list whose length matches the color list:
+
+    1. the categorical dtype of ``adata.obs[color_key]`` — ``AnnData`` prunes
+       ``uns['<key>_colors']`` to the surviving categories on every subset/copy,
+       so this pair is the one that stays consistent;
+    2. ``adata.uns['<key>_categories']`` — the only reliable order for a plain
+       object/integer column;
+    3. the sorted unique values of that column.
 
     Returns ``None`` when the key is absent or unusable, so the caller can fall
     back to the built-in default palette.
@@ -255,35 +280,38 @@ def _palette_from_uns(adata, color_key: str) -> Optional[dict]:
         return None
 
     stored = adata.uns[colors_key]
-    if isinstance(stored, Mapping):
+    mapping = _as_uns_mapping(stored)
+    if mapping is not None:
         # e.g. ``io.read_atera(load_groups=True)`` stores {group: hex}
-        return {str(k): v for k, v in stored.items()}
+        return mapping
 
     colors = list(np.ravel(np.asarray(stored, dtype=object)))
+    if not colors:
+        return None
+
+    column = adata.obs[color_key] if color_key in adata.obs.columns else None
+    candidates = []
+    if column is not None and isinstance(column.dtype, pd.CategoricalDtype):
+        candidates.append(list(column.cat.categories))
     categories_key = f"{color_key}_categories"
     if categories_key in adata.uns:
-        categories = list(adata.uns[categories_key])
-    elif color_key in adata.obs.columns and isinstance(
-        adata.obs[color_key].dtype, pd.CategoricalDtype
-    ):
-        categories = list(adata.obs[color_key].cat.categories)
-    elif color_key in adata.obs.columns:
+        candidates.append(list(adata.uns[categories_key]))
+    if column is not None:
         try:
-            categories = sorted(pd.unique(adata.obs[color_key].dropna()).tolist())
+            candidates.append(sorted(pd.unique(column.dropna()).tolist()))
         except TypeError:  # mixed, unorderable categories
-            return None
-    else:
-        return None
+            pass
 
-    if len(categories) != len(colors):
-        warnings.warn(
-            f"Ignoring `adata.uns['{colors_key}']`: it holds {len(colors)} colors "
-            f"but `{color_key}` has {len(categories)} categories. "
-            "Using the default palette instead."
-        )
-        return None
+    for categories in candidates:
+        if len(categories) == len(colors):
+            return dict(zip(categories, colors))
 
-    return dict(zip(categories, colors))
+    warnings.warn(
+        f"Ignoring `adata.uns['{colors_key}']`: it holds {len(colors)} colors, which "
+        f"matches no category list for `{color_key}`. "
+        "Using the default palette instead."
+    )
+    return None
 
 
 def _default_categorical_palette(categories) -> list:

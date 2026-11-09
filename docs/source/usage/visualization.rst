@@ -107,9 +107,11 @@ A warning will be issued if this occurs.
 
 When ``palette`` is left as ``None``, ``spatial_cell`` looks for
 ``adata.uns['<color>_colors']`` — the scanpy convention — before falling back to
-its built-in discrete palette. Colors are aligned through
-``adata.uns['<color>_categories']`` when that key exists, otherwise through the
-categorical dtype of ``adata.obs[color]`` (or its sorted unique values):
+its built-in discrete palette. The color list is aligned with
+``adata.obs[color].cat.categories`` first (``AnnData`` prunes both together when a
+subset is taken, so ROI panels keep the same color per group), then with
+``adata.uns['<color>_categories']`` for a plain object column, then with its
+sorted unique values:
 
 .. code-block:: python
 
@@ -123,6 +125,18 @@ categorical dtype of ``adata.obs[color]`` (or its sorted unique values):
 If the stored list length disagrees with the number of categories, it is ignored
 with a warning. The same colors are always used for the polygons and for the
 legend swatches, so the two cannot disagree.
+
+Atera bundles already arrive in this form: ``io.read_atera(load_groups=True)``
+writes ``uns['cell_group_colors']`` as a list aligned with
+``obs['cell_group'].cat.categories``, and keeps the raw ``{group: hex}`` map under
+``uns['atera_cell_group_palette']``. Both ``spatial_cell`` and squidpy therefore
+pick up Atera's own 19-color palette with no ``palette=`` argument:
+
+.. code-block:: python
+
+   adata = tcl.io.read_atera(bundle, sample="breast", build_polygons=True)
+   tcl.pl.spatial_cell(adata, color="cell_group")              # vendor colors
+   sq.pl.spatial_scatter(adata, color="cell_group", library_id="breast")
 
 Axes Frame (``frameon``)
 ------------------------

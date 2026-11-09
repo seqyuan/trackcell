@@ -1,5 +1,39 @@
 Changelog
 
+Version 0.4.8
+-------------
+
+**Upgrade note** — ``read_atera(load_groups=True)`` now writes
+``uns['cell_group_colors']`` as a **list** aligned with
+``obs['cell_group'].cat.categories`` (scanpy / squidpy convention) instead of a
+``{group: hex}`` dict. Code that indexed it by group name must switch to
+``uns['atera_cell_group_palette']``, which keeps the dict. The list form is what
+``sq.pl.spatial_scatter(color='cell_group')`` requires — the dict made squidpy
+raise ``Expected palette to be of length 19, found 1``, i.e. a plain
+``tcl.io.read_atera()`` -> ``sq.pl`` workflow could not plot Atera's own
+clustering at all without a manual ``palette=``.
+
+**Fixed**:
+
+* ``read_atera(load_groups=True)`` stored the vendor palette as a dict under
+  ``uns['cell_group_colors']``, which no plotting library reads positionally and
+  which ``AnnData`` re-packs into a 0-d object array on the first subset or copy.
+  It is now the conventional list, with the name-keyed map kept separately under
+  ``uns['atera_cell_group_palette']``. Groups missing a color in
+  ``cell_groups.csv`` now get gray and a warning instead of vanishing.
+* ``pl.spatial_cell`` lost the ``adata.uns['<col>_colors']`` palette after any
+  subset. ``AnnData`` packs a dict stored in ``.uns`` into a 0-d object array as
+  soon as the object is subset or copied, so ``read_atera(load_groups=True)``'s
+  ``{group: hex}`` palette scanned as *one* color and was thrown away. Every ROI
+  panel plotted from ``adata[mask].copy()`` silently got the default palette
+  instead of the vendor colors.
+* Alignment with ``uns['<col>_colors']`` now follows
+  ``obs[col].cat.categories`` first, not ``uns['<col>_categories']``. ``AnnData``
+  prunes the color list in lock-step with the categorical when a subset is taken
+  (``_remove_unused_categories``) but leaves ``_categories`` untouched, so
+  trusting the latter mispaired colors and categories after the first subset.
+  ``_categories`` is still used as a fallback for plain object columns.
+
 Version 0.4.7
 -------------
 

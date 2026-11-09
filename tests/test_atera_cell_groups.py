@@ -37,7 +37,12 @@ def test_attaches_groups_and_colors(tmp_path):
 
     assert isinstance(adata.obs["cell_group"].dtype, pd.CategoricalDtype)
     assert adata.obs["cell_group"].tolist() == ["Tumour", "Stroma", "Tumour"]
-    assert adata.uns["cell_group_colors"] == {"Tumour": "#ff0000", "Stroma": "#00ff00"}
+    # scanpy / squidpy convention: a list aligned with cat.categories (sorted: Stroma, Tumour)
+    assert adata.uns["cell_group_colors"] == ["#00ff00", "#ff0000"]
+    assert adata.uns["atera_cell_group_palette"] == {
+        "Tumour": "#ff0000",
+        "Stroma": "#00ff00",
+    }
     meta = adata.uns["atera_cell_groups"]
     assert meta["n_groups"] == 2
     assert meta["n_unassigned"] == 0
@@ -100,3 +105,36 @@ def test_custom_key(tmp_path):
     assert _attach_cell_groups(adata, tmp_path, key="my_cluster") is True
     assert adata.obs["my_cluster"].tolist() == ["Tumour"]
     assert "cell_group" not in adata.obs.columns
+
+
+def test_colors_are_stored_in_scanpy_convention(tmp_path):
+    """``sq.pl.spatial_scatter(color=key)`` reads this key positionally.
+
+    Storing ``{group: hex}`` here made squidpy raise
+    ``Expected palette to be of length 19, found 1``; storing a list aligned with
+    ``cat.categories`` is what both scanpy and squidpy expect.
+    """
+    adata = _adata(["c0", "c1", "c2"])
+    _write_groups(
+        tmp_path,
+        [("c0", "B", "#222222"), ("c1", "A", "#111111"), ("c2", "B", "#222222")],
+    )
+    assert _attach_cell_groups(adata, tmp_path) is True
+
+    colors = adata.uns["cell_group_colors"]
+    assert isinstance(colors, list)
+    assert len(colors) == len(adata.obs["cell_group"].cat.categories)
+    # aligned by name with cat.categories (sorted here: A, B), not by file order
+    assert list(adata.obs["cell_group"].cat.categories) == ["A", "B"]
+    assert colors == ["#111111", "#222222"]
+    assert adata.uns["atera_cell_group_palette"] == {"A": "#111111", "B": "#222222"}
+
+
+def test_group_without_color_gets_gray_and_warns(tmp_path):
+    adata = _adata(["c0", "c1"])
+    _write_groups(tmp_path, [("c0", "A", "#111111"), ("c1", "B", "")])
+    with pytest.warns(RuntimeWarning, match="has no color for 1 of 2 groups"):
+        assert _attach_cell_groups(adata, tmp_path) is True
+
+    assert adata.uns["cell_group_colors"] == ["#111111", "#d3d3d3"]
+    assert adata.uns["atera_cell_group_palette"] == {"A": "#111111"}

@@ -320,8 +320,9 @@ def test_spatial_cell_uses_uns_colors_when_palette_is_none():
 
 
 def test_spatial_cell_uns_colors_follow_uns_categories():
+    """For a plain object column the order has to come from ``uns[..._categories]``."""
     adata = _categorical_adata(["A", "B"])
-    # Explicit category order that differs from the alphabetical one
+    adata.obs["cell_group"] = adata.obs["cell_group"].astype(object)  # not categorical
     adata.uns["cell_group_categories"] = ["B", "A"]
     adata.uns["cell_group_colors"] = ["#377eb8", "#e41a1c"]
 
@@ -463,4 +464,56 @@ def test_spatial_cell_categorical_with_missing_values():
 
     assert [h.get_label() for h in ax.get_legend().legend_handles] == ["A", "B"]
     assert len(set(_fill_colors(ax, ["A", "B"]).values())) == 2
+    plt.close(ax.figure)
+
+
+def test_palette_from_uns_survives_subset_and_copy():
+    """AnnData packs a ``.uns`` dict into a 0-d object array on subset/copy.
+
+    ``adata[mask].copy().uns['cell_group_colors']`` is then ``array([{...}], dtype=object)``
+    — length 1, not a ``Mapping``. Reading it naively made the whole palette fall back
+    to the default one after every ``adata[mask]`` (i.e. in every ROI panel).
+    """
+    from trackcell.pl.plot import _palette_from_uns
+
+    adata = _categorical_adata(["A", "B", "C"])
+    adata.uns["cell_group_colors"] = {"A": "#e41a1c", "B": "#377eb8", "C": "#4daf4a"}
+    sub = adata[np.array([True, True, True])].copy()
+    assert not isinstance(sub.uns["cell_group_colors"], dict)  # 0-d object array
+
+    assert _palette_from_uns(sub, "cell_group") == {
+        "A": "#e41a1c",
+        "B": "#377eb8",
+        "C": "#4daf4a",
+    }
+
+    ax = spatial_cell(sub, color="cell_group", library_id="sample", show=False)
+    expected = {"A": "#e41a1c", "B": "#377eb8", "C": "#4daf4a"}
+    assert _fill_colors(ax, ["A", "B", "C"]) == expected
+    plt.close(ax.figure)
+
+
+def test_palette_from_uns_survives_anndata_category_pruning():
+    """``adata[mask].copy()`` prunes ``uns['<key>_colors']`` to the surviving groups.
+
+    ``annData`` shrinks the color list in lock-step with ``obs[key].cat.categories``
+    but leaves ``uns['<key>_categories']`` untouched. Aligning against that stale
+    list made every ROI panel (``adata[mask].copy()``) fall back to the default
+    palette, so each subset got different colors for the same group.
+    """
+    from trackcell.pl.plot import _palette_from_uns
+
+    labels = ["A", "B", "C", "A"]
+    adata = _categorical_adata(labels)
+    adata.uns["cell_group_colors"] = ["#e41a1c", "#377eb8", "#4daf4a"]
+    adata.uns["cell_group_categories"] = ["A", "B", "C"]
+
+    sub = adata[np.array([True, False, True, True])].copy()  # A and C survive
+
+    assert list(sub.obs["cell_group"].cat.categories) == ["A", "C"]
+    assert list(sub.uns["cell_group_colors"]) == ["#e41a1c", "#4daf4a"]  # pruned
+    assert _palette_from_uns(sub, "cell_group") == {"A": "#e41a1c", "C": "#4daf4a"}
+
+    ax = spatial_cell(sub, color="cell_group", library_id="sample", show=False)
+    assert _fill_colors(ax, ["A", "C"]) == {"A": "#e41a1c", "C": "#4daf4a"}
     plt.close(ax.figure)

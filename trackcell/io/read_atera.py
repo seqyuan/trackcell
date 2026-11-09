@@ -697,10 +697,13 @@ def read_atera(
         path is recorded.
     load_groups
         Attach Atera's own per-cell clustering from ``cell_groups.csv`` into
-        ``obs['cell_group']`` (Categorical) plus
-        ``uns['cell_group_colors']``.  On by default and skipped silently when
-        the bundle has no such file, so preview and official reads stay
-        interchangeable.
+        ``obs['cell_group']`` (Categorical), with the vendor palette written in
+        the scanpy/squidpy convention: ``uns['cell_group_colors']`` as a list
+        aligned with ``obs['cell_group'].cat.categories`` (so ``sq.pl`` and
+        ``tcl.pl`` both pick it up unprompted) plus the raw ``{group: hex}`` map
+        under ``uns['atera_cell_group_palette']``.  On by default and skipped
+        silently when the bundle has no such file, so preview and official reads
+        stay interchangeable.
     region
         ``(xmin, ymin, xmax, ymax)`` in µm, a shapely geometry, or a mapping
         with ``xmin/ymin/xmax/ymax``.  Cells are subset by centroid.
@@ -1021,10 +1024,12 @@ def read_atera_preview(
 def _attach_cell_groups(adata, root, *, key: str = "cell_group", log=None) -> bool:
     """Attach ``cell_groups.csv`` (Atera's own per-cell clustering) to ``adata``.
 
-    Writes ``adata.obs[key]`` as a Categorical and
-    ``adata.uns["cell_group_colors"]`` (group -> hex). Returns ``False`` (and
-    warns) when the file is absent or does not cover the object, so callers can
-    treat it as optional.
+    Writes ``adata.obs[key]`` as a Categorical, ``adata.uns[f"{key}_colors"]`` as
+    a **list** aligned with ``obs[key].cat.categories`` (scanpy / squidpy
+    convention) and the raw ``{group: hex}`` map under
+    ``adata.uns["atera_cell_group_palette"]``. Returns ``False`` (and warns) when
+    the file is absent or does not cover the object, so callers can treat it as
+    optional.
     """
     path = Path(root).expanduser() / _CELL_GROUPS
     if not path.exists():
@@ -1080,7 +1085,25 @@ def _attach_cell_groups(adata, root, *, key: str = "cell_group", log=None) -> bo
             .set_index("group")["color"]
             .to_dict()
         )
-        adata.uns["cell_group_colors"] = {str(k): str(v) for k, v in colors.items()}
+        palette = {str(k): str(v) for k, v in colors.items()}
+        categories = [str(c) for c in adata.obs[key].cat.categories]
+        # scanpy / squidpy read ``uns['<key>_colors']`` as a list aligned with
+        # ``cat.categories``; a dict here is what made
+        # ``sq.pl.spatial_scatter(color=key)`` raise "Expected palette to be of
+        # length 19, found 1" (and AnnData packs a dict into an object array on
+        # copy, so even name-based lookups got fragile).
+        uncolored = [c for c in categories if c not in palette]
+        if uncolored:
+            warnings.warn(
+                f"`{path.name}` has no color for {len(uncolored)} of "
+                f"{len(categories)} groups ({uncolored[:3]}); gray is used for them.",
+                RuntimeWarning,
+                stacklevel=3,
+            )
+        adata.uns[f"{key}_colors"] = [palette.get(c, "#d3d3d3") for c in categories]
+        # The raw map stays available for lookups by name, under a key that no
+        # plotting library will try to interpret as a positional color list.
+        adata.uns["atera_cell_group_palette"] = palette
     adata.uns["atera_cell_groups"] = {
         "path": str(path),
         "key": key,
