@@ -172,6 +172,81 @@ def test_length_string_without_space_and_micron_symbol():
         plt.close(fig)
 
 
+def test_length_rejects_unknown_unit_suffix():
+    """``"20mm"`` used to render a bar labelled "20 µm" — a silent 1000x error.
+
+    ``_LENGTH_RE`` captured any non-digit suffix and ``_normalize_unit`` returned
+    ``None`` for the ones it did not know; the caller then read that ``None`` as
+    "no unit was written" and fell back to µm. The bar was drawn perfectly, just
+    a thousand times too short, with no warning.
+    """
+    adata = _make_adata(coord_unit="um")
+    for value, unit in (
+        ("20mm", "mm"),
+        ("50nm", "nm"),
+        ("3in", "in"),
+        ("50%", "%"),
+        ("100micronss", "micronss"),
+    ):
+        with pytest.raises(ValueError, match="Unrecognised unit"):
+            _draw(adata, length=value)
+        # The message must name the offending unit so the typo is findable.
+        with pytest.raises(ValueError, match=unit):
+            _draw(adata, length=value)
+        plt.close("all")
+
+
+def test_bare_numeric_string_matches_numeric_length():
+    """``length=50`` and ``length="50"`` must not differ by a pixel factor.
+
+    The empty suffix matched ``""`` in ``_PX_ALIASES``, so the quoted form was
+    read as pixels while the unquoted form defaulted to µm. On a Visium HD object
+    (0.32512 µm/px) that is a 3x difference for the same number in quotes.
+    """
+    adata = _make_adata(coord_unit="um")
+    fig, ax, numeric = _draw(adata, length=50)
+    plt.close(fig)
+    fig, ax, quoted = _draw(adata, length="50")
+    plt.close(fig)
+
+    assert quoted["label"] == numeric["label"] == "50 µm"
+    assert quoted["axes_fraction"] == pytest.approx(numeric["axes_fraction"])
+    assert quoted["length_unit"] == numeric["length_unit"] == "um"
+
+
+def test_bare_numeric_string_on_pixel_coordinates_stays_microns():
+    """The quoted form must also stay µm when the coordinates themselves are px."""
+    adata = _make_adata(mpp=0.32512, coord_unit="px")
+    fig, ax, info = _draw(adata, length="50")
+    assert info["label"] == "50 µm"
+    assert info["unit"] == "px"  # coordinates are pixels ...
+    assert info["length_unit"] == "um"  # ... but the bar is still labelled in µm
+    plt.close(fig)
+
+
+def test_invalid_unit_argument_raises():
+    """``unit=`` was the one validated-by-omission argument on ``add_scale_bar``."""
+    adata = _make_adata(coord_unit="um")
+    for unit in ("micronz", "millimetres", "furlong"):
+        with pytest.raises(ValueError, match="Unrecognised `unit`"):
+            _draw(adata, length=50, unit=unit)
+        plt.close("all")
+
+
+def test_known_unit_aliases_still_accepted():
+    """The stricter parser must not reject the spellings it already documented."""
+    adata = _make_adata(coord_unit="um")
+    for value in ("50um", "50 µm", "50μm", "50 micron", "50 MICROMETRES"):
+        fig, ax, info = _draw(adata, length=value)
+        assert info["length"] == pytest.approx(50.0), value
+        assert info["length_unit"] == "um", value
+        plt.close(fig)
+    for value in ("20px", "20 pixel", "20 data"):
+        fig, ax, info = _draw(adata, length=value)
+        assert info["length_unit"] == "px", value
+        plt.close(fig)
+
+
 def test_length_auto_accepts_true_and_none():
     adata = _make_adata(coord_unit="um")
     for value in (True, None, "auto"):

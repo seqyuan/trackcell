@@ -76,6 +76,8 @@ _MATRIX_H5 = "cell_feature_matrix.h5"
 _EXPERIMENT_SPATIAL = "experiment.spatial"
 _EXPERIMENT_XENIUM = "experiment.xenium"
 _PANEL_CONFIG = "panel_config.json"
+#: Per-cell cluster assignment written by Atera (cell_id, group, color).
+_CELL_GROUPS = "cell_groups.csv"
 _GENE_PANEL = "gene_panel.json"
 
 _UNASSIGNED = np.uint32(4294967295)
@@ -650,6 +652,7 @@ def read_atera(
     store_wkt: bool = False,
     keep_de: bool = False,
     load_panel: bool = False,
+    load_groups: bool = True,
     region=None,
     n_cells: Optional[int] = None,
     random_state: int = 0,
@@ -692,6 +695,12 @@ def read_atera(
         Parse ``panel_config.json`` (official, ~11 MB and may contain customer
         information) into ``uns['gene_panel']``.  Off by default; only the
         path is recorded.
+    load_groups
+        Attach Atera's own per-cell clustering from ``cell_groups.csv`` into
+        ``obs['cell_group']`` (Categorical) plus
+        ``uns['cell_group_colors']``.  On by default and skipped silently when
+        the bundle has no such file, so preview and official reads stay
+        interchangeable.
     region
         ``(xmin, ymin, xmax, ymax)`` in µm, a shapely geometry, or a mapping
         with ``xmin/ymin/xmax/ymax``.  Cells are subset by centroid.
@@ -728,6 +737,7 @@ def read_atera(
         store_wkt=store_wkt,
         keep_de=keep_de,
         load_panel=load_panel,
+        load_groups=load_groups,
         region=region,
         n_cells=n_cells,
         random_state=random_state,
@@ -748,6 +758,7 @@ def read_atera_cellseg(
     store_wkt: bool = False,
     keep_de: bool = False,
     load_panel: bool = False,
+    load_groups: bool = True,
     region=None,
     n_cells: Optional[int] = None,
     random_state: int = 0,
@@ -914,6 +925,9 @@ def read_atera_cellseg(
     if load_panel and panel_path.exists():
         adata.uns["gene_panel"] = read_atera_panel(root)
 
+    if load_groups:
+        _attach_cell_groups(adata, root, log=log)
+
     log(f"[Atera] Total: read_atera_cellseg done [{time.time() - t_total:.1f}s]")
     return adata
 
@@ -928,6 +942,7 @@ def read_atera_preview(
     store_wkt: bool = False,
     keep_de: bool = False,
     load_panel: bool = False,
+    load_groups: bool = True,
     region=None,
     n_cells: Optional[int] = None,
     random_state: int = 0,
@@ -997,7 +1012,87 @@ def read_atera_preview(
     adata = _subset_cells(adata, mask)
     if not mask.all():
         log(f"[Atera] Subset to {adata.n_obs:,} cells")
+
+    if load_groups:
+        _attach_cell_groups(adata, root, log=log)
     return adata
+
+
+def _attach_cell_groups(adata, root, *, key: str = "cell_group", log=None) -> bool:
+    """Attach ``cell_groups.csv`` (Atera's own per-cell clustering) to ``adata``.
+
+    Writes ``adata.obs[key]`` as a Categorical and
+    ``adata.uns["cell_group_colors"]`` (group -> hex). Returns ``False`` (and
+    warns) when the file is absent or does not cover the object, so callers can
+    treat it as optional.
+    """
+    path = Path(root).expanduser() / _CELL_GROUPS
+    if not path.exists():
+        return False
+    try:
+        groups = pd.read_csv(path)
+    except Exception as exc:  # noqa: BLE001 - never fail a read over an annotation
+        warnings.warn(
+            f"Could not read `{path.name}`: {exc}", RuntimeWarning, stacklevel=3
+        )
+        return False
+
+    if not {"cell_id", "group"} <= set(groups.columns):
+        warnings.warn(
+            f"`{path.name}` lacks `cell_id`/`group` columns; ignored.",
+            RuntimeWarning,
+            stacklevel=3,
+        )
+        return False
+
+    groups = groups.drop_duplicates("cell_id")
+    lookup = groups.set_index("cell_id")["group"]
+    # ``read_csv`` happily turns numeric ids into int64 while ``obs`` may hold
+    # them as uint32 or str; compare on a single representation.
+    lookup.index = pd.Index(lookup.index.astype(str))
+
+    labels = None
+    for column in ("barcode", "cell_id"):
+        if column in adata.obs.columns:
+            candidate = adata.obs[column].astype(str)
+            if candidate.isin(lookup.index).any():
+                labels = candidate.map(lookup)
+                break
+    if labels is None:
+        if adata.obs_names.astype(str).isin(lookup.index).any():
+            labels = pd.Series(
+                pd.Index(adata.obs_names.astype(str)).map(lookup), index=adata.obs.index
+            )
+        else:
+            warnings.warn(
+                f"`{path.name}` cell_ids do not match this object; ignored.",
+                RuntimeWarning,
+                stacklevel=3,
+            )
+            return False
+
+    missing = int(labels.isna().sum())
+    adata.obs[key] = pd.Categorical(labels)
+    if "color" in groups.columns:
+        colors = (
+            groups.dropna(subset=["color"])
+            .drop_duplicates("group")
+            .set_index("group")["color"]
+            .to_dict()
+        )
+        adata.uns["cell_group_colors"] = {str(k): str(v) for k, v in colors.items()}
+    adata.uns["atera_cell_groups"] = {
+        "path": str(path),
+        "key": key,
+        "n_groups": int(adata.obs[key].nunique()),
+        "n_unassigned": missing,
+    }
+    if log is not None:
+        log(
+            f"[Atera] Cell groups: {adata.obs[key].nunique()} groups from "
+            f"{path.name} ({missing:,} cells unassigned)"
+        )
+    return True
 
 
 def read_atera_panel(path: Union[str, Path]) -> dict:

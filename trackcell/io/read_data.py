@@ -50,6 +50,72 @@ def _infer_sample_from_path(path: Union[str, Path]) -> str:
     return current.name or original.name
 
 
+#: Column names that mark a table as SpaceRanger tissue positions. Used to
+#: validate a parse, because neither an exception nor a column count is reliable:
+#: a TSV read with ``sep=","`` yields one column, and ``sep=None`` (Sniffer)
+#: happily splits the header word "barcode" into ``ba`` / ``code``.
+_TISSUE_POSITION_COLUMNS = {
+    "in_tissue",
+    "array_row",
+    "array_col",
+    "pxl_row_in_fullres",
+    "pxl_col_in_fullres",
+    "pxl_row",
+    "pxl_col",
+    "x",
+    "y",
+}
+
+
+def _looks_like_tissue_positions(frame: pd.DataFrame) -> bool:
+    """True if ``frame`` looks like a barcode + coordinates table."""
+    if frame.shape[1] < 2:
+        return False
+    names = [str(col).strip().lower() for col in frame.columns]
+    if any("barcode" in name for name in names):
+        return True
+    return len(set(names) & _TISSUE_POSITION_COLUMNS) >= 2
+
+
+def _read_tissue_positions(path: Path) -> pd.DataFrame:
+    """Read a SpaceRanger tissue-positions table, rejecting a bad separator.
+
+    ``pd.read_csv(sep=",")`` does *not* raise on a tab-separated file: it returns
+    a single column whose name is the entire header line. The old chain of nested
+    ``try/except`` blocks therefore never reached its ``sep="\\t"`` branch — that
+    branch was unreachable in practice — and the one-column frame went on to fail
+    the barcode check, which reported *"N expression barcodes are missing from
+    tissue positions"*. The file format was blamed on the data.
+
+    Each candidate separator is now judged by whether the result looks like a
+    tissue-positions table, so an unparseable file raises with the separators it
+    tried instead of blaming the barcodes.
+    """
+    if path.suffix == ".parquet":
+        return pd.read_parquet(path)
+
+    attempts = [(",", {}), ("\t", {}), (None, {"engine": "python"})]
+    failures: list[str] = []
+    for sep, kwargs in attempts:
+        try:
+            frame = pd.read_csv(path, sep=sep, **kwargs)
+        except Exception as exc:  # malformed for this separator
+            failures.append(f"sep={sep!r}: {exc}")
+            continue
+        if _looks_like_tissue_positions(frame):
+            return frame
+        failures.append(
+            f"sep={sep!r}: parsed {frame.shape[1]} column(s) "
+            f"{list(frame.columns)[:4]}, which is not a tissue-positions table"
+        )
+
+    raise ValueError(
+        "no separator produced a barcode + coordinates table (expected columns "
+        "such as 'barcode' and 'pxl_row_in_fullres'); "
+        f"tried {'; '.join(failures)}"
+    )
+
+
 def _classification_name(value):
     """Extract a cell-type name from a SpaceRanger classification value.
 
@@ -184,19 +250,7 @@ def read_hd_bin(
 
     # Read tissue positions file
     try:
-        if tissue_pos_path.suffix == ".parquet":
-            df_tissue_positions = pd.read_parquet(tissue_pos_path)
-        else:
-            # Try CSV with different separators
-            try:
-                df_tissue_positions = pd.read_csv(tissue_pos_path, sep=",")
-            except Exception:
-                try:
-                    df_tissue_positions = pd.read_csv(tissue_pos_path, sep="\t")
-                except Exception:
-                    df_tissue_positions = pd.read_csv(
-                        tissue_pos_path, sep=None, engine="python"
-                    )
+        df_tissue_positions = _read_tissue_positions(tissue_pos_path)
     except Exception as e:
         raise ValueError(f"Could not read tissue positions file {tissue_pos_path}: {e}")
 

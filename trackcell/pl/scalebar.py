@@ -34,12 +34,15 @@ Examples
 from __future__ import annotations
 
 import re
+import warnings
 from typing import Any, Dict, Iterator, Optional, Tuple, Union, cast
 
 import numpy as np
+from matplotlib.artist import Artist
 from matplotlib.axes import Axes
 from matplotlib.figure import Figure
 from matplotlib.patches import Rectangle
+from matplotlib.transforms import Bbox
 from matplotlib.transforms import offset_copy
 
 __all__ = [
@@ -61,7 +64,14 @@ _UM_ALIASES = {
     "micrometres",
 }
 #: Unit strings that mean "pixel / arbitrary data unit".
-_PX_ALIASES = {"px", "pixel", "pixels", "data", "unit", "units", "none", ""}
+#:
+#: The empty string is deliberately absent: a *missing* unit is not the same as a
+#: declared pixel unit. While ``""`` was a member, ``_parse_length("50")`` parsed
+#: the absent suffix as pixels while ``_parse_length(50)`` returned ``None`` and
+#: fell back to µm, so ``length=50`` and ``length="50"`` drew bars differing by
+#: the µm-per-pixel factor (3x on Visium HD) with nothing but a pair of quotes to
+#: explain it.
+_PX_ALIASES = {"px", "pixel", "pixels", "data", "unit", "units", "none"}
 
 #: Human readable label suffix for each unit family.
 _UNIT_LABEL = {"um": "µm", "px": "px"}
@@ -295,7 +305,23 @@ def _parse_length(length: object) -> Tuple[Optional[float], Optional[str]]:
             f"Could not parse scale bar length {length!r}. Use a number (µm), "
             "a string such as '50um' / '100um' / '20px', or 'auto'."
         )
-    return float(match.group(1)), _normalize_unit(match.group(2))
+    value = float(match.group(1))
+    raw_unit = match.group(2)
+    if raw_unit == "":
+        # No suffix given: keep the caller's default unit (µm) rather than
+        # guessing pixels. See the note on ``_PX_ALIASES``.
+        return value, None
+    resolved = _normalize_unit(raw_unit)
+    if resolved is None:
+        # Falling back to µm here turned ``length="20mm"`` into a bar labelled
+        # "20 µm" -- a silent 1000x error that renders perfectly, which is the
+        # one failure mode this module exists to avoid.
+        raise ValueError(
+            f"Unrecognised unit {raw_unit!r} in scale bar length {length!r}. "
+            "Use µm/um (also 'micron'/'micrometre'), px/pixel/data, or pass a "
+            "bare number plus `unit=` / `microns_per_unit=`."
+        )
+    return value, resolved
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -304,11 +330,68 @@ def _parse_length(length: object) -> Tuple[Optional[float], Optional[str]]:
 
 
 def _axes_points(ax: Axes) -> Tuple[float, float]:
-    """Axes box size in points (width, height)."""
+    """Axes box size in points (width, height).
+
+    ``ax.apply_aspect()`` is called first because ``ax.bbox`` is only final once
+    matplotlib has applied the aspect ratio (``set_aspect("equal")``, which every
+    spatial plot uses, shrinks the box inside its subplot slot). Measuring before
+    that reports a box wider than the one actually drawn, and every clamped
+    margin comes out too small — which is how a bar ends up on top of the spine.
+    """
     fig = ax.figure
     dpi = fig.dpi if fig is not None else 100.0
+    try:
+        ax.apply_aspect()
+    except Exception:  # noqa: BLE001 - headless axes without a figure manager
+        pass
     bbox = ax.bbox
     return bbox.width * 72.0 / dpi, bbox.height * 72.0 / dpi
+
+
+class _ScaleBarPlacer(Artist):
+    """Invisible artist that re-places the scale bar right before every draw."""
+
+    def __init__(self, place, *, zorder: float):
+        super().__init__()
+        self._place = place
+        self.set_zorder(zorder)
+
+    def draw(self, renderer):
+        self._place(renderer)
+
+    def get_window_extent(self, renderer=None):  # pragma: no cover - empty artist
+        return Bbox.null()
+
+
+def _text_extent_points(
+    ax, text: str, fontsize: float, renderer=None
+) -> Tuple[float, float]:
+    """Measure the rendered size of ``text`` in points.
+
+    Falls back to a width estimate when no renderer is available (interactive
+    backends before the first draw), which keeps the clamp conservative rather
+    than letting the label escape the axes.
+    """
+    fig = ax.figure
+    if fig is not None:
+        if renderer is None:
+            try:
+                renderer = fig.canvas.get_renderer()
+            except Exception:  # noqa: BLE001 - backend without a renderer yet
+                renderer = None
+        if renderer is not None:
+            dpi = fig.dpi if fig.dpi else 100.0
+            probe = fig.text(0, 0, text, fontsize=fontsize)
+            try:
+                bbox = probe.get_window_extent(renderer=renderer)
+                width = bbox.width * 72.0 / dpi
+                height = bbox.height * 72.0 / dpi
+            finally:
+                probe.remove()
+            if np.isfinite(width) and np.isfinite(height) and width > 0:
+                return float(width), float(height)
+    # Rough fallback: average glyph width ~0.62 em, line height ~1.2 em.
+    return float(0.62 * fontsize * max(len(text), 1)), float(1.2 * fontsize)
 
 
 def add_scale_bar(
@@ -332,7 +415,7 @@ def add_scale_bar(
     cap_size: Optional[float] = None,
     label: Optional[str] = None,
     label_position: str = "auto",
-    label_pad: float = 2.0,
+    label_pad: float = 3.0,
     frame: bool = False,
     frame_color: str = "white",
     frame_alpha: float = 0.85,
@@ -397,7 +480,7 @@ def add_scale_bar(
         ``"auto"`` (above the bar, below for ``upper*`` anchors), ``"above"``,
         ``"below"`` or ``"none"``.
     label_pad
-        Gap between bar and label, in points.
+        Gap between bar and label, in points (default 3).
     frame
         Draw a translucent rounded box behind the bar and label (useful on busy
         H&E backgrounds).
@@ -433,6 +516,13 @@ def add_scale_bar(
 
     raw_length, unit_from_length = _parse_length(length)
     resolved_unit = _normalize_unit(unit) if unit is not None else None
+    if unit is not None and resolved_unit is None:
+        # ``loc`` and ``label_position`` are validated above; ``unit`` used to be
+        # the one argument where a typo (``"micronz"``) was silently read as µm.
+        raise ValueError(
+            f"Unrecognised `unit` {unit!r}. Choose from µm/um, micron/micrometre, "
+            "or px/pixel/data."
+        )
     if unit_from_length is not None and resolved_unit not in (None, unit_from_length):
         raise ValueError(
             f"Conflicting units: `length={length!r}` implies {unit_from_length!r} "
@@ -484,8 +574,6 @@ def add_scale_bar(
             "width. Use a shorter `length` or disable the scale bar."
         )
     if axes_fraction < 0.02:
-        import warnings
-
         warnings.warn(
             f"Scale bar of {_format_length(bar_length)} {_UNIT_LABEL[length_unit]} "
             f"covers only {axes_fraction:.1%} of the visible width and may be hard "
@@ -496,51 +584,33 @@ def add_scale_bar(
     if label is None:
         label = f"{_format_length(bar_length)} {_UNIT_LABEL[length_unit]}"
 
-    # ── geometry in axes fractions ──────────────────────────────────────────
-    ax_w_pt, ax_h_pt = _axes_points(ax)
-    ax_w_pt = ax_w_pt if ax_w_pt > 0 else 1.0
-    ax_h_pt = ax_h_pt if ax_h_pt > 0 else 1.0
-
-    x_anchor, y_anchor = _LOC_FACTORS[loc_key]
-    # keep the bar inside the axes box
-    x_anchor = (
-        float(np.clip(x_anchor, pad, 1.0 - pad)) if abs(x_anchor - 0.5) > 1e-9 else 0.5
-    )
-    if y_anchor <= 0.0:
-        y_bar = pad
-    elif y_anchor >= 1.0:
-        y_bar = 1.0 - pad
-    else:
-        y_bar = y_anchor
-
-    if x_anchor >= 1.0:
-        x_start, x_end = x_anchor - axes_fraction, x_anchor
-    elif x_anchor <= 0.0:
-        x_start, x_end = x_anchor, x_anchor + axes_fraction
-    else:
-        x_start = x_anchor - axes_fraction / 2.0
-        x_end = x_anchor + axes_fraction / 2.0
-
-    # One transform carries the user offset (in points) for bar, caps, label and
-    # frame alike, so the whole group shifts as a unit.
-    trans = offset_copy(
-        ax.transAxes,
-        fig=cast("Figure", ax.figure),
-        x=float(offset[0]),
-        y=float(offset[1]),
-        units="points",
-    )
+    # ── artists are created once, then *placed* on every draw ───────────────
+    #
+    # Placement depends on the axes box in points and on the rendered label size.
+    # Neither is final when this function returns: ``set_aspect("equal")``,
+    # ``tight_layout()``, ``savefig(bbox_inches="tight")`` and window resizes all
+    # move the box afterwards, and a bar clamped against the old box ends up on
+    # top of the spine. So the geometry is recomputed inside a placer artist that
+    # draws just before the bar/label/frame on every render pass.
     default_cap = max(4.0, 4.0 * linewidth)
-    # Keep the end caps readable when the bar itself is only a few points long.
-    bar_pt = max(axes_fraction * ax_w_pt, 1.0)
+    bar_pt = max(axes_fraction * _axes_points(ax)[0], 1.0)
     cap_pt = (
         float(cap_size)
         if cap_size is not None
         else float(min(default_cap, max(2.0, 0.6 * bar_pt)))
     )
-    ax.plot(
-        [x_start, x_end],
-        [y_bar, y_bar],
+
+    trans = offset_copy(
+        ax.transAxes,
+        fig=cast("Figure", ax.figure),
+        x=0.0,
+        y=0.0,
+        units="points",
+    )
+
+    (bar_line,) = ax.plot(
+        [0.0, 0.0],
+        [0.0, 0.0],
         transform=trans,
         color=color,
         linewidth=linewidth,
@@ -553,20 +623,16 @@ def add_scale_bar(
         markeredgewidth=linewidth,
     )
 
-    # ── label ───────────────────────────────────────────────────────────────
-    if label_position == "auto":
-        label_position = "below" if y_anchor >= 1.0 else "above"
-    if label_position != "none" and label:
-        x_center = (x_start + x_end) / 2.0
-        sign = 1.0 if label_position == "above" else -1.0
-        ax.annotate(
+    label_artist = None
+    if label and label_position != "none":
+        label_artist = ax.annotate(
             label,
-            xy=(x_center, y_bar),
+            xy=(0.5, 0.0),
             xycoords=trans,
-            xytext=(0.0, sign * label_pad),
+            xytext=(0.0, 0.0),
             textcoords="offset points",
             ha="center",
-            va="bottom" if sign > 0 else "top",
+            va="bottom",
             fontsize=fontsize,
             color=color,
             alpha=alpha,
@@ -574,32 +640,172 @@ def add_scale_bar(
             zorder=zorder + 0.1,
         )
 
-    # ── optional frame ──────────────────────────────────────────────────────
+    frame_patch = None
     if frame:
-        pad_x = float(frame_pad) / ax_w_pt
-        pad_y = float(frame_pad) / ax_h_pt
-        text_extra = (
-            (label_pad + fontsize * 1.15) / ax_h_pt if label_position != "none" else 0.0
+        frame_patch = Rectangle(
+            (0.0, 0.0),
+            0.0,
+            0.0,
+            transform=trans,
+            facecolor=frame_color,
+            alpha=frame_alpha,
+            edgecolor="none",
+            clip_on=False,
+            zorder=zorder - 0.1,
         )
-        if label_position == "below":
-            y_low = y_bar - text_extra - pad_y
-            y_high = y_bar + pad_y
+        ax.add_patch(frame_patch)
+
+    warned = {"fit": False}
+
+    def _place(renderer=None):
+        """Compute the clamped geometry in axes fractions and apply it."""
+        ax_w_pt, ax_h_pt = _axes_points(ax)
+        ax_w_pt = ax_w_pt if ax_w_pt > 0 else 1.0
+        ax_h_pt = ax_h_pt if ax_h_pt > 0 else 1.0
+
+        # Caps are ``|`` markers: length ``cap_pt`` vertically, ``linewidth``
+        # horizontally, so they bound the group on both axes.
+        stroke_half = linewidth / 2.0
+        breathing = 1.0  # points of margin so the stroke never sits on the spine
+        frame_extra = float(frame_pad) if frame else 0.0
+        margin_x_pt = stroke_half + breathing + frame_extra
+        margin_y_pt = max(stroke_half, cap_pt / 2.0) + breathing + frame_extra
+
+        # An offset larger than the axes can never keep the group inside, so it
+        # is clamped first: a requested shift is a hint, staying in frame is the rule.
+        max_off_x = max(ax_w_pt / 2.0 - margin_x_pt, 0.0)
+        max_off_y = max(ax_h_pt / 2.0 - margin_y_pt, 0.0)
+        off_x = float(np.clip(float(offset[0]), -max_off_x, max_off_x))
+        off_y = float(np.clip(float(offset[1]), -max_off_y, max_off_y))
+
+        x_lo = (margin_x_pt - off_x) / ax_w_pt
+        x_hi = 1.0 - (margin_x_pt + off_x) / ax_w_pt
+        y_lo = (margin_y_pt - off_y) / ax_h_pt
+        y_hi = 1.0 - (margin_y_pt + off_y) / ax_h_pt
+        if x_hi < x_lo:  # request larger than the box: fall back to the padding
+            x_lo, x_hi = pad, 1.0 - pad
+        if y_hi < y_lo:
+            y_lo, y_hi = pad, 1.0 - pad
+
+        placement = offset_copy(
+            ax.transAxes,
+            fig=cast("Figure", ax.figure),
+            x=off_x,
+            y=off_y,
+            units="points",
+        )
+        bar_line.set_transform(placement)
+        if label_artist is not None:
+            label_artist.xycoords = placement
+        if frame_patch is not None:
+            frame_patch.set_transform(placement)
+
+        x_anchor, y_anchor = _LOC_FACTORS[loc_key]
+        if y_anchor <= 0.0:
+            y_bar = y_lo
+        elif y_anchor >= 1.0:
+            y_bar = y_hi
         else:
-            y_low = y_bar - pad_y
-            y_high = y_bar + text_extra + pad_y
-        ax.add_patch(
-            Rectangle(
-                (min(x_start, x_end) - pad_x, y_low),
-                abs(x_end - x_start) + 2 * pad_x,
-                max(y_high - y_low, 1e-6),
-                transform=trans,
-                facecolor=frame_color,
-                alpha=frame_alpha,
-                edgecolor="none",
-                clip_on=False,
-                zorder=zorder - 0.1,
-            )
-        )
+            y_bar = float(np.clip(y_anchor, y_lo, y_hi))
+
+        if axes_fraction <= max(x_hi - x_lo, 0.0):
+            if x_anchor >= 1.0:
+                x_end = x_hi
+                x_start = x_end - axes_fraction
+            elif x_anchor <= 0.0:
+                x_start = x_lo
+                x_end = x_start + axes_fraction
+            else:
+                center = float(
+                    np.clip(
+                        x_anchor, x_lo + axes_fraction / 2.0, x_hi - axes_fraction / 2.0
+                    )
+                )
+                x_start = center - axes_fraction / 2.0
+                x_end = center + axes_fraction / 2.0
+        else:
+            # Shortening the bar would misreport the scale, so keep the true
+            # length and say so instead of silently drawing a wrong one. Warn
+            # once, at call time: repeating this on every draw would be noise.
+            if not warned["fit"] and renderer is None:
+                warned["fit"] = True
+                warnings.warn(
+                    f"A {_format_length(bar_length)} {_UNIT_LABEL[length_unit]} "
+                    "scale bar does not fit inside the axes together with its caps "
+                    "and label; it will overflow. Use a shorter `length`, a smaller "
+                    "`frac`, or `caps=False`/`frame=False`.",
+                    stacklevel=3,
+                )
+            center = (x_lo + x_hi) / 2.0
+            x_start = center - axes_fraction / 2.0
+            x_end = center + axes_fraction / 2.0
+
+        bar_line.set_xdata([x_start, x_end])
+        bar_line.set_ydata([y_bar, y_bar])
+
+        position = label_position
+        x_center = (x_start + x_end) / 2.0
+        ha = "center"
+        text_w_pt = text_h_pt = 0.0
+        if label_artist is not None and position != "none":
+            text_w_pt, text_h_pt = _text_extent_points(ax, label, fontsize, renderer)
+            if position == "auto":
+                position = "below" if y_anchor >= 1.0 else "above"
+            band = (float(label_pad) + text_h_pt + margin_y_pt - breathing) / ax_h_pt
+            if position == "above" and y_bar + band > y_hi:
+                position = "below"
+            elif position == "below" and y_bar - band < y_lo:
+                position = "above"
+
+            text_w = text_w_pt / ax_w_pt
+            if text_w <= max(axes_fraction, 1e-9):
+                x_center = float(
+                    np.clip(x_center, x_lo + text_w / 2.0, x_hi - text_w / 2.0)
+                )
+            else:
+                # Wider label than the bar: keep it attached to the bar's inner
+                # end instead of floating in the middle of the axes.
+                if x_anchor >= 1.0:
+                    x_center, ha = x_end, "right"
+                elif x_anchor <= 0.0:
+                    x_center, ha = x_start, "left"
+                if ha == "right":
+                    x_center = max(x_center, x_lo + text_w)
+                elif ha == "left":
+                    x_center = min(x_center, x_hi - text_w)
+                else:
+                    x_center = float(
+                        np.clip(x_center, x_lo + text_w / 2.0, x_hi - text_w / 2.0)
+                    )
+
+            sign = 1.0 if position == "above" else -1.0
+            label_artist.xy = (x_center, y_bar)
+            label_artist.xyann = (0.0, sign * float(label_pad))
+            label_artist.set_ha(ha)
+            label_artist.set_va("bottom" if sign > 0 else "top")
+        elif label_artist is not None:
+            label_artist.xy = (x_center, y_bar)
+
+        if frame_patch is not None:
+            pad_x = float(frame_pad) / ax_w_pt
+            pad_y = float(frame_pad) / ax_h_pt
+            if label_artist is not None and position != "none":
+                text_extra = (float(label_pad) + text_h_pt) / ax_h_pt
+            else:
+                text_extra = 0.0
+            if position == "below":
+                y_low = y_bar - text_extra - pad_y
+                y_high = y_bar + pad_y
+            else:
+                y_low = y_bar - pad_y
+                y_high = y_bar + text_extra + pad_y
+            frame_patch.set_xy((min(x_start, x_end) - pad_x, y_low))
+            frame_patch.set_width(abs(x_end - x_start) + 2 * pad_x)
+            frame_patch.set_height(max(y_high - y_low, 1e-6))
+
+    placer = _ScaleBarPlacer(_place, zorder=zorder - 0.2)
+    ax.add_artist(placer)
+    _place(None)  # so the artists are sane before the first draw
 
     return {
         "length": bar_length,
