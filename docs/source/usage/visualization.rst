@@ -606,9 +606,15 @@ To pick the center interactively instead of typing coordinates:
    drawing primitive; pass ``radius_unit="um"`` together with ``adata`` (or
    ``microns_per_unit``) whenever the two figures must agree.
 
-A complete runnable walkthrough on Atera kidney data — read, overview, circular
-ROI, multi-radius comparison and the overview+zoom composite — is in
-:doc:`../notebooks/Atera_spatial_roi_demo`.
+The scale bar itself is clamped against the axes: caps, label and backing frame
+are measured and re-placed on every draw, so ``tight_layout()``,
+``savefig(bbox_inches="tight")`` and window resizes cannot push them over the
+spine.
+
+A complete runnable walkthrough on an Atera breast-cancer section — raw read with
+Atera's own clustering, whole-section point plots, a 2 x 3 lattice of circular
+ROIs, the ROIs versus the remaining tissue, per-ROI distance maps, and cell
+polygons at a smaller radius — is in :doc:`../notebooks/Atera_spatial_roi_demo`.
 
 
 Interactive ROI Selection (Jupyter / matplotlib)
