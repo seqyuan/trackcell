@@ -1,5 +1,71 @@
 Changelog
 
+Version 0.4.6
+-------------
+
+**Upgrade note** — ``scalebar`` lengths carrying a unit suffix other than µm/px now
+raise ``ValueError`` instead of being silently converted to micrometres. A script
+that passed ``"20mm"`` was drawing a 20 µm bar, not a 20 mm one; convert to a µm
+length or pass ``microns_per_unit=``.
+
+**Fixed**:
+
+* ``pl.add_scale_bar`` read an unknown unit suffix as micrometres: ``length="20mm"``
+  drew a bar labelled *20 µm* — a 1000× error that renders perfectly, with no
+  warning. ``"50nm"``, ``"3in"`` and ``"50%"`` behaved the same way. Unknown
+  suffixes now raise, and so does a misspelled ``unit=`` (``"micronz"``), which was
+  the only ``add_scale_bar`` argument left unvalidated while ``loc`` and
+  ``label_position`` already raised.
+* A bare numeric *string* was read as pixels while the same bare *number* was read
+  as micrometres: the empty suffix matched ``""`` in the pixel-alias set, so
+  ``length=50`` drew 50 µm but ``length="50"`` drew 50 px — a 3× difference on a
+  Visium HD object (0.32512 µm/px) with only a pair of quotes to explain it. Both
+  spellings now mean micrometres.
+* ``pl.add_scale_bar`` no longer draws outside the axes. The bar is clamped in
+  points (caps, stroke, label, backing frame) and, because ``tight_layout()``,
+  ``savefig(bbox_inches="tight")``, ``set_aspect("equal")`` and window resizes
+  move the axes box *after* the call, the geometry is recomputed by a placer
+  artist on every draw. Reported symptom: caps and label sitting on the spine or
+  cut off in saved figures.
+* ``tl._gene_utils.align_gene_frame`` deduplicated through a list membership scan,
+  2.42 s on a 20k-gene model frame (147× the equivalent ``align_gene_list``, which
+  had already been fixed). It now uses a set and selects rows by position instead
+  of rebuilding the frame from ``Series`` objects, which could also upcast column
+  dtypes. Same frame: 0.023 s, dtypes preserved column by column.
+* ``io.read_hd_bin`` read a tab-separated ``tissue_positions.csv`` with
+  ``sep=","`` — which does not raise, it returns a single column holding the whole
+  header line. The ``sep="\t"`` fallback was therefore unreachable, and the
+  failure surfaced as *"N expression barcodes are missing from tissue positions"*,
+  blaming the data for the file format. Parses are now validated against the
+  barcode + coordinates schema, and an unparseable file reports the separators it
+  tried.
+
+**Added**:
+
+* ``io.read_atera(..., load_groups=True)`` attaches Atera's own per-cell
+  clustering from ``cell_groups.csv`` into ``obs['cell_group']`` (Categorical)
+  with the vendor palette in ``uns['cell_group_colors']``, so the cluster labels
+  people actually see in Atera Explorer are available without a manual join.
+  Bundles without the file are skipped silently.
+* New notebook ``notebooks/Atera_spatial_roi_demo`` and a "Circular ROI (point +
+  physical radius)" section in ``usage/visualization``. The notebook runs on a
+  raw Atera breast-cancer bundle: Atera's own ``cell_groups.csv`` clustering,
+  whole-section point plots (``total_counts`` + ``cell_group`` side by side), a
+  2 x 3 lattice of 300 µm ROIs, the six ROIs beside the remaining tissue, six
+  distance-to-center maps coloured by physical µm, and cell polygons
+  (``spatial_cell``) at a 100 µm radius for both cluster and gene expression.
+  Scale bars follow each panel's field of view — 1000 µm, 100 µm, 50 µm.
+
+**Changed**:
+
+* Coverage no longer counts ``trackcell/benchmark`` (development scaffolding,
+  excluded from the wheel since 0.4.3). It was padding the denominator with lines
+  no user can execute: the same test run now reports 80% instead of 70%.
+* ``coverage report`` without ``--include`` no longer aborts with *"No source for
+  code"* on a transient module that a dependency ``exec``s into the working
+  directory.
+
+
 Version 0.4.5
 -------------
 
@@ -17,10 +83,6 @@ Version 0.4.5
   overview plot, the circular counterpart of ``pl.mark_region``. It shares the
   unit semantics with ``tl.cells_in_radius`` (``radius_unit='um'`` +
   ``adata``), so the annotation and the selection cannot drift apart.
-* New notebook ``notebooks/Atera_spatial_roi_demo`` and a "Circular ROI (point +
-  physical radius)" section in ``usage/visualization``: read an Atera bundle,
-  pick a center, select by radius, and plot overview + zoom with scale bars
-  whose lengths follow each panel's field of view (100 µm vs 50 µm vs 20 µm).
 
 
 Version 0.4.4

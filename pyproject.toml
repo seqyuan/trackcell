@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "trackcell"
-version = "0.4.5"
+version = "0.4.6"
 description = "A Python package for processing single-cell and spatial transcriptomics data"
 authors = ["Zan Yuan <yfinddream@gmail.com>"]
 readme = "README.md"
@@ -125,3 +125,18 @@ markers = [
     "slow: heavy tests that need external R/Seurat benchmark data (minutes)",
     "parity: golden-vector parity tests against R outputs",
 ]
+
+[tool.coverage.run]
+# ``trackcell/benchmark`` is excluded from the wheel (see ``exclude`` near the top):
+# it is development scaffolding, not shipped code. Leaving it in the denominator
+# reported 70% for a library whose shipped modules measure 79% — a number users
+# have no way to execute was penalising the score.
+omit = ["trackcell/benchmark/*"]
+
+[tool.coverage.report]
+# Some dependencies ``exec`` a transient module written into the CWD (observed here
+# as ``config.py`` / ``config-3.py``), which coverage records as a measured file but
+# cannot find on disk afterwards. Without this, a bare ``coverage report`` aborts
+# with "No source for code" instead of printing the table. The CI ratchets pass
+# ``--include=`` and never hit it; this only keeps the local report readable.
+ignore_errors = true
