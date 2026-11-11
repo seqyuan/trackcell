@@ -1,7 +1,7 @@
 Changelog
 
-Version 0.5.0 (unreleased)
-----------------------------
+Version 0.5.0
+-------------
 
 **Breaking** — the two module paths below are gone. Neither was ever part of the
 documented API, but both were reachable in 0.4.x, so this is called out.
