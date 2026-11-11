@@ -1,7 +1,7 @@
 Changelog
 
-Version 0.6.0 (unreleased)
----------------------------
+Version 0.6.0
+-------------
 
 **Internal** — no behaviour change:
 
