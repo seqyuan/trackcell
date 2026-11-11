@@ -66,6 +66,58 @@ def test_blend_accepts_integer_expression_matrix():
         assert not set(colors.iloc[:3]) & {"#ff0000", "#0000ff"}
 
 
+def test_blend_keeps_genes_expressed_below_the_percentile_tail():
+    """A gene in 0.3% of cells must not be silently dropped.
+
+    With the default 99th percentile, a gene present in fewer than 1% of cells
+    has ``vmax == 0``. The old code zeroed the whole gene, so those cells came
+    out as background — exactly the rare markers a co-expression map is used to
+    find.
+    """
+    n = 1000
+    X = np.zeros((n, 2), dtype=np.float32)
+    X[3:, 0] = np.linspace(1, 100, n - 3)  # common gene, absent in first 3 cells
+    X[:3, 1] = 10.0  # rare gene
+    adata = AnnData(X=X)
+    adata.var_names = ["common", "rare"]
+    adata.obs_names = [f"c{i}" for i in range(n)]
+
+    colors = tcl.tl.multigene_blend(
+        adata,
+        genes=["rare", "common"],
+        colors=["#ff0000", "#0000ff"],
+        inplace=False,
+    )
+
+    assert colors.iloc[:3].tolist() == ["#ff0000"] * 3
+    assert colors.iloc[-1] == "#0000ff"
+    assert colors.iloc[3:].ne("#e0e0e0").any()
+
+
+def test_blend_rejects_duplicate_genes():
+    adata = _make_adata(n_genes=3)
+    with pytest.raises(ValueError, match="duplicates"):
+        tcl.tl.multigene_blend(adata, genes=["g0", "g0"])
+
+
+def test_blend_rejects_negative_expression():
+    adata = _make_adata(n_genes=3)
+    adata.X[0, 0] = -1.0
+    with pytest.raises(ValueError, match="non-negative"):
+        tcl.tl.multigene_blend(adata, genes=["g0", "g1"])
+
+
+def test_blend_normalises_colour_names_and_validates_gamma():
+    adata = _make_adata(n_genes=3)
+    colors = tcl.tl.multigene_blend(
+        adata, genes=["g0", "g1"], colors=["red", "blue"], inplace=False
+    )
+    assert colors.attrs["colors"] == ["#ff0000", "#0000ff"]
+
+    with pytest.raises(ValueError, match="gamma"):
+        tcl.tl.multigene_blend(adata, genes=["g0", "g1"], gamma=0)
+
+
 def _geometries(adata):
     import geopandas as gpd
     from shapely.geometry import box

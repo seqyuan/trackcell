@@ -170,6 +170,12 @@ def multigene_blend(
     of per-gene base colors. The result is a hex color per cell stored in
     ``adata.obs[key_added]``, usable with ``spatial_cell(color=key_added)``.
 
+    The blend encodes **relative composition**, not absolute expression level:
+    because the per-gene weights sum to 1, a cell with one UMI of gene A and a
+    cell with 1,000 UMIs of gene A get the same colour when no other gene is
+    expressed. Use ``mode='facet'`` (or a single-gene ``spatial_cell`` plot) when
+    intensity matters.
+
     **Mode 'facet'**: Draws faceted subplots, one gene per panel, each using
     a single-hue colormap (white → gene color). Returns matplotlib axes.
 
@@ -238,11 +244,27 @@ def multigene_blend(
     n_genes = len(genes)
     if n_genes < 2:
         raise ValueError(f"Need at least 2 genes, got {n_genes}")
+    if len(set(genes)) != n_genes:
+        raise ValueError(f"`genes` contains duplicates: {genes}")
+    if not (0 <= vmin_percentile < vmax_percentile <= 100):
+        raise ValueError(
+            "Need 0 <= vmin_percentile < vmax_percentile <= 100, got "
+            f"({vmin_percentile}, {vmax_percentile})"
+        )
 
     # Validate genes
     missing = [g for g in genes if g not in adata.var_names]
     if missing:
         raise ValueError(f"Genes not found in adata.var_names: {missing}")
+
+    # Normalise colours early: matplotlib accepts names and RGB tuples, but the
+    # blend math needs hex and ``params['colors']`` is what the legend reads.
+    from matplotlib.colors import is_color_like, to_hex
+
+    if colors is not None and len(colors) != n_genes:
+        raise ValueError(
+            f"colors length ({len(colors)}) must match genes length ({n_genes})"
+        )
 
     # Default colors
     if colors is None:
@@ -252,14 +274,18 @@ def multigene_blend(
             # Extend the palette beyond the 7 hand-picked colours.  A cyclic
             # qualitative map keeps genes distinguishable for 8-20 genes.
             from matplotlib import colormaps
-            from matplotlib.colors import to_hex
 
             cmap = colormaps.get_cmap("tab20" if n_genes <= 20 else "hsv")
             colors = [to_hex(cmap(i / max(n_genes, 1))) for i in range(n_genes)]
-    elif len(colors) != n_genes:
-        raise ValueError(
-            f"colors length ({len(colors)}) must match genes length ({n_genes})"
-        )
+
+    normalized_colors = []
+    for color in colors:
+        if not is_color_like(color):
+            raise ValueError(
+                f"`colors` contains {color!r}, which is not a matplotlib colour."
+            )
+        normalized_colors.append(to_hex(color))
+    colors = normalized_colors
 
     if mode == "facet":
         return _multigene_facet(
@@ -289,6 +315,14 @@ def multigene_blend(
             f'Consider using <= 7 genes or mode="facet".'
         )
 
+    if not np.isfinite(gamma) or gamma <= 0:
+        raise ValueError(f"`gamma` must be a positive finite number, got {gamma!r}.")
+    if not is_color_like(background):
+        raise ValueError(
+            f"`background` must be a matplotlib colour, got {background!r}."
+        )
+    background = to_hex(background)
+
     # ── Extract expression matrix ──
     X = adata[:, genes].X if layer is None else adata[:, genes].layers[layer]
     # ``issparse`` rather than ``hasattr(X, 'toarray')``: AnnData's dense
@@ -298,6 +332,13 @@ def multigene_blend(
     if issparse(X):
         X = X.toarray()
     X = np.asarray(X, dtype=float)
+    if not np.isfinite(X).all():
+        raise ValueError("Expression matrix contains non-finite values.")
+    if (X < 0).any():
+        raise ValueError(
+            "multigene_blend needs non-negative expression values; "
+            "scaled/centred layers produce meaningless colour mixtures."
+        )
 
     n_cells = X.shape[0]
 
@@ -308,8 +349,16 @@ def multigene_blend(
     X_norm = np.zeros_like(X, dtype=float)
     for j in range(n_genes):
         col = X[:, j]
-        vmin = np.percentile(col, vmin_percentile)
-        vmax = np.percentile(col, vmax_percentile)
+        vmin = float(np.percentile(col, vmin_percentile))
+        vmax = float(np.percentile(col, vmax_percentile))
+        # A gene expressed in fewer cells than the upper tail of the percentile
+        # range (e.g. 3 cells in 1000 with vmax_percentile=99) has vmax == 0.
+        # Falling through would zero the whole gene and paint its cells as
+        # background, silently dropping exactly the rare markers a co-expression
+        # map is often used to find. Fall back to the observed range.
+        if vmax <= vmin:
+            vmax = float(col.max())
+            vmin = min(vmin, float(col.min()))
         if vmax > vmin:
             col_clipped = np.clip(col, vmin, vmax)
             X_norm[:, j] = (col_clipped - vmin) / (vmax - vmin)

@@ -1,5 +1,33 @@
 Changelog
 
+Version 0.6.2 (unreleased)
+---------------------------
+
+**Fixed** — multi-gene blend rendering:
+
+* ``spatial_cell`` now draws a raw per-cell colour column as **one**
+  ``PatchCollection`` instead of one collection per unique colour. A typical
+  ``tl.multigene_blend`` result has one colour per cell, so 600 cells meant 600
+  collections (~49 s) and 5,000 cells effectively never finished; a single
+  collection draws 5,000 cells in ~1.1 s. The render-smoke test now asserts one
+  collection with many facecolors instead of one collection per colour.
+
+* ``tl.multigene_blend`` falls back to the observed range when a gene's
+  ``vmax_percentile`` is zero. A gene expressed in fewer cells than the upper
+  percentile tail (e.g. 3 of 1,000 at 99th percentile) used to be zeroed
+  entirely, so its cells were painted as background — exactly the rare markers
+  a co-expression map is often used to find.
+
+* ``pl.multigene_blend`` reads ``uns['<key>_params']`` through the same
+  ``_as_uns_mapping`` helper as palettes, so an AnnData that packs the dict into
+  a 0-d object array during subset/copy no longer raises ``AttributeError``.
+
+* ``tl.multigene_blend`` validates duplicate gene names, negative/non-finite
+  expression values, ``gamma``, percentile order and colour arguments, and
+  normalises matplotlib colour names to hex before storing them. The docstring
+  and the usage page now state explicitly that the blend encodes relative
+  composition, not absolute expression intensity.
+
 Version 0.6.1
 -------------
 

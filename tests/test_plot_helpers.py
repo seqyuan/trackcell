@@ -513,6 +513,24 @@ def test_palette_from_uns_ignores_empty_mapping():
     plt.close(ax.figure)
 
 
+def test_raw_hex_column_draws_one_collection():
+    """Per-cell colours must be one PatchCollection, not one per colour."""
+    from matplotlib.colors import to_hex
+
+    n = 50
+    adata = _categorical_adata([f"g{i}" for i in range(n)])
+    hexes = [f"#{i:02x}0000" for i in range(n)]
+    adata.obs["blend"] = hexes
+
+    ax = spatial_cell(adata, color="blend", show=False, legend=False)
+
+    assert len(ax.collections) == 1
+    faces = ax.collections[0].get_facecolors()
+    assert len(faces) == n
+    assert [to_hex(face) for face in faces] == hexes
+    plt.close(ax.figure)
+
+
 def test_palette_from_uns_survives_anndata_category_pruning():
     """``adata[mask].copy()`` prunes ``uns['<key>_colors']`` to the surviving groups.
 

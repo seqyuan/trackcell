@@ -18,6 +18,7 @@ matplotlib.use("Agg")
 from pathlib import Path
 
 import matplotlib.pyplot as plt
+import numpy as np
 import pandas as pd
 import pytest
 from matplotlib.patches import Patch
@@ -85,6 +86,17 @@ def test_spatial_cell_alone_produces_no_legend():
 
 
 # ── nothing is recomputed ───────────────────────────────────────────────────
+
+
+def test_legend_survives_params_packed_as_object_array():
+    """AnnData may wrap a ``uns`` dict in a 0-d object array on subset/copy."""
+    adata = _blended()
+    params = dict(adata.uns["multigene_blend_params"])
+    adata.uns["multigene_blend_params"] = np.array([params], dtype=object)
+
+    ax = tcl.pl.multigene_blend(adata, show=False)
+
+    assert _legend_labels(ax) == GENES
 
 
 def test_does_not_recompute_the_blend():
@@ -269,6 +281,27 @@ def test_rendered_facecolors_are_the_blends_not_the_categorical_palette():
     # palette colour such as tab10 blue.
     assert len(unique) == 1, unique
     assert np.allclose(unique[0], 1.0), unique
+
+
+def test_per_cell_colours_preserve_row_order_in_one_collection():
+    """A single PatchCollection must carry the colours in adata.obs order.
+
+    Grouping by unique colour used to create one collection per cell (600 cells
+    -> 600 collections). Drawing them all at once must not shuffle them.
+    """
+    from matplotlib.colors import to_hex
+
+    adata = _blended()
+    expected = adata.obs["multigene_blend"].tolist()
+
+    ax = tcl.pl.multigene_blend(adata, show=False)
+
+    collections = [
+        c for c in ax.collections if hasattr(c, "get_facecolor") and len(c.get_paths())
+    ]
+    assert len(collections) == 1
+    observed = [to_hex(rgba) for rgba in collections[0].get_facecolors()]
+    assert observed == expected
 
 
 def test_ordinary_blend_does_not_advertise_an_unused_background_swatch():
