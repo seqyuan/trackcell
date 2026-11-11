@@ -50,7 +50,9 @@ The resulting AnnData object contains:
 * Gene metadata in ``.var`` (gene_ids, feature_types)
 * Spatial coordinates in ``.obsm["spatial"]``
 * Cell polygons in ``.uns["spatial"][sample]["geometries"]`` (GeoDataFrame)
-* Cell boundary arrays in ``.uns["cell_boundaries"]`` (compact vertex arrays)
+* Cell boundary arrays in ``.uns["cell_boundaries"]`` (compact vertex arrays,
+  ``layout='offset'``: ``cell_idx`` is a vertex start offset and ``n_vertices``
+  is row-aligned)
 * Nucleus boundary arrays in ``.uns["nucleus_boundaries"]`` (if available)
 * WKT geometry strings in ``.obs["geometry"]`` (for serialization)
 * Experiment metadata in ``.uns["experiment"]``
@@ -157,6 +159,16 @@ The resulting AnnData object contains:
 * Scalefactors in ``.uns["spatial"][sample]["scalefactors"]``
 * Cell geometries in ``.uns["spatial"][sample]["geometries"]`` (GeoDataFrame)
 * Cell geometries in ``.obs["geometry"]`` (WKT strings for serialization)
+
+.. note::
+
+   The GeoDataFrame carries **no CRS**. SpaceRanger GeoJSON coordinates are
+   full-resolution image pixels, in the same Cartesian frame as
+   ``obsm["spatial"]``; the GeoJSON default of WGS84 (EPSG:4326) is deliberately
+   dropped. Use ``scalefactors["microns_per_pixel"]`` for physical units.
+   Keeping the false geographic CRS made every plot fall back to
+   ``aspect="equal"`` with an "Aspect calculation failed" warning, and made
+   ``geometries.area`` return square degrees.
 
 Reading Bin-Level Data (2um/8um/16um)
 --------------------------------------
@@ -334,6 +346,9 @@ A typical STOmics pipeline output looks like:
        └── B02825B2.cellbin.gem           # cellbin 表达矩阵 (文本)
 
 **物理分辨率**: 1 GEF 坐标单位 = 500nm = 0.5μm。图像像素与 GEF 坐标 1:1 对齐。
+``tcl.pl.resolve_microns_per_unit`` reads ``metadata['pixel_size_um']``, so
+physical-distance helpers (``cells_in_radius``, scale bars, ``mark_circle``,
+``hd_labeldist``) convert GEF units automatically; you do not pass a factor.
 
 Read Cellbin Data
 ~~~~~~~~~~~~~~~~~

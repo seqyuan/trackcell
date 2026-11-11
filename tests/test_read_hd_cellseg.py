@@ -41,6 +41,8 @@ def test_read_hd_cellseg_happy_path(hd_cellseg_bundle):
     geometries = spatial["geometries"]
     assert isinstance(geometries, gpd.GeoDataFrame)
     assert len(geometries) == adata.n_obs == 3
+    # GeoJSON's default WGS84 must not leak onto pixel coordinates.
+    assert geometries.crs is None
     assert spatial["images"]["hires"].shape == (12, 16, 3)
     # spot_diameter_fullres was absent from the scalefactors JSON, so the
     # reader estimates it as fiducial_diameter_fullres / 40.
@@ -159,3 +161,27 @@ def test_read_hd_cellseg_classification_metadata(hd_cellseg_bundle):
         "B cell": "#ff0000",
         "T cell": "#0080ff",
     }
+
+
+def test_read_hd_cellseg_without_vendor_colors_publishes_no_palette(
+    hd_cellseg_bundle,
+):
+    """A classification without colours must not publish an empty palette.
+
+    ``pl.spatial_cell`` treated ``classification_colors={}`` as a real palette,
+    warned that every category was missing, and painted them all grey.
+    """
+    write_cell_segmentations(
+        hd_cellseg_bundle / "graphclust_annotated_cell_segmentations.geojson",
+        cell_ids=SEG_CELL_IDS,
+        classification=[
+            '{"name": "B cell"}',
+            '{"name": "T cell"}',
+            '{"name": "B cell"}',
+        ],
+    )
+
+    adata = read_hd_cellseg(hd_cellseg_bundle, sample="Cse1")
+
+    assert adata.obs["classification"].tolist() == ["B cell", "T cell", "B cell"]
+    assert "classification_colors" not in adata.uns

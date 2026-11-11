@@ -617,7 +617,7 @@ def _attach_polygons(
 def _attach_compact_boundaries(
     adata: ad.AnnData, sample: str, key: str, uns_key: str
 ) -> None:
-    """Store compact polygon vertices (per-cell offsets) in ``uns``."""
+    """Store compact polygon vertices in ``uns`` using the index layout."""
     gdf = adata.uns.get("spatial", {}).get(sample, {}).get(key)
     if not isinstance(gdf, gpd.GeoDataFrame) or not len(gdf):
         return
@@ -635,6 +635,10 @@ def _attach_compact_boundaries(
         "vertex_y": vertex_y,
         "n_vertices": n_vertices,
         "cell_idx": cell_idx,
+        # ``index``: ``cell_idx`` is a polygon index into ``n_vertices`` (not a
+        # vertex offset). Xenium writes the offset layout; consumers must read
+        # this marker instead of guessing from the array contents.
+        "layout": "index",
     }
 
 

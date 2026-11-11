@@ -1,0 +1,9 @@
+{
+  "n_genes": 40,
+  "n_cells": 120,
+  "seed": 1448145,
+  "vst_flavor": "v2",
+  "sctransform_version": "0.4.3",
+  "min_variance": "umi_median",
+  "gmean_eps": 1
+}

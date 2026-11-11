@@ -68,7 +68,7 @@ Modules
 - ``pl``: plotting (``show=True`` by default, returns ``Axes``)
 """
 
-__version__ = "0.6.0"
+__version__ = "0.6.1"
 __author__ = "Zan Yuan"
 __email__ = "yfinddream@gmail.com"
 

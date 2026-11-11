@@ -1,5 +1,86 @@
 Changelog
 
+Version 0.6.1
+-------------
+
+**Fixed** — physical units:
+
+* ``tl.hd_labeldist`` now resolves the coordinate unit through
+  ``pl.resolve_microns_per_unit`` instead of maintaining a second resolver.
+  Xenium and Atera centroid coordinates are already µm; the old fallback
+  multiplied them by the morphology ``pixel_size`` (0.2125 on a typical Xenium
+  run), so every ``{label}_dist`` was 4.7× too small with no warning. Atera's
+  own documentation and ``README`` already said not to apply that factor.
+  ``coordinate_system='auto'`` now resolves to ``'data'`` for physical
+  coordinates; ``'fullres'`` is ignored with a warning and ``'hires'`` raises.
+
+* ``pl.resolve_microns_per_unit`` reads ``metadata['pixel_size_um']`` and
+  ``metadata['resolution_nm']``. STOmics GEF coordinates are resolution units
+  (500 nm by default), so ``cells_in_radius``, scale bars and ``mark_circle``
+  were 2× wrong on those objects, and ``hd_labeldist`` raised for lack of a
+  ``microns_per_pixel``. The coordinate unit is now explicit in
+  ``read_xenium_cellseg`` metadata (``coord_unit='um'``).
+
+**Fixed** — geometry and rendering:
+
+* ``read_hd_cellseg`` drops the false ``EPSG:4326`` that ``gpd.read_file``
+  assigns to GeoJSON. The coordinates are full-resolution image pixels. The
+  false CRS made ``spatial_cell`` emit an "Aspect calculation failed" warning
+  on every plot, made ``geometries.area`` return square degrees, and was
+  persisted by ``save_h5ad``.
+
+* Compact boundary tables now carry a ``layout`` marker. Xenium writes
+  ``layout='offset'`` with a row-aligned ``n_vertices``; Atera writes
+  ``layout='index'``. ``tl.split_by_slice`` supports both and also reindexes
+  ``nucleus_boundaries``. Previously an Atera object was decoded with vertex
+  offsets and silently got the wrong cells' vertices, while a Xenium object
+  with any cell lacking a boundary raised ``IndexError``.
+
+* An empty ``uns['classification_colors']`` is no longer treated as a palette.
+  ``spatial_cell`` used to warn about every category and paint them all grey
+  when the vendor GeoJSON omitted colours. ``read_hd_cellseg`` now publishes
+  the palette only when at least one colour was found.
+
+* ``tl.multigene_blend`` casts integer expression matrices to float before
+  percentile normalisation. AnnData's dense ``ArrayView`` exposes
+  ``toarray()``, so the old ``hasattr`` sparse check skipped the cast and
+  ``np.zeros_like(int_array)`` truncated most cells to the background colour.
+
+**Changed** — maintenance:
+
+* ``add_geometries_to_annohdcell_output`` installs the bin-coordinate array
+  once per worker instead of shipping it in every task tuple. On a 10⁵-cell ×
+  10⁶-bin dataset that reduced per-task pickling from the whole array to two
+  small integers; an empty cell set no longer tries to start a zero-process
+  pool.
+
+* ``RegionSelector.to_adata()`` preserves labels from a previous session for
+  cells outside the new ROIs, matching ``_save_to_adata()``.
+
+* ``tl.spatial_slice_cluster`` interprets ``eps`` in micrometres by default and
+  converts through ``pl.resolve_microns_per_unit``. The same ``eps=80`` now
+  means 80 µm on Visium HD (266.7 px at 0.3 µm/px) and STOmics (160 units),
+  not 80 raw coordinate units. Pass ``eps_unit='data'`` to keep the previous
+  raw-unit behaviour. ``uns['slice_id_params']`` records ``eps_data``.
+
+* ``io.save_h5ad`` no longer removes a pre-existing ``<key>__crs`` sidecar; only
+  the temporary value written for the file is cleaned up.
+
+**Testing**:
+
+* New ``tests/data/sct_golden`` (40 genes × 120 cells) plus
+  ``tests/test_sct_r_golden_small.py``: the Python ``vst`` is compared against
+  R ``sctransform`` step-1 parameters, regularised parameters, gene means and
+  Pearson residuals in ~2 s. This is the first SCT parity check that runs on
+  every PR; the external benchmark suite is still skipped when
+  ``TRACKCELL_BENCHMARK_ROOT`` is absent.
+
+* ``convert_annohdcell`` serial/parallel tests; CI ratchet 12% → 45%.
+
+* Docs: public-function counts (74), the mypy command in ``CONTRIBUTING``, the
+  unit-resolution order (STOmics), the boundary ``layout`` contract and the
+  deprecation-free categorical check in ``pl.plot``.
+
 Version 0.6.0
 -------------
 

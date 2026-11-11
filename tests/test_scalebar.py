@@ -70,6 +70,32 @@ def test_resolve_falls_back_to_microns_per_pixel():
     assert family == "px"
 
 
+def test_resolve_stomics_pixel_size_um():
+    """STOmics GEF coordinates are resolution units, not µm or image pixels."""
+    adata = _make_adata()
+    adata.uns["spatial"]["s"]["metadata"]["pixel_size_um"] = 0.5
+    assert resolve_microns_per_unit(adata, "s") == (0.5, "um")
+
+
+def test_resolve_stomics_resolution_nm():
+    adata = _make_adata()
+    adata.uns["spatial"]["s"]["metadata"]["resolution_nm"] = 500
+    assert resolve_microns_per_unit(adata, "s") == (0.5, "um")
+
+
+def test_resolve_physical_scale_beats_stray_microns_per_pixel():
+    """When the coordinate unit has a physical scale, use it."""
+    adata = _make_adata(mpp=0.325)
+    adata.uns["spatial"]["s"]["metadata"]["pixel_size_um"] = 0.5
+    assert resolve_microns_per_unit(adata, "s") == (0.5, "um")
+
+
+def test_resolve_explicit_pixel_hint_beats_physical_scale():
+    adata = _make_adata(mpp=0.25, coord_unit="px")
+    adata.uns["spatial"]["s"]["metadata"]["pixel_size_um"] = 0.5
+    assert resolve_microns_per_unit(adata, "s") == (0.25, "px")
+
+
 def test_resolve_defaults_to_microns_when_nothing_known():
     adata = _make_adata()
     assert resolve_microns_per_unit(adata, "s") == (1.0, "um")

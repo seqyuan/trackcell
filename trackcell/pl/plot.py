@@ -282,8 +282,10 @@ def _palette_from_uns(adata, color_key: str) -> Optional[dict]:
     stored = adata.uns[colors_key]
     mapping = _as_uns_mapping(stored)
     if mapping is not None:
-        # e.g. ``io.read_atera(load_groups=True)`` stores {group: hex}
-        return mapping
+        # e.g. ``io.read_atera(load_groups=True)`` stores {group: hex}.
+        # An empty mapping is not a palette: returning ``{}`` made
+        # ``spatial_cell`` warn about every category and paint them all grey.
+        return mapping or None
 
     colors = list(np.ravel(np.asarray(stored, dtype=object)))
     if not colors:
@@ -401,7 +403,7 @@ def _is_color_column(series: pd.Series) -> bool:
     if len(non_null) == 0:
         return False
 
-    if pd.api.types.is_categorical_dtype(non_null):
+    if isinstance(non_null.dtype, pd.CategoricalDtype):
         candidates = non_null.cat.categories
     elif pd.api.types.is_object_dtype(non_null) or pd.api.types.is_string_dtype(
         non_null

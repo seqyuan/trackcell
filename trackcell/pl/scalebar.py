@@ -164,6 +164,54 @@ def _microns_per_pixel(
     return None
 
 
+def _physical_scale_hint(
+    adata: object, library_id: Optional[str] = None
+) -> Optional[float]:
+    """Read a µm-per-coordinate-unit factor stored with the geometry metadata.
+
+    Some platforms use neither micrometres nor image pixels as their coordinate
+    unit. STOmics GEF coordinates are in resolution units (500 nm by default),
+    recorded by :func:`trackcell.io.read_sto_cellbin` as
+    ``metadata['pixel_size_um']`` and ``metadata['resolution_nm']``.
+
+    ``metadata['pixel_size']`` is deliberately **not** considered here: that key
+    is the morphology-image pixel size used by Xenium / Atera, whose centroid
+    coordinates are already micrometres. Applying it would shrink their
+    distances by that factor.
+    """
+    spatial = getattr(adata, "uns", {}).get("spatial") or {}
+    infos = (
+        [spatial.get(library_id, {})]
+        if library_id is not None
+        else list(spatial.values())
+    )
+    for info in infos:
+        if not isinstance(info, dict):
+            continue
+        metadata = info.get("metadata") or {}
+        if not isinstance(metadata, dict):
+            continue
+        for key in ("pixel_size_um", "microns_per_unit", "unit_size_um"):
+            value = metadata.get(key)
+            if value is None:
+                continue
+            try:
+                value = float(value)
+            except (TypeError, ValueError):
+                continue
+            if np.isfinite(value) and value > 0:
+                return value
+        resolution_nm = metadata.get("resolution_nm")
+        if resolution_nm is not None:
+            try:
+                value = float(resolution_nm) / 1000.0
+            except (TypeError, ValueError):
+                continue
+            if np.isfinite(value) and value > 0:
+                return value
+    return None
+
+
 def resolve_microns_per_unit(
     adata: object = None,
     library_id: Optional[str] = None,
@@ -198,10 +246,15 @@ def resolve_microns_per_unit(
 
     1. explicit ``microns_per_unit``;
     2. a ``coord_unit`` / ``spatial_units`` metadata hint (Atera, trackcell readers);
-    3. ``scalefactors['microns_per_pixel']`` (Visium / Visium HD pixels);
-    4. fallback ``1.0`` — coordinates are assumed to be in µm, which holds for
+    3. ``metadata['pixel_size_um']`` / ``metadata['resolution_nm']`` — a fixed
+       physical scale for the coordinate unit (STOmics GEF: 500 nm by default);
+    4. ``scalefactors['microns_per_pixel']`` (Visium / Visium HD pixels);
+    5. fallback ``1.0`` — coordinates are assumed to be in µm, which holds for
        Xenium, Atera and MERSCOPE outputs. Pass ``microns_per_unit`` explicitly
        to override if your object uses pixel coordinates without scalefactors.
+
+    ``metadata['pixel_size']`` is intentionally ignored: Xenium and Atera use it
+    for morphology images, while their centroid coordinates are already µm.
     """
     if microns_per_unit is not None:
         factor = float(microns_per_unit)
@@ -237,11 +290,14 @@ def resolve_microns_per_unit(
             if resolved == "px":
                 declared_px = True
                 break
+        physical_factor = _physical_scale_hint(adata, library_id)
+        if declared_px:
+            return _pixel_factor(), "px"
+        if physical_factor is not None:
+            return physical_factor, "um"
         known_factor = _microns_per_pixel(adata, library_id)
         if known_factor is not None:
             return known_factor, "px"
-        if declared_px:
-            return _pixel_factor(), "px"
 
     return 1.0, "um"
 

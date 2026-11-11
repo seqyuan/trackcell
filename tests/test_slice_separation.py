@@ -58,6 +58,37 @@ def test_spatial_slice_cluster_inplace():
     assert adata.uns["slice_id_summary"]["n_slices"] == 2
 
 
+def test_spatial_slice_cluster_converts_eps_from_um():
+    """``eps=90`` must mean 90 µm on a pixel-coordinate object (0.3 µm/px)."""
+    pytest.importorskip("sklearn")
+    adata = _make_tma_adata(n_cores=2, cells_per_core=120)
+    adata.uns["spatial"] = {"s": {"scalefactors": {"microns_per_pixel": 0.3}}}
+
+    spatial_slice_cluster(adata, eps=90, min_samples=5, min_cells=30)
+    params = adata.uns["slice_id_params"]
+    assert params["eps_data"] == pytest.approx(300.0)
+
+    expected, _ = dbscan_slice_labels(
+        adata.obsm["spatial"], eps=300.0, min_samples=5, min_cells=30
+    )
+    assert adata.obs["slice_cluster"].tolist() == expected.tolist()
+
+
+def test_spatial_slice_cluster_eps_unit_data_preserves_raw_units():
+    pytest.importorskip("sklearn")
+    adata = _make_tma_adata(n_cores=2, cells_per_core=120)
+    adata.uns["spatial"] = {"s": {"scalefactors": {"microns_per_pixel": 0.3}}}
+
+    spatial_slice_cluster(adata, eps=90, eps_unit="data", min_samples=5, min_cells=30)
+    assert adata.uns["slice_id_params"]["eps_data"] == pytest.approx(90.0)
+
+
+def test_spatial_slice_cluster_rejects_unknown_eps_unit():
+    adata = _make_tma_adata(n_cores=2, cells_per_core=20)
+    with pytest.raises(ValueError, match="eps_unit"):
+        spatial_slice_cluster(adata, eps=90, eps_unit="furlongs")
+
+
 def test_slice_cluster_summary():
     pytest.importorskip("sklearn")
     adata = _make_tma_adata(n_cores=2, cells_per_core=120)
@@ -111,6 +142,74 @@ def test_split_by_slice_reindexes_boundaries_to_the_right_cells():
     np.testing.assert_array_equal(
         adata.uns["cell_boundaries"]["cell_idx"], np.arange(n)
     )
+
+
+def test_split_by_slice_supports_per_cell_index_layout():
+    """Atera writes ``cell_idx`` as a polygon index, not a vertex offset."""
+    n = 3
+    adata = AnnData(X=np.zeros((n, 1), dtype=np.float32))
+    adata.obs_names = [f"c{i}" for i in range(n)]
+    adata.obs["slice_id"] = ["A", "A", "B"]
+    adata.uns["cell_boundaries"] = {
+        "vertex_x": np.array([0, 1, 2, 3, 4, 5], dtype=np.float32),
+        "vertex_y": np.zeros(6, dtype=np.float32),
+        "n_vertices": np.array([2, 2, 2], dtype=np.int32),
+        "cell_idx": np.array([0, 1, 2], dtype=np.int32),
+        "layout": "index",
+    }
+
+    parts = split_by_slice(adata, reindex_boundaries=True)
+
+    assert parts["A"].uns["cell_boundaries"]["vertex_x"].tolist() == [
+        0.0,
+        1.0,
+        2.0,
+        3.0,
+    ]
+    assert parts["B"].uns["cell_boundaries"]["vertex_x"].tolist() == [4.0, 5.0]
+    assert parts["B"].uns["cell_boundaries"]["layout"] == "offset"
+    assert parts["B"].uns["cell_boundaries"]["cell_idx"].tolist() == [0]
+
+
+def test_split_by_slice_offset_layout_with_missing_polygon():
+    """A cell without a boundary must not shift the remaining vertices."""
+    n = 3
+    adata = AnnData(X=np.zeros((n, 1), dtype=np.float32))
+    adata.obs_names = [f"c{i}" for i in range(n)]
+    adata.obs["slice_id"] = ["A", "A", "B"]
+    adata.uns["cell_boundaries"] = {
+        "vertex_x": np.array([0, 1, 4, 5], dtype=np.float32),
+        "vertex_y": np.zeros(4, dtype=np.float32),
+        "n_vertices": np.array([2, 0, 2], dtype=np.int32),
+        "cell_idx": np.array([0, -1, 2], dtype=np.int32),
+        "layout": "offset",
+    }
+
+    parts = split_by_slice(adata, reindex_boundaries=True)
+
+    assert parts["A"].uns["cell_boundaries"]["vertex_x"].tolist() == [0.0, 1.0]
+    assert parts["A"].uns["cell_boundaries"]["cell_idx"].tolist() == [0, -1]
+    assert parts["B"].uns["cell_boundaries"]["vertex_x"].tolist() == [4.0, 5.0]
+
+
+def test_split_by_slice_reindexes_nucleus_boundaries():
+    n = 2
+    adata = AnnData(X=np.zeros((n, 1), dtype=np.float32))
+    adata.obs_names = [f"c{i}" for i in range(n)]
+    adata.obs["slice_id"] = ["A", "B"]
+    adata.uns["nucleus_boundaries"] = {
+        "vertex_x": np.array([10.0, 20.0], dtype=np.float32),
+        "vertex_y": np.zeros(2, dtype=np.float32),
+        "n_vertices": np.array([1, 1], dtype=np.int32),
+        "cell_idx": np.array([0, 1], dtype=np.int32),
+        "layout": "index",
+    }
+
+    parts = split_by_slice(adata, reindex_boundaries=True)
+
+    assert parts["A"].uns["nucleus_boundaries"]["vertex_x"].tolist() == [10.0]
+    assert parts["B"].uns["nucleus_boundaries"]["vertex_x"].tolist() == [20.0]
+    assert parts["B"].uns["nucleus_boundaries"]["cell_idx"].tolist() == [0]
 
 
 def test_write_slice_annotation(tmp_path):

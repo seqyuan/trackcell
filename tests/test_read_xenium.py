@@ -61,8 +61,15 @@ def test_read_xenium_without_cell_boundaries_keeps_nucleus(tmp_path):
         tmp_path, sample="sample", verbose=False, include_nucleus=True
     )
     assert adata.shape == (2, 3)
+    assert adata.uns["spatial"]["sample"]["metadata"]["coord_unit"] == "um"
     assert "nucleus_boundaries" in adata.uns
     assert "geometries" not in adata.uns["spatial"]["sample"]
+    nucleus = adata.uns["nucleus_boundaries"]
+    assert nucleus["layout"] == "offset"
+    # Row-aligned: one entry per obs, not one per polygon in parquet order.
+    assert len(nucleus["n_vertices"]) == adata.n_obs
+    assert nucleus["n_vertices"].tolist() == [3, 3]
+    assert nucleus["cell_idx"].tolist() == [0, 3]
 
 
 def test_read_xenium_build_polygons_false_with_nucleus(tmp_path):

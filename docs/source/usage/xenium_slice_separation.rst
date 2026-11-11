@@ -45,7 +45,11 @@ Algorithm
 ---------
 
 1. Read cell centroids ``(x_centroid, y_centroid)`` or ``obsm['spatial']``.
-2. Run ``sklearn.cluster.DBSCAN(eps, min_samples)`` in 2D.
+2. Run ``sklearn.cluster.DBSCAN(eps, min_samples)`` in 2D. ``eps`` is in
+   micrometres by default and is converted with
+   ``pl.resolve_microns_per_unit`` (so 80 means 80 µm on Xenium/Atera, Visium
+   HD pixels and STOmics resolution units alike). Pass ``eps_unit='data'`` to
+   use raw coordinate units.
 3. Clusters with fewer than ``min_cells`` (default 1000) → ``debris``.
 4. Sort remaining clusters by mean Y, then mean X.
 5. Assign global slice IDs ``S001``–``SNNN``.
@@ -85,7 +89,10 @@ API reference
 
 ``tcl.tl.split_by_slice(adata)``
     Split into a dict of per-slice AnnData objects; reindexes
-    ``uns['cell_boundaries']`` when present.
+    ``uns['cell_boundaries']`` / ``['nucleus_boundaries']`` when present. The
+    Xenium reader writes ``layout='offset'`` (``cell_idx`` is a vertex offset,
+    ``n_vertices`` is row-aligned), and ``split_by_slice`` also understands the
+    Atera ``layout='index'`` form.
 
 ``tcl.tl.write_slice_annotation(adata, path)``
     Export CCHD-compatible ``slice_annotation.parquet``.

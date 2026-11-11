@@ -4,6 +4,7 @@ Tools for spatial analyses.
 
 import numpy as np
 import pandas as pd
+from scipy.sparse import issparse
 from scipy.spatial import cKDTree
 from scipy.spatial.distance import cdist
 from typing import Any, List, Optional
@@ -290,10 +291,13 @@ def multigene_blend(
 
     # ── Extract expression matrix ──
     X = adata[:, genes].X if layer is None else adata[:, genes].layers[layer]
-    if hasattr(X, "toarray"):
+    # ``issparse`` rather than ``hasattr(X, 'toarray')``: AnnData's dense
+    # ``ArrayView`` also exposes ``toarray``, so the old check skipped the float
+    # cast for every integer-valued ``.X`` and the normalised values were then
+    # truncated to zero by ``np.zeros_like``.
+    if issparse(X):
         X = X.toarray()
-    else:
-        X = np.asarray(X, dtype=float)
+    X = np.asarray(X, dtype=float)
 
     n_cells = X.shape[0]
 
@@ -301,7 +305,7 @@ def multigene_blend(
     base_rgb = np.array([_hex_to_rgb(c) for c in colors])  # (n_genes, 3)
 
     # ── Per-gene normalization (percentile clipping) ──
-    X_norm = np.zeros_like(X)
+    X_norm = np.zeros_like(X, dtype=float)
     for j in range(n_genes):
         col = X[:, j]
         vmin = np.percentile(col, vmin_percentile)
@@ -363,7 +367,15 @@ def _resolve_labeldist_scalefactors(
     library_id: Optional[str],
     microns_per_pixel: Optional[float],
     hires_scale: Optional[float],
-) -> tuple[str, float, Optional[float]]:
+) -> tuple[str, float, Optional[float], bool]:
+    """Return ``(library_id, um_per_unit, hires_scale, coordinates_are_pixels)``.
+
+    The factor is resolved through :func:`trackcell.pl.resolve_microns_per_unit`,
+    which is the single source of truth for coordinate units in the package. An
+    explicit ``microns_per_pixel`` is treated as a pixel-size factor (the
+    historical meaning of the argument), so callers that pass it keep the
+    fullres/hires behaviour.
+    """
     spatial_meta = adata.uns.get("spatial")
     if not spatial_meta:
         raise ValueError("`adata.uns['spatial']` is missing scalefactor information.")
@@ -384,23 +396,24 @@ def _resolve_labeldist_scalefactors(
             f"Available library_ids: {list(spatial_meta.keys())}"
         )
 
-    scalefactors = spatial_meta[library_id].get("scalefactors", {})
-    resolved_mpp = microns_per_pixel
-    if resolved_mpp is None:
-        resolved_mpp = scalefactors.get("microns_per_pixel")
-    if resolved_mpp is None:
-        # Xenium / Atera readers store pixel size in metadata (µm / pixel).
-        resolved_mpp = (spatial_meta[library_id].get("metadata") or {}).get(
-            "pixel_size"
-        )
-    if resolved_mpp is None:
-        resolved_mpp = (adata.uns.get("experiment") or {}).get("pixel_size")
-    if resolved_mpp is None or not np.isfinite(resolved_mpp) or resolved_mpp <= 0:
+    if microns_per_pixel is not None:
+        resolved_factor = float(microns_per_pixel)
+        coordinates_are_pixels = True
+    else:
+        # Deferred import keeps ``tl`` free of an import-time dependency on ``pl``.
+        from ..pl.scalebar import resolve_microns_per_unit
+
+        resolved_factor, unit_family = resolve_microns_per_unit(adata, library_id)
+        coordinates_are_pixels = unit_family == "px"
+
+    if not np.isfinite(resolved_factor) or resolved_factor <= 0:
         raise ValueError(
-            "A positive `microns_per_pixel` is required. Provide it explicitly "
-            "or include `microns_per_pixel` in scalefactors."
+            "A positive microns-per-unit factor is required. Provide "
+            "`microns_per_pixel`, or include the coordinate unit in the object's "
+            "spatial metadata."
         )
 
+    scalefactors = spatial_meta[library_id].get("scalefactors", {})
     resolved_hires_scale = hires_scale
     if resolved_hires_scale is None:
         resolved_hires_scale = scalefactors.get(
@@ -413,8 +426,9 @@ def _resolve_labeldist_scalefactors(
 
     return (
         library_id,
-        float(resolved_mpp),
+        float(resolved_factor),
         (float(resolved_hires_scale) if resolved_hires_scale is not None else None),
+        coordinates_are_pixels,
     )
 
 
@@ -470,7 +484,13 @@ def hd_labeldist(
     hires_scale: Optional[float] = None,
 ):
     """
-    Compute the distance from every cell to the nearest cell annotated with a specific label (10x HD data).
+    Compute the distance from every cell to the nearest cell annotated with a specific label.
+
+    Works for Visium HD (``obsm['spatial']`` in image pixels) and for platforms
+    whose coordinates already have a physical scale: Xenium / Atera (µm) and
+    STOmics GEF (resolution units, typically 500 nm). The conversion factor is
+    resolved through :func:`trackcell.pl.resolve_microns_per_unit`, so it cannot
+    disagree with scale bars or :func:`cells_in_radius` on the same object.
 
     Distances are reported both in the pixel coordinate system stored in `.obsm["spatial"]`
     (SpaceRanger target/hires layer) and in microns using the scalefactors embedded in
@@ -490,8 +510,9 @@ def hd_labeldist(
         Target label within `groupby` for which distances will be computed.
     inplace : bool, default True
         If True, the function adds two columns to `adata.obs`:
-        `{label}_px` (pixel distance on the hires/registered image) and
-        `{label}_dist` (physical distance in microns).
+        `{label}_px` (distance in the raw coordinate units of `obsm['spatial']`:
+        pixels for Visium HD, µm for Xenium / Atera, resolution units for STOmics)
+        and `{label}_dist` (physical distance in microns).
         If False, the function returns a dataframe with the two columns.
     method : str, default "kdtree"
         Method to use for distance computation:
@@ -502,11 +523,16 @@ def hd_labeldist(
     coordinate_system : {'auto', 'fullres', 'hires'}, default 'auto'
         Pixel coordinate system used by `adata.obsm['spatial']`. `fullres` uses
         `microns_per_pixel` directly; `hires` divides by `hires_scale`; `auto`
-        uses a heuristic and warns when ambiguous.
+        uses a heuristic and warns when ambiguous. Only meaningful for pixel
+        coordinates: when the object declares a physical unit (µm / resolution
+        units), `auto` resolves to ``'data'``, `fullres` is ignored with a
+        warning, and `hires` raises.
     library_id : str, optional
         Spatial library id in `adata.uns['spatial']`. Defaults to the first one.
     microns_per_pixel : float, optional
-        Override the value stored in scalefactors.
+        Explicit pixel size (µm per pixel). Treated as a pixel-coordinate factor,
+        so fullres/hires handling stays available. Do not pass it for Xenium /
+        Atera objects, whose coordinates are already µm.
     hires_scale : float, optional
         Override `tissue_hires_scalef` / `regist_target_img_scalef`.
 
@@ -555,7 +581,7 @@ def hd_labeldist(
     else:
         raise ValueError(f"Unknown method: {method}. Choose 'kdtree' or 'cdist'.")
 
-    resolved_library_id, resolved_mpp, resolved_hires_scale = (
+    resolved_library_id, resolved_factor, resolved_hires_scale, is_pixel = (
         _resolve_labeldist_scalefactors(
             adata,
             library_id=library_id,
@@ -565,22 +591,44 @@ def hd_labeldist(
     )
 
     resolved_coordinate_system = coordinate_system
-    if coordinate_system == "auto":
-        resolved_coordinate_system = _infer_labeldist_coordinate_system(
-            coords_all,
-            microns_per_pixel=resolved_mpp,
-            hires_scale=resolved_hires_scale,
-        )
-    elif coordinate_system == "hires" and resolved_hires_scale is None:
-        raise ValueError(
-            "coordinate_system='hires' requires `hires_scale` or a hires scale "
-            "in scalefactors."
-        )
+    if is_pixel:
+        if coordinate_system == "auto":
+            resolved_coordinate_system = _infer_labeldist_coordinate_system(
+                coords_all,
+                microns_per_pixel=resolved_factor,
+                hires_scale=resolved_hires_scale,
+            )
+        elif coordinate_system == "hires" and resolved_hires_scale is None:
+            raise ValueError(
+                "coordinate_system='hires' requires `hires_scale` or a hires scale "
+                "in scalefactors."
+            )
 
-    if resolved_coordinate_system == "hires":
-        dist_um = dist_px * (resolved_mpp / resolved_hires_scale)
+        if resolved_coordinate_system == "hires":
+            dist_um = dist_px * (resolved_factor / resolved_hires_scale)
+        else:
+            dist_um = dist_px * resolved_factor
     else:
-        dist_um = dist_px * resolved_mpp
+        # Coordinates already carry a physical scale (µm for Xenium/Atera,
+        # resolution units for STOmics). There is no fullres/hires distinction
+        # to infer, and applying the metadata `pixel_size` here was the bug that
+        # shrank Xenium distances by 0.2125.
+        if coordinate_system == "hires":
+            raise ValueError(
+                "coordinate_system='hires' is only meaningful when "
+                "`adata.obsm['spatial']` is in image pixels. This object declares "
+                "a physical coordinate unit (µm or a fixed resolution unit)."
+            )
+        if coordinate_system == "fullres":
+            warnings.warn(
+                "coordinate_system='fullres' is ignored: this object's "
+                "coordinates already have a physical scale, so there is no "
+                "fullres/hires distinction.",
+                UserWarning,
+                stacklevel=2,
+            )
+        resolved_coordinate_system = "data"
+        dist_um = dist_px * resolved_factor
 
     col_px = f"{label}_px"
     col_um = f"{label}_dist"
@@ -591,8 +639,9 @@ def hd_labeldist(
         "coordinate_system": resolved_coordinate_system,
         "requested_coordinate_system": coordinate_system,
         "library_id": resolved_library_id,
-        "microns_per_pixel": resolved_mpp,
+        "microns_per_pixel": resolved_factor,
         "hires_scale": resolved_hires_scale,
+        "unit_family": "px" if is_pixel else "um",
     }
 
     if inplace:

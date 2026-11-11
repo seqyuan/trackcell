@@ -127,9 +127,10 @@ import numpy as np
 import pandas as pd
 import trackcell as tcl
 
-# 1) 每个细胞到目标 niche 的距离（µm 与像素各一列）
-tcl.tl.hd_labeldist(adata, groupby="celltype", label="Tumor",
-                    method="kdtree", coordinate_system="fullres")
+# 1) 每个细胞到目标 niche 的距离（原始坐标单位 + µm 各一列）
+#    Visium HD 的像素坐标可显式加 coordinate_system="fullres"；
+#    Xenium / Atera / STOmics 不要传，单位会自动解析。
+tcl.tl.hd_labeldist(adata, groupby="celltype", label="Tumor", method="kdtree")
 dist = adata.obs["Tumor_dist"].to_numpy()     # µm
 
 # 2) 按距离分箱求平均表达

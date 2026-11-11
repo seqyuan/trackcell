@@ -99,11 +99,12 @@ What the AnnData contains
    ``include_nucleus`` is enabled (the default follows ``build_polygons``).
 
 ``.uns['cell_boundaries']`` / ``['nucleus_boundaries']``
-   Compact vertex arrays: ``cell_idx`` maps each ``obs`` row to an entry in
-   ``n_vertices`` (``-1`` = no polygon); ``vertex_x`` / ``vertex_y`` are
-   concatenated in that order.  Note that this is a per-cell layout and
-   differs from the offset-based layout written by
-   :func:`trackcell.io.read_xenium_cellseg`.
+   Compact vertex arrays with ``layout='index'``: ``cell_idx`` maps each
+   ``obs`` row to a **polygon index** into ``n_vertices`` (``-1`` = no
+   polygon); ``vertex_x`` / ``vertex_y`` are concatenated in that order.
+   Xenium writes the other layout, ``layout='offset'``, where ``cell_idx`` is a
+   vertex start offset and ``n_vertices`` is row-aligned. `tl.split_by_slice`
+   reads the ``layout`` marker and supports both.
 
 Filter control features before analysis
 ---------------------------------------

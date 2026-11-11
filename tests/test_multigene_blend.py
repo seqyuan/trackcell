@@ -39,6 +39,33 @@ def test_blend_inplace_stores_params():
     assert adata.uns["multigene_blend_params"]["genes"] == ["g0", "g1", "g2"]
 
 
+def test_blend_accepts_integer_expression_matrix():
+    """Integer counts must be normalised, not truncated to the background.
+
+    ``adata[:, genes].X`` is a dense ``ArrayView`` that also exposes
+    ``toarray()``; the old `hasattr` sparse check skipped the float cast, and
+    ``np.zeros_like(int_array)`` truncated every normalised value to zero.
+    """
+    from scipy.sparse import csr_matrix
+
+    values = np.array([[1, 10, 0], [2, 20, 0], [3, 30, 0], [0, 0, 0]], dtype=np.int64)
+    expected_background = "#e0e0e0"
+
+    for X in (values, csr_matrix(values)):
+        adata = AnnData(X=X.copy())
+        adata.var_names = ["g0", "g1", "g2"]
+        colors = tcl.tl.multigene_blend(
+            adata,
+            genes=["g0", "g1"],
+            colors=["#ff0000", "#0000ff"],
+            inplace=False,
+        )
+        assert colors.iloc[:3].ne(expected_background).all()
+        assert colors.iloc[3] == expected_background
+        # The expressed rows are blends, not one source colour or the background.
+        assert not set(colors.iloc[:3]) & {"#ff0000", "#0000ff"}
+
+
 def _geometries(adata):
     import geopandas as gpd
     from shapely.geometry import box

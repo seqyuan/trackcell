@@ -201,6 +201,7 @@ def save_h5ad(
     path = Path(filename)
     backup: dict[tuple[str, str], Any] = {}
     crs_added: list[tuple[str, str]] = []
+    crs_backup: dict[tuple[str, str], Any] = {}
 
     for sid in _spatial_samples(adata, None):
         info = adata.uns["spatial"][sid]
@@ -214,6 +215,10 @@ def save_h5ad(
                 crs = getattr(obj, "crs", None)
                 if crs is not None:
                     crs_key = f"{key}{CRS_SUFFIX}"
+                    # Do not destroy a sidecar the caller already had: the
+                    # temporary value is restored below, not popped.
+                    if crs_key in info and (sid, crs_key) not in crs_backup:
+                        crs_backup[(sid, crs_key)] = info[crs_key]
                     info[crs_key] = crs.to_wkt()
                     crs_added.append((sid, crs_key))
 
@@ -222,8 +227,11 @@ def save_h5ad(
     finally:
         for (sid, key), obj in backup.items():
             adata.uns["spatial"][sid][key] = obj
+        for (sid, crs_key), value in crs_backup.items():
+            adata.uns["spatial"][sid][crs_key] = value
         for sid, crs_key in crs_added:
-            adata.uns["spatial"][sid].pop(crs_key, None)
+            if (sid, crs_key) not in crs_backup:
+                adata.uns["spatial"][sid].pop(crs_key, None)
 
     return path
 

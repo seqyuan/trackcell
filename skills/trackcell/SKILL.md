@@ -25,7 +25,7 @@ import trackcell as tcl     # 惯例缩写 tcl
 | 一张玻片上有多个组织块 / TMA 多芯 | `tcl.tl.spatial_slice_cluster` |
 | 要在 Python 里做 SCTransform | `tcl.tl.sctransform` |
 
-**先读 `references/capabilities.md`** —— 那是按"需求"索引的完整能力地图（71 个公开函数）。
+**先读 `references/capabilities.md`** —— 那是按"需求"索引的完整能力地图（74 个公开函数）。
 需要可直接抄的完整代码时读 `references/recipes.md`。
 
 ## 五分钟内必须知道的三件事
@@ -51,7 +51,8 @@ import trackcell as tcl     # 惯例缩写 tcl
 ## 命名约定（用来猜函数名）
 
 - `tcl.io.*` 读 / 写 / 几何同步
-- `tcl.tl.*` 计算，默认 `inplace=True`，传 `copy=True` 拿副本
+- `tcl.tl.*` 计算，默认 `inplace=True`，传 `copy=True` 拿副本（例外：`nhood_enrichment` /
+  `diff_nhood_enrichment` 的 `copy=True` 返回结果 dict，不返回 AnnData）
 - `tcl.pl.*` 画图，默认 `show=True`，返回 `Axes`
 
 ## 已知陷阱
@@ -61,7 +62,8 @@ import trackcell as tcl     # 惯例缩写 tcl
   或 `from trackcell.tl import sctransform`。写 `import trackcell.tl.sctransform as m` 会
   抛 `ModuleNotFoundError` —— 这是故意的，比 0.4.x 静默给你一个函数要好。
 - `tcl.pl.select_regions` 需要 ipympl：先执行 `%matplotlib widget`，否则控件不响应。
-- `tcl.tl.hd_labeldist` 的 `coordinate_system='auto'` 是启发式，要求可复现就显式传 `'fullres'` 或 `'hires'`。
+- `tcl.tl.hd_labeldist` 的 `coordinate_system='auto'` 只对**像素坐标**（Visium HD）做启发式判断；
+  Xenium / Atera 的坐标已是 µm，STOmics 是 0.5µm/unit，单位会自动换算，不要再传 `microns_per_pixel`。
 
 ## 自验：不要盲写代码
 

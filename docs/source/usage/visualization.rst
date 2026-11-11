@@ -507,9 +507,12 @@ decides in this order:
 2. ``coord_unit`` / ``spatial_units`` metadata — Atera and the trackcell readers
    store ``'um'``, meaning coordinates are already micrometers (the factor is
    1.0, and ``pixel_size`` is **not** applied);
-3. ``scalefactors['microns_per_pixel']`` — Visium / Visium HD coordinates are
+3. ``metadata['pixel_size_um']`` / ``metadata['resolution_nm']`` — a fixed
+   physical scale for the coordinate unit. STOmics GEF coordinates are
+   resolution units (500 nm by default), so one unit is 0.5 µm;
+4. ``scalefactors['microns_per_pixel']`` — Visium / Visium HD coordinates are
    full-resolution image pixels, so this factor is required;
-4. fallback ``1.0`` (assume µm), which is correct for Xenium, Atera and
+5. fallback ``1.0`` (assume µm), which is correct for Xenium, Atera and
    MERSCOPE cells.
 
 If your object uses pixel coordinates but carries no scalefactors, pass the

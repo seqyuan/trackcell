@@ -20,8 +20,18 @@ Basic Usage
 
 When ``inplace=True``, the function adds two columns to ``adata.obs``:
 
-* ``{label}_px``: Distance in pixels (on the hires/registered image)
-* ``{label}_dist``: Physical distance in microns
+* ``{label}_px``: Distance in the **raw coordinate units** of
+  ``obsm['spatial']`` — pixels for Visium HD, µm for Xenium / Atera, resolution
+  units for STOmics.
+* ``{label}_dist``: Physical distance in microns.
+
+``hd_labeldist`` resolves the unit through
+:func:`tcl.pl.resolve_microns_per_unit`, the same function used by
+:func:`tcl.tl.cells_in_radius` and scale bars. Xenium and Atera centroid
+coordinates are already µm, so their morphology ``pixel_size`` is **not**
+applied; STOmics ``pixel_size_um`` is. For those platforms
+``coordinate_system='auto'`` resolves to ``'data'`` and there is no
+fullres/hires distinction.
 
 The ``method`` parameter controls the distance computation backend:
 
@@ -77,7 +87,11 @@ system explicitly:
 
 Pass ``coordinate_system='auto'`` (the default) to keep the automatic
 heuristic; a warning will be emitted when the choice is uncertain.
-You can also override individual scalefactors:
+This switch only applies to pixel coordinates (Visium / Visium HD). On Xenium,
+Atera and STOmics objects the coordinates already have a physical scale:
+``'auto'`` resolves to ``'data'``, ``'fullres'`` is ignored with a warning, and
+``'hires'`` raises, because there is no hires image scale to apply.
+You can also override individual scalefactors (pixel platforms only):
 
 .. code-block:: python
 
@@ -86,7 +100,7 @@ You can also override individual scalefactors:
        groupby="classification",
        label="Cluster-2",
        library_id="sample1",              # pick a specific spatial library
-       microns_per_pixel=0.2125,           # override from scalefactors
+       microns_per_pixel=0.2125,           # pixel size, not for Xenium/Atera
        hires_scale=0.05,                   # override tissue_hires_scalef
    )
 
@@ -96,9 +110,12 @@ The resolved parameters are stored in ``adata.uns['{label}_dist_params']``
 Coordinate Resolution Detection
 -------------------------------
 
-The function automatically detects whether coordinates are in hires or full-res resolution
-by comparing the computed tissue size with the expected chip size (6.5mm for 10X HD),
-ensuring compatibility with both SpaceRanger output and bin2cell-processed data.
+This section applies only to **pixel** coordinates (Visium / Visium HD). When
+the object declares a physical unit (Xenium / Atera µm, STOmics resolution
+units), the heuristic is skipped: there is no hires/fullres distinction to infer.
+For pixel coordinates, the function detects hires vs full-res by comparing the
+computed tissue size with the expected chip size (6.5mm for 10X HD), ensuring
+compatibility with both SpaceRanger output and bin2cell-processed data.
 
 * **Standard SpaceRanger output**: When ``hires_scale`` is 0.05-0.2, correctly identifies as hires coordinates
 * **bin2cell processed data**: When ``hires_scale`` is close to 1.0, correctly identifies as full-res coordinates

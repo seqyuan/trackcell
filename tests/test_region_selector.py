@@ -96,6 +96,29 @@ def test_save_to_adata_preserves_existing_roi_labels():
     assert adata.obs["roi"].isna().sum() == 1
 
 
+def test_to_adata_preserves_existing_roi_labels():
+    adata = _make_selector_adata()
+    adata.obs["roi"] = ["old_a", "old_a", "old_b", None]
+    fig = Figure()
+    ax = fig.add_subplot(111)
+    sel = RegionSelector(
+        adata,
+        ax=ax,
+        mode="squarebin",
+        basis="spatial",
+        valid_ids=adata.obs_names,
+        key_added="roi",
+        inplace=False,
+    )
+    sel.add_roi(np.array([[0.0, 0.0], [2.0, 0.0], [2.0, 1.0], [0.0, 1.0]]))
+    copy = sel.to_adata()
+
+    assert copy.obs["roi"].tolist()[:3] == ["ROI_1", "ROI_1", "old_b"]
+    assert copy.obs["roi"].isna().sum() == 1
+    # ``to_adata`` returns a copy; the original column is untouched.
+    assert adata.obs["roi"].tolist()[:2] == ["old_a", "old_a"]
+
+
 def test_extract_ids_repairs_self_intersecting_polygon():
     """A self-intersecting lasso must not produce arbitrary membership."""
     adata = _make_selector_adata()

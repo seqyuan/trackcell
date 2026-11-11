@@ -14,6 +14,7 @@ import numpy as np
 import pytest
 from shapely import wkt
 
+import trackcell as tcl
 from trackcell.io.read_sto import (
     _find_cellbin_gef,
     read_sto_bin,
@@ -84,6 +85,30 @@ def test_read_sto_cellbin_happy_path(sto_cellbin_bundle):
         204.0,
     )
     assert "images" not in spatial  # no 03.register/ sibling in this bundle
+
+
+def test_read_sto_cellbin_distances_use_the_500nm_coordinate_unit(sto_cellbin_bundle):
+    """GEF coordinates are resolution units (500 nm), not µm or pixels.
+
+    The default 150 µm radius must include the cell 141.4 µm away. Before the
+    unit fix the resolver returned 1.0 µm/unit, so that cell was excluded.
+    """
+    adata = read_sto_cellbin(sto_cellbin_bundle)
+
+    assert tcl.pl.resolve_microns_per_unit(adata) == (0.5, "um")
+
+    mask = tcl.tl.cells_in_radius(adata, (100.0, 200.0), radius=150, radius_unit="um")
+    assert mask.tolist() == [True, True, False]
+
+    adata.obs["grp"] = ["A", "B", "B"]
+    result = tcl.tl.hd_labeldist(
+        adata, groupby="grp", label="A", inplace=False, coordinate_system="auto"
+    )
+    np.testing.assert_allclose(
+        result["A_dist"].values,
+        [0.0, np.sqrt(200**2 + 200**2) * 0.5, np.sqrt(400**2 + 400**2) * 0.5],
+    )
+    assert result.attrs["params"]["unit_family"] == "um"
 
 
 def test_read_sto_cellbin_integer_index_var_names(sto_cellbin_bundle):

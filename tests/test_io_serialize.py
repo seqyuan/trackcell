@@ -147,3 +147,15 @@ def test_save_h5ad_does_not_leak_crs_sidecar_into_memory(tmp_path):
     assert not any(k.endswith("__crs") for k in info)
     assert isinstance(info["geometries"], gpd.GeoDataFrame)
     assert info["geometries"].crs.to_epsg() == 3857
+
+
+def test_save_h5ad_does_not_drop_a_preexisting_crs_sidecar(tmp_path):
+    """Only the temporary sidecar written for the file may be removed."""
+    adata = _make_adata()
+    gdf = adata.uns["spatial"]["sample"]["geometries"].set_crs("EPSG:3857")
+    adata.uns["spatial"]["sample"]["geometries"] = gdf
+    adata.uns["spatial"]["sample"]["geometries__crs"] = "CALLER-OWNED"
+
+    tcl.io.save_h5ad(adata, tmp_path / "crs3.h5ad")
+
+    assert adata.uns["spatial"]["sample"]["geometries__crs"] == "CALLER-OWNED"

@@ -1,6 +1,6 @@
 # trackcell 能力地图（按需求索引）
 
-> 71 个公开函数：`io` 25 / `tl` 31 / `pl` 15。
+> 74 个公开函数：`io` 25 / `tl` 33 / `pl` 16。
 > 这份文件按**你会怎么问**来索引，不按模块名索引。找不到就直接 `help(tcl.tl.<name>)`——docstring 覆盖率 88%，质量很高。
 
 ---
@@ -11,12 +11,12 @@
 
 | 需求 | 默认会做的错事 | 用这个 | 为什么 |
 |---|---|---|---|
-| 算每个细胞到某类细胞的距离 | 手写 `scipy.cdist`（O(n·m) 爆内存）或裸 cKDTree，然后忘记 µm 换算 | `tl.hd_labeldist` | kdtree O(n log n)；一次输出**两个单位**（`{label}_px` 像素 + `{label}_dist` µm） |
+| 算每个细胞到某类细胞的距离 | 手写 `scipy.cdist`（O(n·m) 爆内存）或裸 cKDTree，然后忘记 µm 换算 | `tl.hd_labeldist` | kdtree O(n log n)；一次输出**两个单位**（`{label}_px` 原始坐标单位 + `{label}_dist` µm），单位经 `resolve_microns_per_unit` 统一 |
 | 选某个圆心半径内的细胞 | 把半径当数据单位传进去（Visium HD 上是像素，差几十倍） | `tl.cells_in_radius(adata, center, radius, radius_unit='um')` | 自动经 `resolve_microns_per_unit` 换算，返回可直接 `adata[mask]` 的布尔掩码 |
-| µm ↔ 像素换算 | 自己读 `scalefactors`，或假设坐标是 µm | `pl.resolve_microns_per_unit(adata)` | 四级回退：显式值 → metadata hint → `microns_per_pixel` → 1.0，并返回 `unit_family` 告诉你到底是 µm 还是 px |
+| µm ↔ 像素换算 | 自己读 `scalefactors`，或假设坐标是 µm | `pl.resolve_microns_per_unit(adata)` | 回退顺序：显式值 → `coord_unit` → `pixel_size_um` / `resolution_nm`（STOmics）→ `microns_per_pixel` → 1.0；同时返回 `unit_family`（`um` / `px`）。`cells_in_radius` / 比例尺 / `hd_labeldist` 共用它 |
 | 画细胞轮廓图 | `sc.pl.spatial` 画散点 | `pl.spatial_cell` | 用 `uns['spatial'][sample]['geometries']` 的 GeoDataFrame 画真多边形 |
 | 画比例尺 | 手工 `ax.plot` 一条线，长度靠猜 | `pl.add_scale_bar(ax, adata, length='auto')` | `'auto'` 走 `nice_scale_length`（1/2/5×10ⁿ），单位自动解析 |
-| 拆分一张玻片上的多块组织 | 手工设 x/y 阈值切 | `tl.spatial_slice_cluster` | DBSCAN + 按空间位置排序编号 + `debris` 垃圾标签，输出 `obs['slice_id']` |
+| 拆分一张玻片上的多块组织 | 手工设 x/y 阈值切 | `tl.spatial_slice_cluster` | DBSCAN + 按空间位置排序编号 + `debris` 垃圾标签，输出 `obs['slice_id']`；`eps` 默认按 µm 自动换算（`eps_unit='data'` 用原始坐标单位） |
 | 拆完导给下游 | 手工循环存 h5ad | `tl.split_by_slice` + `tl.write_slice_annotation` | 前者重排边界，后者写 CCHD 兼容的 `slice_annotation.parquet` |
 | 挑 leiden 分辨率 | 硬编码 `resolution=0.5` 或 1.0 | `tl.select_resolution(adata, n_runs=5)` | 多次运行算稳定性，返回最优分辨率 + 完整打分表 |
 | 大 cluster 里还混着空间上断开的小块 | 忽略 | `tl.connected_components` | 按空间图连通性把 cluster 拆成连通块（`min_cells` 过滤碎片） |

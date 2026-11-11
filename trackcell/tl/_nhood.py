@@ -371,8 +371,8 @@ def diff_nhood_enrichment(
 
     Returns
     -------
-    ``None`` or dict with key ``'{c1}_{c2}'`` containing ``'enrichment'`` and
-    optionally ``'pvalue'``.
+    ``None`` or dict with key ``'{c1}_{c2}'`` containing ``'enrichment'`` and,
+    when ``pvalues=True``, ``'pvalue'`` plus BH-adjusted ``'pvalue_adj'``.
     """
     adata = adata.copy() if copy else adata
     if connectivity_key not in adata.obsp:

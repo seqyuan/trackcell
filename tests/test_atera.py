@@ -364,7 +364,9 @@ def test_read_official_schema(official_bundle):
         "vertex_y",
         "n_vertices",
         "cell_idx",
+        "layout",
     }
+    assert adata.uns["cell_boundaries"]["layout"] == "index"
     assert adata.uns["cell_boundaries"]["cell_idx"].shape == (6,)
     # store_wkt is off by default
     assert "geometry" not in adata.obs.columns

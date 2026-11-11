@@ -39,7 +39,7 @@ data.
 ```bash
 poetry run black --check trackcell tests scripts   # formatting (line length 88)
 poetry run flake8 trackcell tests scripts          # config in .flake8
-poetry run mypy trackcell                          # scoped type checks
+poetry run mypy trackcell/_logging.py trackcell/io/serialize.py   # scoped strict modules
 ```
 
 These are the **exact** commands CI runs — if they pass locally, CI's lint jobs

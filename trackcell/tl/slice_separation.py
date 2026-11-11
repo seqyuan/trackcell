@@ -13,6 +13,7 @@ Two CCHD use cases share the same sklearn DBSCAN backend:
 from __future__ import annotations
 
 import warnings
+from collections.abc import Mapping
 from pathlib import Path
 from typing import Optional, Sequence, Union
 
@@ -209,6 +210,8 @@ def spatial_slice_cluster(
     sort_spatial: bool = True,
     n_jobs: int = -1,
     copy: bool = False,
+    eps_unit: str = "um",
+    microns_per_unit: Optional[float] = None,
 ) -> Optional[AnnData]:
     """
     Annotate an AnnData object with DBSCAN-based tissue slice labels.
@@ -222,7 +225,7 @@ def spatial_slice_cluster(
     adata
         AnnData with spatial coordinates.
     eps, min_samples, min_cells, slice_start, slice_prefix, debris_label
-        Passed to :func:`dbscan_slice_labels`.
+        Passed to :func:`dbscan_slice_labels` (``eps`` after unit conversion).
     spatial_key
         Key in ``adata.obsm`` for coordinates.
     key_added
@@ -235,6 +238,15 @@ def spatial_slice_cluster(
         DBSCAN parallel jobs.
     copy
         If True, return a modified copy instead of updating in place.
+    eps_unit
+        Unit of ``eps``: ``'um'`` (default) converts through
+        :func:`trackcell.pl.resolve_microns_per_unit`, so the same ``eps=80``
+        means 80 µm on Xenium / Atera (factor 1), Visium HD (pixel coordinates,
+        factor ``microns_per_pixel``) and STOmics (resolution units). Pass
+        ``'data'`` to use raw coordinate units, which is what the function did
+        before this option existed.
+    microns_per_unit
+        Explicit µm-per-data-unit override used when ``eps_unit='um'``.
 
     Returns
     -------
@@ -244,9 +256,23 @@ def spatial_slice_cluster(
     target = adata.copy() if copy else adata
     coords = _spatial_coords(target, spatial_key=spatial_key)
 
+    unit = str(eps_unit).strip().lower()
+    if unit in ("um", "µm", "μm", "micron", "microns", "micrometers"):
+        # Deferred import: keeps ``tl`` free of an import-time dependency on ``pl``.
+        from ..pl.scalebar import resolve_microns_per_unit
+
+        factor, _ = resolve_microns_per_unit(
+            target, library_id=None, microns_per_unit=microns_per_unit
+        )
+        eps_data = float(eps) / float(factor)
+    elif unit in ("data", "pixel", "pixels", "px", "unit", "units"):
+        eps_data = float(eps)
+    else:
+        raise ValueError(f"`eps_unit` must be 'um' or 'data', got {eps_unit!r}.")
+
     clusters, slice_ids = dbscan_slice_labels(
         coords,
-        eps=eps,
+        eps=eps_data,
         min_samples=min_samples,
         min_cells=min_cells,
         slice_start=slice_start,
@@ -261,6 +287,9 @@ def spatial_slice_cluster(
 
     params = {
         "eps": eps,
+        "eps_unit": eps_unit,
+        "eps_data": eps_data,
+        "microns_per_unit": microns_per_unit,
         "min_samples": min_samples,
         "min_cells": min_cells,
         "slice_start": slice_start,
@@ -321,33 +350,46 @@ def slice_cluster_summary(
     return pd.DataFrame(rows)
 
 
-def _reindex_cell_boundaries(sub: AnnData, positions: np.ndarray) -> None:
-    """Rebuild compact cell_boundaries vertex offsets after subsetting.
+def _reindex_compact_table(
+    table: dict, positions: np.ndarray, n_obs: int
+) -> dict | None:
+    """Rebuild one compact boundary table for a subset, or return ``None``.
 
-    Parameters
-    ----------
-    sub
-        Subset AnnData (may be a view).  ``uns['cell_boundaries']`` is
-        rewritten in place.
-    positions
-        Position of each ``sub`` observation in the *original* (pre-subset)
-        AnnData, i.e. ``parent.obs_names.get_indexer(sub.obs_names)``.
-        ``uns['cell_boundaries']['cell_idx']`` is indexed by these values.
+    Two layouts are supported and identified by ``table['layout']``:
+
+    * ``'offset'`` (Xenium reader): ``cell_idx[i]`` is the vertex start offset
+      of obs row ``i``; ``n_vertices`` is row-aligned.
+    * ``'index'`` (Atera reader): ``cell_idx[i]`` is a polygon index into
+      ``n_vertices``; the vertex start is ``cumsum(n_vertices)[index]``.
+
+    Legacy tables without the marker are read as ``'offset'``, matching the
+    Xenium layout that existed before the marker was introduced.
     """
-    if "cell_boundaries" not in sub.uns:
-        return
-    cb = sub.uns["cell_boundaries"]
-    old_idx = cb["cell_idx"]
-    old_nv = cb["n_vertices"]
-    old_vx = cb["vertex_x"]
-    old_vy = cb["vertex_y"]
-    desc = cb.get("description", "")
+    old_idx = np.asarray(table["cell_idx"])
+    old_nv = np.asarray(table["n_vertices"])
+    old_vx = table["vertex_x"]
+    old_vy = table["vertex_y"]
+    layout = table.get("layout", "offset")
+
+    if layout == "index":
+        starts = np.concatenate(([0], np.cumsum(old_nv))).astype(np.int64)
+    elif layout == "offset":
+        starts = None
+    else:
+        raise ValueError(
+            f"Unknown compact-boundary layout {layout!r}; expected 'offset' or 'index'."
+        )
 
     positions = np.asarray(positions, dtype=np.int64)
-    if positions.shape[0] != sub.n_obs:
+    if positions.shape[0] != n_obs:
         raise ValueError(
             "positions must have one entry per observation in `sub` "
-            f"(got {positions.shape[0]} for n_obs={sub.n_obs})."
+            f"(got {positions.shape[0]} for n_obs={n_obs})."
+        )
+    if len(old_idx) and positions.size and positions.max() >= len(old_idx):
+        raise ValueError(
+            "compact boundary positions point past the stored table "
+            f"(max={int(positions.max())}, rows={len(old_idx)})."
         )
 
     new_nv_list: list[int] = []
@@ -356,34 +398,89 @@ def _reindex_cell_boundaries(sub: AnnData, positions: np.ndarray) -> None:
     new_cell_idx: list[int] = []
     cum = 0
 
-    for i in range(sub.n_obs):
+    for i in range(n_obs):
         pos = int(positions[i])
         if pos < 0:
             new_cell_idx.append(-1)
             new_nv_list.append(0)
             continue
-        start = int(old_idx[pos])
-        if start >= 0:
-            nv = int(old_nv[pos])
-            new_cell_idx.append(cum)
-            new_nv_list.append(nv)
-            cum += nv
-            new_vx_list.append(old_vx[start : start + nv])
-            new_vy_list.append(old_vy[start : start + nv])
-        else:
-            new_cell_idx.append(-1)
-            new_nv_list.append(0)
 
-    if new_vx_list:
-        sub.uns["cell_boundaries"] = {
-            "vertex_x": np.concatenate(new_vx_list).astype(np.float32),
-            "vertex_y": np.concatenate(new_vy_list).astype(np.float32),
-            "n_vertices": np.array(new_nv_list, dtype=np.int32),
-            "cell_idx": np.array(new_cell_idx, dtype=np.int32),
-            "description": desc,
-        }
-    else:
-        del sub.uns["cell_boundaries"]
+        if layout == "index":
+            polygon = int(old_idx[pos])
+            if polygon < 0:
+                new_cell_idx.append(-1)
+                new_nv_list.append(0)
+                continue
+            if polygon >= len(old_nv):
+                raise ValueError(
+                    f"cell_idx points at polygon {polygon}, but only "
+                    f"{len(old_nv)} polygons are stored."
+                )
+            start = int(starts[polygon])
+            nv = int(old_nv[polygon])
+        else:
+            start = int(old_idx[pos])
+            if start < 0:
+                new_cell_idx.append(-1)
+                new_nv_list.append(0)
+                continue
+            if pos >= len(old_nv):
+                raise ValueError(
+                    "This object uses the offset layout but is missing the "
+                    "row-aligned `n_vertices` array (it predates the 0.6.x "
+                    "layout marker). Re-read the vendor bundle, or rebuild "
+                    "the boundaries from `obs['geometry']`."
+                )
+            nv = int(old_nv[pos])
+
+        if nv <= 0 or start < 0 or start + nv > len(old_vx):
+            raise ValueError(
+                f"Stored boundary for row {i} is out of range "
+                f"(start={start}, nv={nv}, vertices={len(old_vx)})."
+            )
+        new_cell_idx.append(cum)
+        new_nv_list.append(nv)
+        cum += nv
+        new_vx_list.append(old_vx[start : start + nv])
+        new_vy_list.append(old_vy[start : start + nv])
+
+    if not new_vx_list:
+        return None
+
+    result = {
+        "vertex_x": np.concatenate(new_vx_list).astype(np.float32),
+        "vertex_y": np.concatenate(new_vy_list).astype(np.float32),
+        "n_vertices": np.array(new_nv_list, dtype=np.int32),
+        "cell_idx": np.array(new_cell_idx, dtype=np.int32),
+        # The subset is written in the unambiguous offset layout.
+        "layout": "offset",
+    }
+    if "description" in table:
+        result["description"] = table["description"]
+    return result
+
+
+def _reindex_cell_boundaries(sub: AnnData, positions: np.ndarray) -> None:
+    """Rebuild compact cell/nucleus boundary tables after subsetting.
+
+    Parameters
+    ----------
+    sub
+        Subset AnnData (may be a view). ``uns['cell_boundaries']`` and
+        ``uns['nucleus_boundaries']`` are rewritten in place.
+    positions
+        Position of each ``sub`` observation in the *original* (pre-subset)
+        AnnData, i.e. ``parent.obs_names.get_indexer(sub.obs_names)``.
+    """
+    for key in ("cell_boundaries", "nucleus_boundaries"):
+        table = sub.uns.get(key)
+        if not isinstance(table, Mapping):
+            continue
+        rebuilt = _reindex_compact_table(table, positions, sub.n_obs)
+        if rebuilt is None:
+            del sub.uns[key]
+        else:
+            sub.uns[key] = rebuilt
 
 
 def split_by_slice(
@@ -407,7 +504,10 @@ def split_by_slice(
     copy
         If True, each slice is a deep copy; if False, views where possible.
     reindex_boundaries
-        Rebuild ``uns['cell_boundaries']`` vertex offsets for each subset.
+        Rebuild ``uns['cell_boundaries']`` / ``['nucleus_boundaries']`` for each
+        subset. Both the Xenium ``layout='offset'`` and the Atera
+        ``layout='index'`` tables are accepted; the subset is written in the
+        offset layout.
 
     Returns
     -------

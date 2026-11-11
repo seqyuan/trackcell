@@ -5,7 +5,7 @@ Supports 10x Visium HD (SpaceRanger), 10x Xenium Analyzer and 10x Atera outputs.
 
 > Using an AI assistant (Claude Code, Cursor, pi, Copilot)? There is a
 > ready-made capability map at [`skills/trackcell/`](skills/trackcell/SKILL.md)
-> — a need-indexed guide to all 71 public functions plus runnable recipes.
+> — a need-indexed guide to all 74 public functions plus runnable recipes.
 > See [For AI assistants](#for-ai-assistants).
 
 ## Installation
@@ -416,7 +416,11 @@ tcl.pl.spatial_cell(adata, library_id="sample1")
 
 For detailed documentation, see [docs/convert_annohdcell.md](docs/convert_annohdcell.md)
 
-### Computing Distances to a Label (10x HD)
+### Computing Distances to a Label
+
+Works on Visium HD (pixel coordinates), Xenium / Atera (µm) and STOmics
+(resolution units); the unit is resolved through
+`tcl.pl.resolve_microns_per_unit`, so `{label}_dist` is always µm.
 
 ```python
 # Compute distance to a specific annotation label stored in adata.obs["group_col"]

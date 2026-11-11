@@ -494,6 +494,25 @@ def test_palette_from_uns_survives_subset_and_copy():
     plt.close(ax.figure)
 
 
+def test_palette_from_uns_ignores_empty_mapping():
+    """An empty vendor palette is not a palette; use the default one."""
+    import warnings
+
+    from trackcell.pl.plot import _palette_from_uns
+
+    adata = _categorical_adata(["A", "B"])
+    adata.uns["cell_group_colors"] = {}
+
+    assert _palette_from_uns(adata, "cell_group") is None
+
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        ax = spatial_cell(adata, color="cell_group", show=False)
+    assert not any("missing colors" in str(w.message) for w in caught)
+    assert len(set(_fill_colors(ax, ["A", "B"]).values())) == 2
+    plt.close(ax.figure)
+
+
 def test_palette_from_uns_survives_anndata_category_pruning():
     """``adata[mask].copy()`` prunes ``uns['<key>_colors']`` to the surviving groups.
 

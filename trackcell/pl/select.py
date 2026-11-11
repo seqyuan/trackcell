@@ -633,8 +633,11 @@ class RegionSelector:
 
         ad = _copy.deepcopy(self.adata)
         key = self.key_added
-        ad.obs[key] = None
-        ad.obs[key] = ad.obs[key].astype(object)
+        if key in ad.obs.columns:
+            # Keep labels from a previous session for cells outside the new ROIs.
+            ad.obs[key] = ad.obs[key].astype(object)
+        else:
+            ad.obs[key] = pd.Series([None] * ad.n_obs, index=ad.obs_names, dtype=object)
         for roi_name, ids in self.rois.items():
             ad.obs.loc[ids, key] = roi_name
         return ad

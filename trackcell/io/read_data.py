@@ -406,6 +406,8 @@ def read_hd_cellseg(
         - Tissue images in .uns["spatial"][sample]["images"]
         - Scalefactors in .uns["spatial"][sample]["scalefactors"]
         - Cell geometries in .uns["spatial"][sample]["geometries"] (GeoDataFrame)
+          with **no CRS**: coordinates are full-resolution image pixels, the same
+          frame as ``obsm["spatial"]``.
         - Cell geometries in .obs["geometry"] (WKT strings for serialization)
 
     Examples
@@ -465,6 +467,13 @@ def read_hd_cellseg(
         seg_file_path = datapath / found_file
 
     gdf_seg = gpd.read_file(seg_file_path)
+    # GeoJSON has no CRS member, so geopandas assigns WGS84 (EPSG:4326) by the
+    # RFC 7946 default. These coordinates are **full-resolution image pixels**,
+    # not longitude/latitude: keeping the false CRS made geopandas compute a
+    # geographic aspect (``1 / cos(y)``) and raised "aspect must be finite and
+    # positive" on every plot, and made ``.area`` return square degrees. Drop the
+    # CRS so geometry and ``obsm['spatial']`` share one Cartesian frame.
+    gdf_seg = gdf_seg.set_crs(None, allow_override=True)
     df = pd.DataFrame(gdf_seg)
 
     if "cell_id" not in df.columns:
@@ -541,9 +550,13 @@ def read_hd_cellseg(
         adata.obs["classification"] = [
             _classification_name(item) for item in classifications
         ]
-        adata.uns["classification_colors"] = convert_classification_to_color_dict(
-            df, "classification"
-        )
+        # Only publish a palette when the vendor actually supplied colours. An
+        # empty dict is not a palette: ``pl.spatial_cell`` used to treat it as
+        # one and paint every category grey while warning that all colours were
+        # missing.
+        colors = convert_classification_to_color_dict(df, "classification")
+        if colors:
+            adata.uns["classification_colors"] = colors
 
     # Read tissue images
     try:
@@ -699,8 +712,10 @@ def read_xenium_cellseg(
         - Gene metadata in .var (gene_ids, feature_types)
         - Spatial coordinates in .obsm['spatial']
         - Cell polygons in .uns['spatial'][sample]['geometries'] (GeoDataFrame)
-        - Cell boundary arrays in .uns['cell_boundaries'] (compact vertex arrays)
-        - Nucleus boundary arrays in .uns['nucleus_boundaries'] (if available)
+        - Cell boundary arrays in .uns['cell_boundaries'] (compact vertex arrays,
+          ``layout='offset'`` with a row-aligned ``n_vertices``)
+        - Nucleus boundary arrays in .uns['nucleus_boundaries'] (if available,
+          same layout)
         - WKT geometry strings in .obs['geometry'] (for serialization)
         - Experiment metadata in .uns['experiment']
 
@@ -886,8 +901,16 @@ def read_xenium_cellseg(
         log(f"  Loaded {len(bd_df):,} boundary vertices [{time.time()-t0:.1f}s]")
 
         t1 = time.time()
-        # Single pass: build both compact arrays and polygons
-        n_vertices_list, all_vx, all_vy = [], [], []
+        # Single pass: build both compact arrays and polygons.
+        #
+        # ``layout='offset'``: ``cell_idx[i]`` is the vertex start offset for
+        # obs row ``i`` (-1 when the cell has no boundary) and ``n_vertices[i]``
+        # is row-aligned, so every row can be decoded on its own. Keeping
+        # ``n_vertices`` in parquet-group order made the table impossible to
+        # read back by row once a cell lacked a boundary (and made
+        # ``split_by_slice`` raise IndexError).
+        n_vertices_arr = np.zeros(len(common_cells), dtype=np.int32)
+        all_vx, all_vy = [], []
         cell_to_bd_idx = np.full(len(common_cells), -1, dtype=np.int32)
         polygons = {}
         cum_vertices = 0
@@ -902,7 +925,7 @@ def read_xenium_cellseg(
             # Compact arrays
             cell_to_bd_idx[idx] = cum_vertices
             nv = len(vx)
-            n_vertices_list.append(nv)
+            n_vertices_arr[idx] = nv
             cum_vertices += nv
             all_vx.append(vx)
             all_vy.append(vy)
@@ -917,8 +940,9 @@ def read_xenium_cellseg(
             adata.uns["cell_boundaries"] = {
                 "vertex_x": np.concatenate(all_vx).astype(np.float32),
                 "vertex_y": np.concatenate(all_vy).astype(np.float32),
-                "n_vertices": np.array(n_vertices_list, dtype=np.int32),
+                "n_vertices": n_vertices_arr,
                 "cell_idx": cell_to_bd_idx,
+                "layout": "offset",
             }
         del bd_df
         gc.collect()
@@ -939,7 +963,8 @@ def read_xenium_cellseg(
         nuc_df = pd.read_parquet(nuc_path)
         nuc_grouped = nuc_df.groupby("cell_id", sort=False)
 
-        nuc_nv_list, nuc_vx, nuc_vy = [], [], []
+        nuc_nv_arr = np.zeros(len(common_cells), dtype=np.int32)
+        nuc_vx, nuc_vy = [], []
         nuc_to_idx = np.full(len(common_cells), -1, dtype=np.int32)
         cum_nuc = 0
 
@@ -949,7 +974,7 @@ def read_xenium_cellseg(
                 vy = group["vertex_y"].values
                 idx = cell_idx_map[cell_id]
                 nuc_to_idx[idx] = cum_nuc
-                nuc_nv_list.append(len(vx))
+                nuc_nv_arr[idx] = len(vx)
                 cum_nuc += len(vx)
                 nuc_vx.append(vx)
                 nuc_vy.append(vy)
@@ -958,8 +983,9 @@ def read_xenium_cellseg(
             adata.uns["nucleus_boundaries"] = {
                 "vertex_x": np.concatenate(nuc_vx).astype(np.float32),
                 "vertex_y": np.concatenate(nuc_vy).astype(np.float32),
-                "n_vertices": np.array(nuc_nv_list, dtype=np.int32),
+                "n_vertices": nuc_nv_arr,
                 "cell_idx": nuc_to_idx,
+                "layout": "offset",
             }
         del nuc_df
         gc.collect()
@@ -978,11 +1004,16 @@ def read_xenium_cellseg(
             adata.uns["gene_panel"] = json.load(f)
 
     # ── 10. Setup spatial metadata (squidpy-compatible) ──
+    # ``coord_unit='um'`` is load-bearing: Xenium centroids are micrometres, so
+    # consumers must not apply the morphology ``pixel_size`` to them. It also
+    # lets ``pl.resolve_microns_per_unit`` (and therefore scale bars /
+    # ``tl.cells_in_radius`` / ``tl.hd_labeldist``) agree on the unit.
     adata.uns["spatial"] = {
         sample: {
             "metadata": {
                 "sample_id": sample,
                 "pixel_size": adata.uns.get("experiment", {}).get("pixel_size", 0.2125),
+                "coord_unit": "um",
             },
             "scalefactors": {
                 "spot_diameter_fullres": 1.0,

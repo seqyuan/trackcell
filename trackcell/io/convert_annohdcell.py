@@ -90,6 +90,23 @@ def bins_to_cell_polygon(
     return polygon
 
 
+# Per-worker state for ``add_geometries_to_annohdcell_output``. The bin
+# coordinates array can be hundreds of MB; passing it in every task tuple made
+# ``Pool.map`` pickle it once per cell (10^5 cells x 10^6 bins is terabytes of
+# IPC). The initializer ships it once per worker instead.
+_POLYGON_WORKER_STATE: dict = {}
+
+
+def _init_polygon_worker(
+    spatial_coords: np.ndarray,
+    bin_size_um: float,
+    microns_per_pixel: Optional[float],
+) -> None:
+    _POLYGON_WORKER_STATE["spatial_coords"] = spatial_coords
+    _POLYGON_WORKER_STATE["bin_size_um"] = bin_size_um
+    _POLYGON_WORKER_STATE["microns_per_pixel"] = microns_per_pixel
+
+
 def _create_polygon_for_cell(args):
     """
     Helper function for parallel polygon creation.
@@ -97,16 +114,20 @@ def _create_polygon_for_cell(args):
     Parameters
     ----------
     args : tuple
-        (cell_id, bin_indices, spatial_coords, bin_size_um, microns_per_pixel)
+        ``(cell_id, bin_indices)``. The coordinate array and bin geometry are
+        installed once per worker by :func:`_init_polygon_worker`.
 
     Returns
     -------
     tuple
         (cell_id, polygon)
     """
-    cell_id, bin_indices, spatial_coords, bin_size_um, microns_per_pixel = args
-    bin_coords = spatial_coords[bin_indices]
-    polygon = bins_to_cell_polygon(bin_coords, bin_size_um, microns_per_pixel)
+    cell_id, bin_indices = args
+    state = _POLYGON_WORKER_STATE
+    bin_coords = state["spatial_coords"][bin_indices]
+    polygon = bins_to_cell_polygon(
+        bin_coords, state["bin_size_um"], state["microns_per_pixel"]
+    )
     return cell_id, polygon
 
 
@@ -518,9 +539,12 @@ def add_geometries_to_annohdcell_output(
     for label in cell_to_bins:
         cell_to_bins[label] = np.array(cell_to_bins[label], dtype=np.int32)
 
-    # Prepare arguments for parallel processing
+    # Prepare arguments for parallel processing. Only the cell id and its bin
+    # indices travel per task; the coordinate array is installed once per worker
+    # by ``_init_polygon_worker``.
     args_list = []
     cell_label_to_obs_idx = {}  # Map cell label to obs index
+    mp = microns_per_pixel if buffer_polygons else None
 
     for idx, label in enumerate(cell_labels):
         cell_label_to_obs_idx[label] = idx
@@ -530,23 +554,24 @@ def add_geometries_to_annohdcell_output(
             )
             continue
 
-        bin_indices = cell_to_bins[label]
-        mp = microns_per_pixel if buffer_polygons else None
-        args_list.append((label, bin_indices, spatial_bin, bin_size_um, mp))
+        args_list.append((label, cell_to_bins[label]))
 
     logger.info("Processing %s cells with bins...", len(args_list))
 
-    # Process in parallel or serial depending on n_jobs
-    if n_jobs == 1:
-        # Serial processing
+    # Process in parallel or serial depending on n_jobs.
+    if not args_list:
         results = []
-        for args in args_list:
-            results.append(_create_polygon_for_cell(args))
+    elif n_jobs == 1:
+        _init_polygon_worker(spatial_bin, bin_size_um, mp)
+        results = [_create_polygon_for_cell(args) for args in args_list]
     else:
-        # Parallel processing
-        actual_jobs = min(n_jobs if n_jobs > 0 else cpu_count(), len(args_list))
+        actual_jobs = max(1, min(n_jobs if n_jobs > 0 else cpu_count(), len(args_list)))
         logger.info("Using %s parallel workers", actual_jobs)
-        with Pool(processes=actual_jobs) as pool:
+        with Pool(
+            processes=actual_jobs,
+            initializer=_init_polygon_worker,
+            initargs=(spatial_bin, bin_size_um, mp),
+        ) as pool:
             results = pool.map(_create_polygon_for_cell, args_list)
 
     logger.info("Created %s polygon geometries", len(results))
