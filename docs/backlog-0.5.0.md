@@ -25,6 +25,9 @@
 
 ### A-1 函数遮蔽同名子模块
 
+> **状态（0.5.0）**：已完成。`tl/sctransform.py` → `tl/_sct_entry.py`，
+> `io/read_atera.py` → `io/_atera.py`；旧路径现在响亮失败。详见本条的「实测修正」。
+
 | 项 | 内容 |
 |---|---|
 | **现状** | `trackcell/tl/__init__.py:21` 把 `sctransform` 函数绑到 `tl.sctransform`，同名模块 `trackcell/tl/sctransform.py` 因此被遮蔽。`trackcell/io/__init__.py` 同样：`read_atera` 函数遮蔽 `trackcell/io/read_atera.py`。`import trackcell.tl.sctransform as m` 拿到的是**函数**（`<class 'function'>`），模块只在 `sys.modules` 里。 |
@@ -55,6 +58,12 @@
 
 ### A-2 API 边界：`io` 里放 QC，`tl` 里放绘图
 
+> **状态（0.5.1）**：已完成。但本条的断言「三个 QC 函数都是纯计算」**不成立**——
+> `atera_transcript_qc` 第一参数是 run 目录并流式读点云，是 IO。只把
+> `atera_cell_qc` / `filter_atera_genes` 导出到 `tl`；`atera_transcript_qc` 留在 `io`。
+> `pl.multigene_blend` 的真实价值不是薄包装，而是补上 `spatial_cell` 无法构建的
+> **基因→颜色图例**（参数存在 `uns` 里却无人使用）。
+
 | 项 | 内容 |
 |---|---|
 | **现状** | `io.__all__`（25 个）里有 `atera_cell_qc` / `atera_transcript_qc` / `filter_atera_genes`——纯计算，没有一个字节是 IO。`tl.__all__`（30 个）里 `multigene_blend` 的签名含 `show / ax / figsize / ncols / alpha_facet / background` 六个绘图参数，是半个绘图函数。 |
@@ -71,7 +80,9 @@
 
 ### B-1 xgb 整合特征选择用了"最像批次效应"的基因
 
-> **状态（0.5.1）**：已解决，采用方案③（不改行为，补文档 + 可复核返回）。
+> **状态（0.6.0，未发布）**：已解决，采用方案③（不改行为，补文档 + 可复核返回）。
+> 注意：本条代码（commit 65c0b7e）在 v0.5.1 tag **之后**，所以 `return_importance`
+> 不在已发布的 0.5.1 wheel 里。最初误标为 0.5.1，已纠正。
 >
 > **意图判定依据**：私有函数 docstring 已写明 "rank anchor genes by XGBoost
 > **batch-discrimination** importance"，公开包装也写 "rank by XGBoost
