@@ -8,7 +8,7 @@ from anndata import AnnData
 
 from trackcell.benchmark.yardcluster.data import make_patch_adata
 from trackcell.benchmark.yardcluster.metrics import evaluate_clustering
-from trackcell.tl.spatial_cluster import spatial_cluster
+from trackcell.tl._cluster import spatial_cluster
 
 ConfigName = Literal["baseline_no_gradient", "defaults_auto", "domain_gradient"]
 

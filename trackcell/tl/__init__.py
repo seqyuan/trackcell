@@ -1,61 +1,61 @@
 """
 TL (Tools) module for TrackCell package.
 
-This module provides utility and helper functions for single-cell and spatial transcriptomics data analysis.
+This module provides utility and helper functions for single-cell and spatial
+transcriptomics data analysis.
 """
 
-from .spatial import cells_in_radius, hd_labeldist, multigene_blend
-from .spatial_cluster import (
-    neighborhood_features,
-    spatial_cluster,
-    spatial_neighbors,
-    yard_cluster,
-    yard_embed,
-)
-from ._nhood import (
-    connected_components,
-    diff_nhood_enrichment,
-    nhood_enrichment,
-)
-from ._autores import (
-    select_resolution,
-    sweep_resolutions,
-)
-from ._spatial_graph import remove_long_links
-
-# ``atera_cell_qc`` and ``filter_atera_genes`` are pure computation over an
-# AnnData — neither touches the filesystem — so by the same rule that puts
-# ``nhood_enrichment`` in ``tl`` and only its renderer in ``pl``, they belong
-# here too. Definitions stay in ``io`` (the platform reader owns them) and both
-# paths keep working: ``tcl.tl.atera_cell_qc is tcl.io.atera_cell_qc``.
+# Public names are resolved on first access (PEP 562) rather than imported here.
 #
-# ``atera_transcript_qc`` is deliberately *not* re-exported here: its first
-# argument is a run directory, and it streams the point cloud from disk. It is
-# IO that happens to end in a QC table, not computation.
-from ..io import atera_cell_qc, filter_atera_genes
-from ._sct_entry import pack_sct_model, sctransform
-from .integration import (
-    integrate_rpca,
-    integrate_sct_rpca,
-    prep_sct_integration,
-    run_sct_integration,
-    release_sct_integration_cache,
-    sct_prep_matrix,
-    select_integration_features,
-)
-from .slice_separation import (
-    dbscan_slice_labels,
-    distance_to_nearest_centroids,
-    mark_colony_centroids,
-    slice_cluster_summary,
-    spatial_colony_cluster,
-    spatial_slice_cluster,
-    split_by_slice,
-    write_slice_annotation,
-)
+# Several of these modules pull in the whole single-cell stack: ``read_data``,
+# ``read_sto`` and ``convert_annohdcell`` import ``scanpy`` (2.0 s, and it imports
+# ``matplotlib.pyplot``, which locks the backend). Importing them eagerly made
+# ``import trackcell.tl`` cost the same as importing every reader, because ``tl``
+# re-exports two QC helpers that live here.
+#
+# ``_LAZY_EXPORTS`` maps each public name to the module that defines it;
+# ``scripts/measure_import.py --check`` enforces the result. The mapping is
+# generated from the previous import statements and guarded by
+# ``tests/test_lazy_imports.py``, which asserts every ``__all__`` name resolves to
+# the object the old eager import would have produced.
+
+_LAZY_EXPORTS = {
+    "cells_in_radius": ".spatial",
+    "hd_labeldist": ".spatial",
+    "multigene_blend": ".spatial",
+    "neighborhood_features": "._cluster",
+    "spatial_cluster": "._cluster",
+    "spatial_neighbors": "._cluster",
+    "yard_cluster": "._cluster",
+    "yard_embed": "._cluster",
+    "connected_components": "._nhood",
+    "diff_nhood_enrichment": "._nhood",
+    "nhood_enrichment": "._nhood",
+    "select_resolution": "._autores",
+    "sweep_resolutions": "._autores",
+    "remove_long_links": "._spatial_graph",
+    "atera_cell_qc": "..io",
+    "filter_atera_genes": "..io",
+    "pack_sct_model": "._sct_entry",
+    "sctransform": "._sct_entry",
+    "integrate_rpca": ".integration",
+    "integrate_sct_rpca": ".integration",
+    "prep_sct_integration": ".integration",
+    "run_sct_integration": ".integration",
+    "release_sct_integration_cache": ".integration",
+    "sct_prep_matrix": ".integration",
+    "select_integration_features": ".integration",
+    "dbscan_slice_labels": ".slice_separation",
+    "distance_to_nearest_centroids": ".slice_separation",
+    "mark_colony_centroids": ".slice_separation",
+    "slice_cluster_summary": ".slice_separation",
+    "spatial_colony_cluster": ".slice_separation",
+    "spatial_slice_cluster": ".slice_separation",
+    "split_by_slice": ".slice_separation",
+    "write_slice_annotation": ".slice_separation",
+}
 
 __all__ = [
-    # Re-exported from ``io``: pure computation, no filesystem access.
     "atera_cell_qc",
     "filter_atera_genes",
     "sctransform",
@@ -90,3 +90,19 @@ __all__ = [
     "split_by_slice",
     "write_slice_annotation",
 ]
+
+
+def __getattr__(name: str):
+    try:
+        module_name = _LAZY_EXPORTS[name]
+    except KeyError:
+        raise AttributeError(f"module {__name__!r} has no attribute {name!r}") from None
+    import importlib
+
+    value = getattr(importlib.import_module(module_name, __name__), name)
+    globals()[name] = value
+    return value
+
+
+def __dir__():
+    return sorted(set(globals()) | set(_LAZY_EXPORTS))

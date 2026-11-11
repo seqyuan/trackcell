@@ -10,7 +10,7 @@ from trackcell.tl._yardcluster_utils import (
     resolve_platform_params,
     spatial_stratified_sketch_indices,
 )
-from trackcell.tl.spatial_cluster import neighborhood_features, spatial_cluster
+from trackcell.tl._cluster import neighborhood_features, spatial_cluster
 
 
 def _patch_adata(n=60, seed=0):

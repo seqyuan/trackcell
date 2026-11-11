@@ -12,7 +12,7 @@ from trackcell.tl._spatial_graph import (
     compute_neighborhood_gradient_cosphi,
 )
 from trackcell.tl._cluster_merge import merge_clusters_de
-from trackcell.tl.spatial_cluster import (
+from trackcell.tl._cluster import (
     neighborhood_features,
     spatial_cluster,
     spatial_neighbors,
@@ -172,7 +172,7 @@ def test_auto_mode_computes_neighborhood_features_once(monkeypatch):
 
     adata = _make_ring_adata(n_per_ring=25, n_genes=40)
     calls = {"n": 0}
-    sc_mod = importlib.import_module("trackcell.tl.spatial_cluster")
+    sc_mod = importlib.import_module("trackcell.tl._cluster")
     orig = sc_mod.compute_neighborhood_mean
 
     def counted(X, weights, chunk_size=500):

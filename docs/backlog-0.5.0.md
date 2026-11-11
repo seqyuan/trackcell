@@ -207,6 +207,25 @@
 
 ### C-3 `import trackcell` 的连带开销
 
+> **状态（0.6.0）**：已完成。先写度量再改结构——`scripts/measure_import.py`
+> 用 `python -X importtime` 在**新进程**里测，基线四目标全是 2.43 s。
+>
+> 病因不是 `pl` 而是 `io`：`trackcell/__init__.py` 急切导入 `io`，`io.read_data`
+> 拉 `scanpy`（2.0 s），`scanpy` 再拉 `matplotlib.pyplot`（锁 backend）。
+>
+> 三步：① 包顶层三个子模块改 PEP 562；② `io`/`tl` 的 `__all__` 也改懒加载
+> （映射由 AST 从原 import 语句生成，避免手抄 74 个名字出错）；③ 发现并修掉
+> `tl.spatial_cluster` 的模块名/函数名碰撞——**这是 A-1 同一类缺陷，被急切绑定掩盖了**。
+>
+> 结果：`import trackcell` / `trackcell.tl` / `trackcell.io` 均 2.43 s → ~0 s；
+> `trackcell.pl` 0.67 s（绘图本就需要 pyplot + geopandas）。
+>
+> 守卫：`tests/test_lazy_imports.py`（新进程断言未加载 scanpy/pyplot、`__all__`
+> 全覆盖、`dir()` 诚实、别名同一性、子模块不能遮蔽同名函数）+ CI 里的
+> `measure_import.py --check`。两者都已注入验证会失败。
+>
+> 代价：`spatial_cluster` 模块改名属 breaking，故本条进 0.6.0 而非 0.5.2。
+
 | 项 | 内容 |
 |---|---|
 | **现状** | 实测 **2.36 s**，且拉起 `matplotlib.pyplot`（并锁定 backend）、`scanpy`、`geopandas`、`zarr`、`h5py`、`imageio`、`multiprocessing`。 |

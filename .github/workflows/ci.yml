@@ -76,6 +76,15 @@ jobs:
         run: poetry run black --check trackcell tests scripts
 
 
+      - name: Import-time budget
+        # The package resolves its public names lazily (PEP 562). Without a check
+        # here, one top-level ``import scanpy`` anywhere in the tree silently
+        # restores the 2.4 s cold start — and, worse, re-imports
+        # matplotlib.pyplot, which locks the backend before the caller can call
+        # matplotlib.use("Agg").
+        run: |
+          poetry run python scripts/measure_import.py --check
+
       - name: Build and validate wheel metadata
         # No --expect-version: the tag check belongs to the release workflow
         # (auto-release.yml). Here we only verify the wheel is self-consistent.

@@ -28,7 +28,7 @@ def test_run_yardcluster_benchmark_smoke():
 
 
 def test_evaluate_clustering_perfect_labels():
-    from trackcell.tl.spatial_cluster import spatial_neighbors
+    from trackcell.tl._cluster import spatial_neighbors
 
     adata = make_patch_adata(n_per_patch=8, n_patches=2, seed=2)
     adata.obs["pred"] = adata.obs["patch"].astype(str)

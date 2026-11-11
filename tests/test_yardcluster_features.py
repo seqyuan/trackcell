@@ -20,7 +20,7 @@ from trackcell.tl._nhood import (
     nhood_enrichment,
 )
 from trackcell.tl._autores import select_resolution, sweep_resolutions
-from trackcell.tl.spatial_cluster import (
+from trackcell.tl._cluster import (
     neighborhood_features,
     spatial_cluster,
     spatial_neighbors,

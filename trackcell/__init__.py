@@ -73,8 +73,38 @@ __author__ = "Zan Yuan"
 __email__ = "yfinddream@gmail.com"
 
 from . import _logging  # noqa: F401  (imported for its NullHandler side effect)
-from . import io
-from . import pl
-from . import tl
+
+# ``io`` / ``pl`` / ``tl`` are imported on first access, not here.
+#
+# Measured before the change (``python -X importtime``, fresh interpreter):
+# ``import trackcell`` cost 2.43 s and pulled matplotlib.pyplot, scanpy,
+# geopandas, zarr and imageio — and ``import trackcell.tl`` cost the same, because
+# this module imported every subpackage eagerly. The single largest item was
+# ``scanpy`` (2.0 s), reached through ``io.read_data``.
+#
+# Lazy loading is not only about startup time. Importing ``matplotlib.pyplot``
+# *locks the backend*, so ``matplotlib.use("Agg")`` had to run before
+# ``import trackcell`` to take effect — a trap on headless machines that surfaces
+# as a hang or an X11 error rather than as a message.
+#
+# ``import trackcell as tcl; tcl.io.read_hd_cellseg(...)`` and
+# ``from trackcell import io`` both still work: PEP 562 resolves them through
+# ``__getattr__``, which caches into module globals so the indirection is paid
+# once. ``scripts/measure_import.py --check`` enforces the budget.
+_LAZY_SUBMODULES = frozenset({"io", "pl", "tl"})
 
 __all__ = ["io", "pl", "tl"]
+
+
+def __getattr__(name: str):
+    if name in _LAZY_SUBMODULES:
+        import importlib
+
+        module = importlib.import_module(f".{name}", __name__)
+        globals()[name] = module
+        return module
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
+
+def __dir__():
+    return sorted(set(globals()) | _LAZY_SUBMODULES)

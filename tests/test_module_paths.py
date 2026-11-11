@@ -36,7 +36,7 @@ SELF = Path(__file__).resolve()
 
 #: Module basenames retired in 0.5.0. Importing a module by these names now
 #: raises ModuleNotFoundError, which is the intended behaviour.
-RETIRED = ("sctransform", "read_atera")
+RETIRED = ("sctransform", "read_atera", "spatial_cluster")
 
 
 def _python_files():
@@ -114,7 +114,11 @@ def test_retired_module_paths_fail_loudly():
     """The old paths must raise, not silently resolve to the shadowing function."""
     import importlib
 
-    for dotted in ("trackcell.tl.sctransform", "trackcell.io.read_atera"):
+    for dotted in (
+        "trackcell.tl.sctransform",
+        "trackcell.io.read_atera",
+        "trackcell.tl.spatial_cluster",
+    ):
         with pytest.raises(ModuleNotFoundError):
             importlib.import_module(dotted)
 

@@ -1,7 +1,44 @@
 Changelog
 
-Version 0.5.2 (unreleased)
+Version 0.6.0 (unreleased)
 ---------------------------
+
+**Breaking** — one module path again:
+
+* ``trackcell/tl/spatial_cluster.py`` → ``trackcell/tl/_cluster.py``. This is the
+  same defect 0.5.0 fixed for ``sctransform`` and ``read_atera``, and it survived
+  that round because eager binding masked it: ``tl/__init__.py`` imported the
+  ``spatial_cluster`` *function* after the submodule, so the function won and the
+  collision was invisible. PEP 562 lazy resolution removed the mask — importing
+  the submodule from anywhere sets it as an attribute on the package, the import
+  system bypasses ``__getattr__``, and callers received a module where a function
+  was promised.
+
+  Public API unchanged: ``tcl.tl.spatial_cluster(...)`` is still the function.
+  ``import trackcell.tl.spatial_cluster`` and
+  ``from trackcell.tl.spatial_cluster import spatial_cluster`` now raise
+  ``ModuleNotFoundError``. Migration: ``from trackcell.tl import spatial_cluster``
+  or ``from trackcell.tl._cluster import spatial_cluster``.
+  ``tests/test_module_paths.py`` now covers all three retired paths.
+
+**Changed** — import time:
+
+* ``import trackcell`` went from **2.43 s to ~0 s**. ``io`` / ``pl`` / ``tl`` are
+  resolved on first access (PEP 562) instead of at import, and ``io``/``tl`` do
+  the same for their own public names. ``import trackcell.tl`` and
+  ``import trackcell.io`` also drop to ~0 s; ``trackcell.pl`` stays at ~0.7 s
+  because plotting genuinely needs ``matplotlib.pyplot`` and ``geopandas``.
+
+  Beyond speed, this fixes a real trap: ``matplotlib.pyplot`` **locks the
+  backend** when imported, so ``matplotlib.use("Agg")`` had to run *before*
+  ``import trackcell`` to take effect. On a headless machine the wrong order
+  surfaced as a hang or an X11 error rather than as a message.
+
+  Enforced by ``scripts/measure_import.py --check`` (a CI step) and
+  ``tests/test_lazy_imports.py``, which imports the core package in a fresh
+  interpreter and asserts neither ``scanpy`` nor ``matplotlib.pyplot`` was
+  loaded. Both were verified to fail when an eager import is restored.
+
 
 **Documentation** — behavior unchanged:
 
