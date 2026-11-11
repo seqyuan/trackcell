@@ -1,7 +1,7 @@
 Changelog
 
-Version 0.5.1
--------------
+Version 0.5.2 (unreleased)
+---------------------------
 
 **Documentation** — behavior unchanged:
 
@@ -27,6 +27,9 @@ Version 0.5.1
   gave no access to. Ignored with a warning for ``'seurat'``, which has no single
   importance score. When fewer than two batches are present no classifier is
   fitted and the table carries ``NaN`` importances.
+
+Version 0.5.1
+-------------
 
 **Fixed**:
 
