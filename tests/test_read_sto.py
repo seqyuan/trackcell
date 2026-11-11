@@ -20,8 +20,11 @@ from trackcell.io.read_sto import (
     read_sto_cellbin,
 )
 from tests.conftest import (
+    BORDER_SENTINEL,
+    N_BORDER_SLOTS,
     STO_GENES,
     sentinel_border,
+    square_border,
     write_cellbin_gef,
     write_gem,
     write_image,
@@ -428,3 +431,79 @@ def test_leiden_fallback_only_on_missing_backend(monkeypatch):
     with pytest.raises(TypeError):
         _leiden_with_seed(adata, 1.0, "neighbors", "leiden_test", 0)
     assert calls["n"] == 1  # no fallback attempt
+
+
+# ---------------------------------------------------------------------------
+# Fallback geometry must be discoverable, not silent
+# ---------------------------------------------------------------------------
+
+
+def _two_vertex_border() -> np.ndarray:
+    """A border with only two real vertices — not a polygon, so a square is faked."""
+    offsets = np.full((N_BORDER_SLOTS, 2), BORDER_SENTINEL, dtype=np.int16)
+    offsets[0] = (-4, -4)
+    offsets[1] = (4, -4)
+    return offsets
+
+
+def test_all_sentinel_borders_are_flagged_in_obs(tmp_path):
+    """A fabricated square must be identifiable per cell, not just counted in a log."""
+    n_cells = 3
+    gef = write_cellbin_gef(
+        tmp_path / "B000010.cellbin.gef",
+        borders=[sentinel_border() for _ in range(n_cells)],
+    )
+
+    adata = read_sto_cellbin(gef, sample="s")
+
+    assert adata.obs["geometry_is_fallback"].tolist() == [True] * n_cells
+    assert adata.uns["spatial"]["s"]["metadata"]["n_fallback_polygons"] == n_cells
+
+
+def test_few_vertex_borders_are_flagged_even_though_the_polygon_looks_real(tmp_path):
+    """The subtle case: <3 vertices still yields a valid-looking 10x10 square.
+
+    Nothing about that polygon says "fabricated", so the flag has to be decided
+    from the border array, not from the polygon.
+    """
+    gef = write_cellbin_gef(
+        tmp_path / "B000011.cellbin.gef",
+        borders=[_two_vertex_border() for _ in range(3)],
+    )
+
+    adata = read_sto_cellbin(gef, sample="s")
+
+    geometries = adata.uns["spatial"]["s"]["geometries"]
+    assert all(poly.area == 100.0 for poly in geometries.geometry)
+    assert all(poly.is_valid and not poly.is_empty for poly in geometries.geometry)
+    assert adata.obs["geometry_is_fallback"].tolist() == [True, True, True]
+
+
+def test_real_borders_are_not_flagged_and_do_not_warn(tmp_path):
+    gef = write_cellbin_gef(
+        tmp_path / "B000012.cellbin.gef",
+        borders=[square_border() for _ in range(3)],
+    )
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", RuntimeWarning)
+        adata = read_sto_cellbin(gef, sample="s")
+
+    assert adata.obs["geometry_is_fallback"].tolist() == [False, False, False]
+    assert adata.uns["spatial"]["s"]["metadata"]["n_fallback_polygons"] == 0
+
+
+def test_mixed_borders_warn_with_the_affected_count(tmp_path):
+    gef = write_cellbin_gef(
+        tmp_path / "B000013.cellbin.gef",
+        borders=[square_border(), sentinel_border(), _two_vertex_border()],
+    )
+
+    with pytest.warns(RuntimeWarning, match=r"2/3 cells have no usable border"):
+        adata = read_sto_cellbin(gef, sample="s")
+
+    assert adata.obs["geometry_is_fallback"].tolist() == [False, True, True]
+    assert adata.uns["spatial"]["s"]["metadata"]["n_fallback_polygons"] == 2
+    # Flagged cells still carry *a* geometry, so downstream code never sees None.
+    assert len(adata.uns["spatial"]["s"]["geometries"]) == 3
+    assert adata.obs["geometry"].notna().all()

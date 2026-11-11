@@ -3,6 +3,46 @@ Changelog
 Version 0.5.1 (unreleased)
 ---------------------------
 
+**Fixed**:
+
+* ``read_sto_cellbin`` faked a 10x10 polygon for cells whose GEF border cannot
+  form one (all-sentinel, or fewer than three vertices). The fabrication itself is
+  deliberate — a ``None`` geometry would put a null check into every downstream
+  area / ``intersects`` / ROI path — but it was only visible as an ``INFO`` log
+  line, so area statistics and region selections silently used boxes that do not
+  exist in the data. It is now disclosed three ways:
+  ``obs['geometry_is_fallback']`` (per cell),
+  ``uns['spatial'][sample]['metadata']['n_fallback_polygons']`` (per sample), and
+  a ``RuntimeWarning`` naming the affected count.
+
+  Also fixes a latent crash on the same path: when
+  ``_extract_polygon_from_relative_offsets`` returned ``None``, the ``None`` was
+  stored and ``wkt.dumps(None)`` raised ``AttributeError`` later. That case now
+  receives the documented fallback box instead.
+
+* ``tl.remove_long_links`` exempted the wrong edges from trimming. Self loops
+  were identified by weight (``data >= 1 - 1e-12``), on the assumption that only
+  a self loop can normalise to 1.0. But ``build_spatial_weights`` emits no self
+  loops at all, and a row with exactly one neighbour normalises that genuine edge
+  to 1.0 too — so degree-1 cells (tissue edges, anything isolated by an earlier
+  trim) had their single, usually longest, edge kept out of the percentile sample
+  and exempt from trimming. Self loops are now identified by position
+  (``row == col``). Verified on a graph where the old test let a 100-unit edge
+  from a degree-1 cell survive.
+
+  Consequence worth knowing: an isolated cell's long edge is now trimmed, which
+  can leave a zero-degree row. What the neighbourhood features should report for
+  such a cell is a separate open question (backlog B-2 ②).
+
+* ``read_xenium_cellseg`` no longer writes progress to stdout. It used
+  ``log = print if verbose else noop``, which broke the rule the 0.4.0 changelog
+  set for library code and could not be silenced by log level. Records now go
+  through the ``trackcell`` logger; ``verbose`` still gates them, so the switch
+  keeps working. The logger carries a ``NullHandler``, so a default import stays
+  quiet — call ``logging.basicConfig(level=logging.INFO)`` to see progress.
+  ``atera_info`` and the interactive ROI selector keep their ``print``
+  deliberately: both are console-facing by design.
+
 **Added**:
 
 * ``pl.multigene_blend`` — renders the composite produced by

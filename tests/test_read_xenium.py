@@ -1,5 +1,7 @@
 """Regression tests for the Xenium reader's polygon/boundary handling."""
 
+import logging
+
 import h5py
 import numpy as np
 import pandas as pd
@@ -131,3 +133,52 @@ def test_read_xenium_rejects_partial_overlap_below_threshold(tmp_path):
 
     with pytest.raises(ValueError, match="Refusing to continue below 90%"):
         read_xenium_cellseg(tmp_path, sample="sample", verbose=False)
+
+
+# ---------------------------------------------------------------------------
+# Progress output goes to the logger, not stdout
+# ---------------------------------------------------------------------------
+
+
+def test_progress_does_not_touch_stdout(tmp_path, capsys):
+    """Library code must not print.
+
+    ``read_xenium_cellseg`` used ``log = print if verbose else noop``, which
+    broke the rule the 0.4.0 changelog set for library code: stdout gets
+    polluted in notebooks and cannot be controlled by log level.
+    """
+    _write_xenium_fixture(tmp_path)
+
+    read_xenium_cellseg(tmp_path, verbose=True)
+
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert captured.err == ""
+
+
+def test_progress_reaches_the_logger(tmp_path, caplog):
+    """``verbose=True`` must still be observable — through logging."""
+    _write_xenium_fixture(tmp_path)
+
+    with caplog.at_level(logging.INFO, logger="trackcell"):
+        read_xenium_cellseg(tmp_path, verbose=True)
+
+    messages = [r.getMessage() for r in caplog.records if r.levelno == logging.INFO]
+    assert any("[Xenium]" in m for m in messages), messages
+    assert any("Expression matrix" in m for m in messages), messages
+
+
+def test_quiet_by_default_and_with_verbose_false(tmp_path, caplog):
+    """The package logger carries a NullHandler, so nothing leaks either way."""
+    _write_xenium_fixture(tmp_path)
+
+    with caplog.at_level(logging.INFO, logger="trackcell"):
+        read_xenium_cellseg(tmp_path, verbose=False)
+        verbose_false = len(caplog.records)
+
+        caplog.clear()
+        read_xenium_cellseg(tmp_path, verbose=True)
+        verbose_true = len(caplog.records)
+
+    assert verbose_false == 0
+    assert verbose_true > 0

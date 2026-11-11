@@ -716,7 +716,21 @@ def read_xenium_cellseg(
     if sample is None:
         sample = datapath.name
 
-    log = print if verbose else (lambda *args, **kwargs: None)
+    def log(message: str) -> None:
+        """Emit a progress record through the package logger.
+
+        This used to be ``print``, which broke the rule the 0.4.0 changelog set
+        for library code and could not be silenced by log level. ``verbose``
+        still gates the records, so callers keep the switch they already have;
+        what changed is the destination. The package logger carries a
+        ``NullHandler``, so a default ``trackcell`` import stays quiet — call
+        ``logging.basicConfig(level=logging.INFO)`` to see progress.
+
+        ``atera_info`` and the interactive ROI selector keep their ``print``
+        deliberately: both are console-facing by design.
+        """
+        if verbose:
+            logger.info(message)
 
     t_total = time.time()
 

@@ -83,6 +83,13 @@
 
 ### B-2 孤立节点的上下文特征为 0
 
+> **状态（0.5.1）**：① 已完成 —— 自环判定改为 `coo.row == coo.col`。
+> 取证发现原假设根本不成立：`build_spatial_weights` **不产生任何自环**（对角全零），
+> 所以 `data >= 1-1e-12` 不是在识别自环，而是在把**度为 1 的真实边**误判成自环。
+> A/B 实测：度 1 的细胞那条 100 单位长边，旧逻辑下**幸存**（不被剪），新逻辑下被剪。
+> 副作用：孤立细胞的长边被剪后会留下零度行 —— 即 ② 的问题变得更实际，等语义决策。
+
+
 | 项 | 内容 |
 |---|---|
 | **现状** | `tl/_spatial_graph.py:497-509`：`remove_long_links` 剪边后可能出现零度行，`_row_normalize` 对 `row_sum == 0` 保持整行为 0。于是 `compute_neighborhood_mean` 给这些细胞的特征是 **0**，下游 PCA 把它们当作"表达为零的细胞"。另外自环判定用 `coo.data >= 1.0 - 1e-12` 启发式，单邻居行的真实边权重也是 1.0，会被误判为自环。 |
@@ -95,6 +102,13 @@
 
 ### B-3 伪造 10×10 方框当 geometry
 
+> **状态（0.5.1）**：已完成。保留兜底（非破坏），并让它可发现：
+> `obs['geometry_is_fallback']`（逐细胞）+ `metadata['n_fallback_polygons']` + `RuntimeWarning`。
+> 另外修了一个同路径的潜在崩溃：`_extract_polygon_from_relative_offsets` 返回 `None` 时，
+> 旧代码把 `None` 存进 `polygons`，后面 `wkt.dumps(None)` 抛 `AttributeError`。现在该分支走兜底方框。
+> 「<3 顶点」也算 fallback —— 它伪造的方框和真多边形无法区分，必须从 border 数组判定。
+
+
 | 项 | 内容 |
 |---|---|
 | **现状** | `io/read_sto.py:70-90, 440-460`：细胞轮廓顶点 < 3（或全 sentinel）时，**伪造**一个 10×10 px 的方框作为 `geometry`，只累加一个 `n_fallback` 计数并打 INFO 日志。下游面积、`intersects`、ROI 选择全部使用这个假多边形。 |
@@ -106,6 +120,12 @@
 | **工时** | 1.5 h |
 
 ### B-4 `print()` 还是 `logger`
+
+> **状态（0.5.1）**：已完成，采用「保留 `verbose`，但改走 logger」方案。
+> `verbose` 仍是开关，目的地从 stdout 变为 `trackcell` logger（带 `NullHandler`，默认安静）。
+> `atera_info` 与 ROI 选择器的 `print` 保持不变（已声明有意）。
+> 测试用 `capsys` 断言无 stdout、`caplog` 断言有 INFO，并注入 `print` 验证过测试会失败。
+
 
 | 项 | 内容 |
 |---|---|

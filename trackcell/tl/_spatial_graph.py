@@ -496,8 +496,16 @@ def remove_long_links(
         return weights.copy()
 
     edge_d = np.linalg.norm(coords[rows] - coords[cols], axis=1)
-    # Self loops carry weight 1.0; genuine edges carry weight < 1 after row norm.
-    is_self = coo.data >= 1.0 - 1e-12
+    # Self loops are identified by position, not by weight. The previous test
+    # (``data >= 1 - 1e-12``) assumed self loops are the only entries that can
+    # reach weight 1.0 after row normalisation, but a row with exactly one
+    # neighbour normalises that genuine edge to 1.0 as well — and
+    # ``build_spatial_weights`` emits no self loops at all (verified: the
+    # diagonal is zero). The heuristic therefore excluded real edges, so
+    # degree-1 cells — tissue edges, anything isolated by a previous trim — had
+    # their single (often longest) edge kept out of the percentile sample and
+    # exempt from trimming.
+    is_self = coo.row == coo.col
     real = ~is_self
     if not np.any(real):
         return weights.copy()

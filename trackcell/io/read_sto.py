@@ -79,6 +79,31 @@ def _unique_gene_index(
 _BORDER_SENTINEL = np.int16(32767)
 
 
+def _fallback_square(cell_x: float, cell_y: float, half: float = 5.0) -> Polygon:
+    """The 10x10 box substituted for cells whose border is unusable.
+
+    Kept as a named helper because it is used in two places (the all-sentinel
+    branch and the too-few-vertices branch) and because callers now need to be
+    able to identify cells that received one — see ``geometry_is_fallback``.
+    """
+    return Polygon(
+        [
+            (cell_x - half, cell_y - half),
+            (cell_x + half, cell_y - half),
+            (cell_x + half, cell_y + half),
+            (cell_x - half, cell_y + half),
+        ]
+    )
+
+
+def _valid_border_offsets(border_offsets: np.ndarray) -> np.ndarray:
+    """Strip trailing sentinel padding from a GEF cell-border array."""
+    keep = (border_offsets[:, 0] != _BORDER_SENTINEL) | (
+        border_offsets[:, 1] != _BORDER_SENTINEL
+    )
+    return border_offsets[keep]
+
+
 def _extract_polygon_from_relative_offsets(
     border_offsets: np.ndarray,
     cell_x: int,
@@ -107,22 +132,11 @@ def _extract_polygon_from_relative_offsets(
         has fewer than 3 valid vertices.
     """
     # Strip trailing sentinel entries
-    valid_mask = (border_offsets[:, 0] != _BORDER_SENTINEL) | (
-        border_offsets[:, 1] != _BORDER_SENTINEL
-    )
-    valid_offsets = border_offsets[valid_mask]
+    valid_offsets = _valid_border_offsets(border_offsets)
 
     if len(valid_offsets) < 3:
         # Not enough points for a polygon; use a small square around centroid.
-        half = 5
-        return Polygon(
-            [
-                (cell_x - half, cell_y - half),
-                (cell_x + half, cell_y - half),
-                (cell_x + half, cell_y + half),
-                (cell_x - half, cell_y + half),
-            ]
-        )
+        return _fallback_square(cell_x, cell_y)
 
     # Convert offsets + centroid → absolute coordinates
     abs_coords = valid_offsets.astype(np.float64)
@@ -421,12 +435,16 @@ def read_sto_cellbin(
     sc.AnnData
         AnnData object with:
         - ``.X``: CSR expression matrix (cells × genes)
-        - ``.obs``: cell_id, area, dnb_count, gene_count, exp_count, geometry
+        - ``.obs``: cell_id, area, dnb_count, gene_count, exp_count, geometry,
+          geometry_is_fallback
         - ``.obsm['spatial']``: cell centroid coordinates
         - ``.obs['geometry']``: WKT strings of cell polygons
+        - ``.obs['geometry_is_fallback']``: True where the polygon is a
+          fabricated 10x10 box (see Notes)
         - ``.uns['spatial'][sample]['geometries']``: GeoDataFrame with cell polygons
         - ``.uns['spatial'][sample]['images']``: tissue image (if found)
         - ``.uns['spatial'][sample]['scalefactors']`` / ``metadata``
+          (``metadata['n_fallback_polygons']`` counts fabricated boxes)
 
     Examples
     --------
@@ -458,6 +476,14 @@ def read_sto_cellbin(
     - The ``cellBorder`` dataset stores up to 32 (dx, dy) offset pairs
       relative to the cell centroid. Trailing slots (sentinel value 32767)
       are stripped during geometry construction.
+    - Cells whose border cannot form a polygon (all-sentinel, or fewer than
+      three surviving vertices) still receive a **fabricated 10x10 box** centred
+      on the centroid, because a ``None`` geometry would push a null check into
+      every downstream area/intersect/ROI path. Those boxes are real to code
+      that consumes them, so they are disclosed in
+      ``.obs['geometry_is_fallback']`` and counted in
+      ``metadata['n_fallback_polygons']``, and a ``RuntimeWarning`` names the
+      affected count. Filter on the flag when polygon area matters.
     - Expression matrix is built directly from the cell offset table
       for efficient CSR construction (no intermediate dense matrix).
     """
@@ -500,32 +526,48 @@ def read_sto_cellbin(
         cells_y = cell["y"].astype(np.float64)
 
         polygons = {}
-        n_valid = 0
-        n_fallback = 0
+        is_fallback = np.zeros(n_cells, dtype=bool)
 
         for i in range(n_cells):
             offsets = cell_border[i]
             # Quick check: is this cell fully sentinel?
             if np.all(offsets == border_sentinel):
-                half = 5.0
-                poly = Polygon(
-                    [
-                        (cells_x[i] - half, cells_y[i] - half),
-                        (cells_x[i] + half, cells_y[i] - half),
-                        (cells_x[i] + half, cells_y[i] + half),
-                        (cells_x[i] - half, cells_y[i] + half),
-                    ]
-                )
-                n_fallback += 1
+                polygons[i] = _fallback_square(cells_x[i], cells_y[i])
+                is_fallback[i] = True
+                continue
+
+            poly = _extract_polygon_from_relative_offsets(
+                offsets, cells_x[i], cells_y[i]
+            )
+            too_few_vertices = len(_valid_border_offsets(offsets)) < 3
+            if poly is None:
+                # Unreachable for well-formed hulls, but the old code stored the
+                # ``None`` and crashed later in ``wkt.dumps``. Substituting the
+                # documented fallback keeps the array rectangular and is what
+                # ``geometry_is_fallback`` exists to disclose.
+                poly = _fallback_square(cells_x[i], cells_y[i])
+                is_fallback[i] = True
             else:
-                poly = _extract_polygon_from_relative_offsets(
-                    offsets, cells_x[i], cells_y[i]
-                )
-                if poly is not None:
-                    n_valid += 1
-                else:
-                    n_fallback += 1
+                # ``_extract_polygon_from_relative_offsets`` fabricates the same
+                # 10x10 square when fewer than three vertices survive sentinel
+                # stripping, so that is a fallback too — the fabricated box is
+                # indistinguishable from a real cell otherwise.
+                is_fallback[i] = too_few_vertices
             polygons[i] = poly
+
+        n_fallback = int(is_fallback.sum())
+        n_valid = n_cells - n_fallback
+
+        if n_fallback:
+            warnings.warn(
+                f"{n_fallback:,}/{n_cells:,} cells have no usable border in "
+                f"'{gef_path.name}' and were given a 10x10 fallback square. "
+                "Areas, intersects() and ROI selection will treat those squares "
+                "as real geometry. Flagged in "
+                "adata.obs['geometry_is_fallback'].",
+                RuntimeWarning,
+                stacklevel=2,
+            )
 
         logger.info(
             "[STO cellbin] Borders: %s valid polygons, " "%s fallback [%.1fs]",
@@ -608,6 +650,7 @@ def read_sto_cellbin(
             "dnb_count": cell["dnbCount"].astype(np.int32),
             "gene_count": cell["geneCount"].astype(np.int32),
             "exp_count": cell["expCount"].astype(np.int32),
+            "geometry_is_fallback": is_fallback,
         },
         index=cell_ids,
     )
@@ -657,6 +700,10 @@ def read_sto_cellbin(
                     "x": [cell_min_x, cell_max_x],
                     "y": [cell_min_y, cell_max_y],
                 },
+                # Cells whose ``geometries`` entry is a fabricated 10x10 box.
+                # Mirrored in ``obs['geometry_is_fallback']`` for per-cell use;
+                # recorded here too so a summary can be read without loading obs.
+                "n_fallback_polygons": n_fallback,
             },
             "scalefactors": {
                 "spot_diameter_fullres": float(spot_diameter),

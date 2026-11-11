@@ -5,7 +5,10 @@ import pandas as pd
 import pytest
 from anndata import AnnData
 
+from scipy import sparse as sps
+
 from trackcell.tl._spatial_graph import (
+    _row_normalize,
     build_spatial_weights,
     compute_neighborhood_multi_hop,
     remove_long_links,
@@ -394,3 +397,51 @@ def test_align_gene_frame_empty_and_paren_columns():
     )
     assert list(intercept.columns) == ["Intercept"]
     assert list(intercept.index) == ["G0"]
+
+
+def test_remove_long_links_trims_the_only_edge_of_a_degree_one_cell():
+    """A degree-1 cell normalises its sole edge to weight 1.0.
+
+    The old self-loop test was ``data >= 1 - 1e-12``, which mistook that genuine
+    edge for a self loop and exempted it from trimming — so the edge most in need
+    of removal, the one long enough to bridge two regions, always survived.
+    ``build_spatial_weights`` emits no self loops at all, so the weight test was
+    never detecting what it claimed.
+    """
+    coords = np.array([[0.0, 0.0], [100.0, 0.0], [1.0, 0.0], [0.0, 1.0]])
+    adjacency = np.array(
+        [
+            [0.0, 1.0, 1.0, 1.0],
+            [1.0, 0.0, 0.0, 0.0],  # degree 1, neighbour 100 units away
+            [1.0, 0.0, 0.0, 1.0],
+            [1.0, 0.0, 1.0, 0.0],
+        ]
+    )
+    w = _row_normalize(sps.csr_matrix(adjacency))
+    assert w[1, 0] == pytest.approx(1.0)  # the weight that fooled the old test
+
+    trimmed = remove_long_links(coords, w, distance_percentile=50.0)
+
+    assert trimmed[1, 0] == 0.0, "the 100-unit edge from the degree-1 cell survived"
+
+
+def test_remove_long_links_keeps_explicit_self_loops():
+    """Explicit diagonal entries are still exempt — now by position, not weight."""
+    coords = np.array([[0.0, 0.0], [0.1, 0.0], [50.0, 0.0]])
+    w = sps.csr_matrix(
+        np.array(
+            [
+                [1.0, 1.0, 0.0],
+                [1.0, 1.0, 1.0],
+                [0.0, 1.0, 1.0],
+            ]
+        )
+    )
+
+    trimmed = remove_long_links(coords, w, distance_percentile=50.0).toarray()
+
+    # Self loops are never trimmed, and a self loop's zero distance must not
+    # enter the percentile sample either.
+    assert trimmed[0, 0] > 0.0
+    assert trimmed[1, 1] > 0.0
+    assert trimmed[2, 2] > 0.0

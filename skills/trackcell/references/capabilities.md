@@ -225,10 +225,12 @@ atera_transcript_qc(path, adata=None, min_qv=20.0, bins=100)
 |---|---|
 | `.X` | 表达矩阵（原始 counts，未归一化） |
 | `.obs` | 细胞元数据；`classification` / `cluster` 等平台注释；多边形平台带 `geometry`（WKT 字符串） |
+| `.obs['geometry_is_fallback']` | 仅 `read_sto_cellbin`：True = 该细胞的多边形是**伪造的 10×10 方框**（GEF border 不可用）。做面积统计、`intersects`、ROI 选择前先看这一列 |
 | `.obsm['spatial']` | (n, 2) 二维坐标。**Visium/HD 是图像像素，Xenium/Atera 是 µm** |
 | `.uns['spatial'][sample]['images']` | 组织图像（dict: `hires` / `lowres`） |
 | `.uns['spatial'][sample]['scalefactors']` | 含 `microns_per_pixel`、`tissue_hires_scalef` |
 | `.uns['spatial'][sample]['geometries']` | **GeoDataFrame**，细胞/核的多边形 |
+| `.uns['spatial'][sample]['metadata']` | 含 `pixel_size` / `pixel_size_um` / `n_fallback_polygons`（伪造多边形计数） |
 | `.uns['experiment']` | 平台元数据，可能含 `pixel_size` |
 
 下游 `tl.*` 全部只依赖 `.obsm['spatial']` + 上述 `uns` 键 + scanpy 惯例（`obsp` 图、`obsm` 表示、`obs` 标签）。
