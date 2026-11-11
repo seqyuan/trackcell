@@ -1,7 +1,7 @@
 Changelog
 
-Version 0.6.2 (unreleased)
----------------------------
+Version 0.6.2
+-------------
 
 **Fixed** — multi-gene blend rendering:
 
@@ -27,6 +27,13 @@ Version 0.6.2 (unreleased)
   normalises matplotlib colour names to hex before storing them. The docstring
   and the usage page now state explicitly that the blend encodes relative
   composition, not absolute expression intensity.
+
+**Infrastructure**:
+
+* The release workflow prefers GitHub OIDC Trusted Publishing when
+  ``PYPI_API_TOKEN`` is absent, and keeps the token path while the secret
+  exists. Deleting the secret switches the next tag to attestation-enabled
+  Trusted Publishing without another workflow change.
 
 Version 0.6.1
 -------------
