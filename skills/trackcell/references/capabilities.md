@@ -23,7 +23,7 @@
 | 空间图边跨过了切片切口 | 忽略，导致邻域富集虚假 | `tl.remove_long_links` | CellCharter 式按距离百分位剪边 |
 | Python 里要做 SCT | 回答"Python 没有，你得用 R" | `tl.sctransform` | Seurat 4.4.0 等价实现，含 `vst` 全流程 + 可选 pyglmGamPoi 后端 |
 | 两条件之间比较空间邻域 | 只做单条件 `nhood_enrichment` | `tl.diff_nhood_enrichment` + `pl.diff_nhood_enrichment` | 直接给 Case vs Ctr 的差异富集矩阵 |
-| 多基因共表达 | 逐基因画三张图 | `tl.multigene_blend(adata, genes, mode='blend')` | 双模式（blend / 其它），共用一套色标 |
+| 多基因共表达 | 逐基因画三张图 | `tl.multigene_blend(adata, genes, mode='blend')` → `pl.multigene_blend(adata)` | 两步：前者算混合色，后者渲染并补上**基因→颜色图例**（`spatial_cell` 画不了这个图例，因为一列成千上万个 hex 字符串没有类别名） |
 
 ---
 
@@ -141,7 +141,8 @@ remove_long_links(coords, weights, distance_percentile=99.0)
 | 邻域富集矩阵（谁挨着谁） | `tl.nhood_enrichment(adata, cluster_key)` |
 | 画出来 | `pl.nhood_enrichment(adata, cluster_key)` |
 | 两条件差异富集 | `tl.diff_nhood_enrichment(adata, cluster_key, condition_key, condition_groups)` + `pl.diff_nhood_enrichment(...)` |
-| 多基因共表达 | `tl.multigene_blend(adata, genes, mode='blend', colors=...)` |
+| 多基因共表达（计算） | `tl.multigene_blend(adata, genes, mode='blend')` → 混合色写进 `obs[key_added]` |
+| 多基因共表达（出图 + 图例） | `pl.multigene_blend(adata, key='multigene_blend')` |
 
 ---
 
@@ -185,6 +186,7 @@ tcl.tl.release_sct_integration_cache(adata, what='scale_data')   # 释放 uns �
 | Atera QC 2×2 面板 | `atera_qc_summary(adata)` |
 | 转录本密度图 | `atera_transcript_density(adata)` |
 | 核内转录本比例 | `atera_nuclear_fraction(adata, genes=..., bin_um=50)` |
+| 多基因混合色 + 基因图例 | `multigene_blend(adata, key='multigene_blend')` |
 
 `select_regions` / `RegionSelector` 需要 ipympl：
 ```python
@@ -195,13 +197,23 @@ sel = tcl.pl.select_regions(adata, color='classification')
 
 ---
 
-## 九、QC（`tcl.io`，虽然不在 tl 里）
+## 九、QC（`io` 定义，两个在 `tl` 也可用）
+
+**规则**：只吃 AnnData 的纯计算在 `tl` 里也有导出；读磁盘的留在 `io`。
 
 ```
 atera_cell_qc(adata, compute_expression_genes=True)   -> DataFrame
-atera_transcript_qc(path, adata=None, min_qv=20.0, bins=100)  -> 流式，不载全矩阵
-filter_atera_genes(adata, inplace=False)              -> 只保留 feature_type == 'Gene Expression'
+    tcl.tl.atera_cell_qc 与 tcl.io.atera_cell_qc 是同一个对象（可互换）
+
+filter_atera_genes(adata, inplace=False)              -> AnnData
+    只保留 feature_type == 'Gene Expression'；别在 HVG/PCA 之前漏掉
+    tcl.tl.filter_atera_genes 与 tcl.io.filter_atera_genes 是同一个对象
+
+atera_transcript_qc(path, adata=None, min_qv=20.0, bins=100)
+    第一个参数是 run 目录，流式读点云 —— 这是 IO，所以**只在 io 里**，不在 tl
 ```
+
+画这几个结果的图：`pl.atera_qc_summary` / `pl.atera_transcript_density` / `pl.atera_nuclear_fraction`。
 
 ---
 

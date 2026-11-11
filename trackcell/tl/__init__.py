@@ -22,6 +22,17 @@ from ._autores import (
     sweep_resolutions,
 )
 from ._spatial_graph import remove_long_links
+
+# ``atera_cell_qc`` and ``filter_atera_genes`` are pure computation over an
+# AnnData — neither touches the filesystem — so by the same rule that puts
+# ``nhood_enrichment`` in ``tl`` and only its renderer in ``pl``, they belong
+# here too. Definitions stay in ``io`` (the platform reader owns them) and both
+# paths keep working: ``tcl.tl.atera_cell_qc is tcl.io.atera_cell_qc``.
+#
+# ``atera_transcript_qc`` is deliberately *not* re-exported here: its first
+# argument is a run directory, and it streams the point cloud from disk. It is
+# IO that happens to end in a QC table, not computation.
+from ..io import atera_cell_qc, filter_atera_genes
 from ._sct_entry import pack_sct_model, sctransform
 from .integration import (
     integrate_rpca,
@@ -44,6 +55,9 @@ from .slice_separation import (
 )
 
 __all__ = [
+    # Re-exported from ``io``: pure computation, no filesystem access.
+    "atera_cell_qc",
+    "filter_atera_genes",
     "sctransform",
     "pack_sct_model",
     "select_integration_features",

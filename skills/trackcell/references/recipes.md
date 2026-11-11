@@ -260,3 +260,39 @@ tcl.pl.mark_region(ax, xlim=(16000, 18000), ylim=(14000, 18000),
 tcl.pl.add_scale_bar(ax, adata, length="auto")   # nice_scale_length 自动取整
 plt.show()
 ```
+
+---
+
+## 11. 多基因共表达（两步：算混合色 → 出图 + 图例）
+
+```python
+import trackcell as tcl
+
+# 第一步：算。每个基因一个基色，按表达比例混合 → 每细胞一个 hex 色
+tcl.tl.multigene_blend(
+    adata,
+    genes=["EPCAM", "COL1A1", "PTPRC"],   # 面板三大类各挑一个
+    colors=["#e41a1c", "#377eb8", "#4daf4a"],
+    mode="blend",                          # 混合色写进 adata.obs["multigene_blend"]
+    key_added="multigene_blend",
+)
+
+# 第二步：画。spatial_cell 画不了这个图例——一列成千上万个 hex 字符串没有类别名，
+# 而基因→颜色的映射存在 uns["multigene_blend_params"] 里，只有它能还原图例。
+ax = tcl.pl.multigene_blend(adata, legend_title="genes", scalebar="auto")
+
+# 不要图例、或想自己控制，就直接用 spatial_cell：
+tcl.pl.spatial_cell(adata, color="multigene_blend")
+```
+
+**分面模式**（每基因一格，cell2location 论文风格）——这一步自己就会出图：
+
+```python
+tcl.tl.multigene_blend(
+    adata, genes=["EPCAM", "COL1A1", "PTPRC", "CD68"],
+    mode="facet", ncols=2,
+)
+```
+
+**常见错误**：`inplace=False` 时返回 Series 且**不写 obs**，所以 `pl.multigene_blend`
+会抛 `KeyError`——这是故意的，错误信息会告诉你少了哪一步。

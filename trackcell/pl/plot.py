@@ -2136,6 +2136,133 @@ def mark_circle(
     return circle
 
 
+def multigene_blend(
+    adata,
+    key: str = "multigene_blend",
+    *,
+    library_id: Optional[str] = None,
+    figsize: Optional[tuple] = None,
+    show: bool = True,
+    ax: Optional[plt.Axes] = None,
+    legend: bool = True,
+    legend_title: Optional[str] = "genes",
+    **kwargs,
+) -> plt.Axes:
+    """
+    Render a blend computed by :func:`trackcell.tl.multigene_blend`.
+
+    ``tl.multigene_blend(mode='blend')`` writes one hex colour per cell into
+    ``adata.obs[key]`` plus the gene-to-colour mapping into
+    ``adata.uns['{key}_params']``. ``spatial_cell`` draws such a column
+    correctly — it detects the raw-hex case and skips palette construction — but
+    it cannot build a legend, because a column holding thousands of distinct hex
+    strings carries no category names. The composite therefore came out with no
+    indication of which colour meant which gene.
+
+    This function supplies that legend. It recomputes nothing: it reads
+    ``adata.obs[key]`` and ``adata.uns['{key}_params']`` only. Call
+    :func:`trackcell.tl.multigene_blend` first.
+
+    Parameters
+    ----------
+    adata
+        Annotated data object.
+    key
+        ``obs`` column written by :func:`trackcell.tl.multigene_blend`.
+    library_id
+        Spatial library id, forwarded to :func:`spatial_cell`.
+    figsize
+        Figure size, forwarded to :func:`spatial_cell`.
+    show
+        Whether to call ``plt.show()``.
+    ax
+        Existing axes to draw on.
+    legend
+        Whether to draw the gene-to-colour legend. Only possible when the
+        ``uns`` parameters are present; blending without ``inplace=True``
+        leaves nothing to read.
+    legend_title
+        Legend title. Pass ``None`` to omit it.
+    **kwargs
+        Forwarded to :func:`spatial_cell` (``edges_width``, ``alpha``,
+        ``scalebar``, ``basis``, ...).
+
+    Returns
+    -------
+    The ``matplotlib.axes.Axes`` with the composite drawn on it.
+
+    Raises
+    ------
+    KeyError
+        If ``adata.obs[key]`` is absent, i.e. blending has not been run.
+    ValueError
+        If ``adata.obs[key]`` is not a column of hex colour strings.
+
+    Examples
+    --------
+    >>> import trackcell as tcl
+    >>> tcl.tl.multigene_blend(adata, genes=["EPCAM", "COL1A1", "PTPRC"])
+    >>> tcl.pl.multigene_blend(adata)  # composite + gene/colour legend
+
+    See Also
+    --------
+    trackcell.tl.multigene_blend : computes the blended colours.
+    spatial_cell : draws any polygon column, including raw hex.
+    """
+    if key not in adata.obs:
+        raise KeyError(
+            f"adata.obs['{key}'] not found. Run "
+            f"tcl.tl.multigene_blend(adata, genes=[...], key_added='{key}') first."
+        )
+
+    column = adata.obs[key]
+    if not _is_hex_color_series(column):
+        raise ValueError(
+            f"adata.obs['{key}'] is not a column of hex colour strings, so it was "
+            "not produced by tl.multigene_blend. Use spatial_cell for ordinary "
+            "columns."
+        )
+
+    ax = spatial_cell(
+        adata,
+        color=key,
+        library_id=library_id,
+        figsize=figsize,
+        show=False,
+        ax=ax,
+        legend=False,
+        **kwargs,
+    )
+
+    params = adata.uns.get(f"{key}_params") or {}
+    genes = params.get("genes") or []
+    colors = params.get("colors") or []
+
+    if legend and genes and colors:
+        from matplotlib.patches import Patch
+
+        # The legend describes the *source* colours, not the per-cell blends:
+        # one entry per input gene, which is the only interpretation that helps
+        # a reader. A legend over the blended hex values would list thousands of
+        # indistinguishable swatches.
+        handles = [
+            Patch(facecolor=color, edgecolor="none", label=gene)
+            for gene, color in zip(genes, colors)
+        ]
+        ax.legend(
+            handles=handles,
+            loc="center left",
+            bbox_to_anchor=(1.01, 0.5),
+            frameon=False,
+            title=legend_title,
+        )
+
+    if show:
+        plt.show()
+
+    return ax
+
+
 def mark_region(
     ax: plt.Axes,
     xlim: Optional[tuple] = None,

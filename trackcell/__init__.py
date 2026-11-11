@@ -27,6 +27,9 @@ Split one slide into tissue sections          ``tl.spatial_slice_cluster``
 Spatial-domain clustering (YardCluster)       ``tl.spatial_cluster``
 Pick a stable Leiden resolution               ``tl.select_resolution``
 Neighbourhood enrichment + 2-condition diff   ``tl.nhood_enrichment`` / ``tl.diff_nhood_enrichment``
+Multi-gene co-expression blend                ``tl.multigene_blend`` then ``pl.multigene_blend``
+Cell-level QC (Atera)                         ``io.atera_cell_qc`` (also ``tl.atera_cell_qc``)
+Transcript QC (streams disk, so it is IO)     ``io.atera_transcript_qc``
 SCTransform in Python (Seurat 4.4.0 equiv.)   ``tl.sctransform``
 SCT + RPCA integration                        ``tl.integrate_sct_rpca``
 Plot cell polygons (not scatter)              ``pl.spatial_cell``

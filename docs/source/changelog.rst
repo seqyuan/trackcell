@@ -1,5 +1,31 @@
 Changelog
 
+Version 0.5.1 (unreleased)
+---------------------------
+
+**Added**:
+
+* ``pl.multigene_blend`` — renders the composite produced by
+  ``tl.multigene_blend(mode='blend')`` and draws the **gene-to-colour legend**.
+  ``pl.spatial_cell`` already rendered such a column correctly (it detects the
+  raw-hex case and skips palette construction) but could not label it: a column
+  of thousands of distinct hex strings carries no category names, while the
+  gene-to-colour mapping sits unused in ``adata.uns['<key>_params']``. The
+  documented composite therefore shipped with no indication of which colour
+  meant which gene. Nothing is recomputed — the function reads ``obs`` and
+  ``uns`` only, and zeroing ``X`` leaves the output unchanged.
+
+* ``tl.atera_cell_qc`` and ``tl.filter_atera_genes`` — re-exported from ``io``
+  as the same objects (``tcl.tl.atera_cell_qc is tcl.io.atera_cell_qc``). Both
+  operate on an AnnData and never touch the filesystem, so they belong in
+  ``tl`` by the same rule that puts ``nhood_enrichment`` there and only its
+  renderer in ``pl``. Lookups for "QC" that started in ``tl`` previously came
+  up empty.
+
+  ``atera_transcript_qc`` is deliberately **not** re-exported: its first
+  argument is a run directory and it streams the point cloud from disk. It is
+  IO that ends in a QC table, not computation, and it stays in ``io``.
+
 Version 0.5.0
 -------------
 

@@ -458,9 +458,17 @@ tcl.tl.multigene_blend(
     mode='blend',
 )
 
-# Visualize with cell polygons
+# Visualize: composite + gene→colour legend
+tcl.pl.multigene_blend(adata)
+
+# Without the legend (or for any ordinary obs column):
 tcl.pl.spatial_cell(adata, color='multigene_blend')
 ```
+
+The two-step split matters because a raw-hex ``obs`` column holds thousands of
+distinct colours and no category names, so ``spatial_cell`` has nothing to label.
+The gene-to-colour mapping is kept in ``adata.uns['multigene_blend_params']`` and
+``pl.multigene_blend`` is what turns it into a legend.
 
 ```python
 # Custom colors + gamma correction

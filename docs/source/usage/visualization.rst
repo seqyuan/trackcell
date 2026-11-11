@@ -251,7 +251,16 @@ RGB averaging. The result is a hex color per cell, stored in ``adata.obs``:
        mode='blend',
    )
 
-   # Visualize as composite
+   # Visualize as composite. ``pl.multigene_blend`` is the same picture as
+   # ``spatial_cell(color='multigene_blend')`` plus the legend that
+   # ``spatial_cell`` cannot build: a raw-hex column carries no category names,
+   # so only the ``uns`` parameters know which colour came from which gene.
+   tcl.pl.multigene_blend(adata)
+
+Equivalently, without the legend:
+
+.. code-block:: python
+
    tcl.pl.spatial_cell(adata, color='multigene_blend')
 
 Custom colors and gamma correction:
