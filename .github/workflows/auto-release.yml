@@ -75,6 +75,11 @@ jobs:
     runs-on: ubuntu-latest
     needs: create-release
 
+    env:
+      # Selects the authentication path below. GitHub does not allow
+      # ``secrets`` directly in ``if:``, so the value is promoted to job env.
+      PYPI_TOKEN: ${{ secrets.PYPI_API_TOKEN }}
+
     steps:
       - uses: actions/checkout@v4
 
@@ -113,7 +118,21 @@ jobs:
       - name: Fast tests
         run: poetry run pytest -m "not slow" -q
 
-      - name: Publish to PyPI
+      - name: Publish to PyPI (Trusted Publishing)
+        # Used once the PyPI project has a Trusted Publisher configured and the
+        # PYPI_API_TOKEN secret has been removed. ``id-token: write`` lets the
+        # action exchange a GitHub OIDC token for a short-lived credential.
+        if: env.PYPI_TOKEN == ''
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: dist/
+          attestations: true
+
+      - name: Publish to PyPI (API token fallback)
+        # Transitional path: while the token secret exists, keep publishing with
+        # it so tags do not depend on a PyPI-side setting. Delete the secret to
+        # switch to Trusted Publishing on the next tag.
+        if: env.PYPI_TOKEN != ''
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
           packages-dir: dist/
