@@ -510,3 +510,40 @@ def test_isolated_cell_fallback_matches_the_graph_builder_convention():
     coords, w = _leaf_graph()
     trimmed = remove_long_links(coords, w, distance_percentile=50.0).toarray()
     assert trimmed[1, 1] == solo[0, 0]
+
+
+def test_isolated_cell_features_are_finite_in_every_mode():
+    """A self loop must not leak NaN into any neighbourhood feature.
+
+    The self loop gives the cell a neighbour at offset (0, 0), which is exactly
+    the kind of degenerate input a directional weighting can turn into NaN
+    (``arctan2(0, 0)`` -> 0, so ``cos(phi)`` -> 1; the regression variant skips
+    rows with fewer than three neighbours). All three consumers are checked
+    because only checking the mean would leave two untested.
+    """
+    from trackcell.tl._spatial_graph import (
+        compute_neighborhood_gradient_cosphi,
+        compute_neighborhood_gradient_regression,
+    )
+
+    coords, w = _leaf_graph()
+    trimmed = remove_long_links(coords, w, distance_percentile=50.0)
+
+    rng = np.random.default_rng(1)
+    X = rng.random((4, 6))
+
+    mean = compute_neighborhood_mean(X, trimmed)
+    cosphi = compute_neighborhood_gradient_cosphi(X, coords, trimmed)
+    regression = compute_neighborhood_gradient_regression(X, coords, trimmed)
+
+    for name, matrix in (
+        ("mean", mean),
+        ("cosphi", cosphi),
+        ("regression", regression),
+    ):
+        assert np.all(np.isfinite(matrix)), f"{name} produced non-finite values"
+
+    # Multi-hop diffusion must also stay finite: the self loop persists under W^k.
+    multi = compute_neighborhood_multi_hop(X, trimmed, n_layers=3)
+    assert np.all(np.isfinite(multi))
+    assert np.allclose(multi[:, :6], mean, rtol=1e-5, atol=1e-5)
