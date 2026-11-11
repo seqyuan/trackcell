@@ -146,13 +146,42 @@ def select_integration_features_xgb(
     subsample: float = 0.8,
     colsample_bytree: float = 0.8,
     seed: int = 0,
-) -> list[str]:
+    return_importance: bool = False,
+):
     """
-    Optional enhancement: rank anchor genes by XGBoost batch-discrimination importance.
+    Rank candidate genes by how strongly they discriminate batches under XGBoost.
 
-    Prefilters with the Seurat-style cross-batch residual variance screen, then
-    trains a batch classifier on per-cell SCT residuals and returns the top
-    ``n_features`` by gain importance. Does not replace reciprocal PCA anchor finding.
+    **This is not** :func:`trackcell.tl.select_integration_features` with
+    ``method='seurat'``, and the two are not interchangeable. Seurat's
+    ``SelectIntegrationFeatures`` keeps genes that are *reproducibly variable
+    within* batches; this function keeps genes that *separate* batches. On the
+    same input the two rankings point in opposite directions, so a downstream
+    comparison of integrated results across the two is not meaningful.
+
+    That direction is deliberate — features carrying batch signal are the ones
+    whose batch effect an integration step has to correct — but it is an
+    experiment, not a Seurat equivalent. Two caveats come with it:
+
+    * Importances are computed on the same cells the classifier was trained on
+      (no held-out fold, no cross-validation), so they are subject to selection
+      bias and should be read as a ranking, not as a calibrated statistic.
+    * Anchors found on batch-discriminating features can match cells by batch
+      structure rather than by cell identity. Reciprocal PCA with
+      ``method='seurat'`` remains the supported path.
+
+    Parameters
+    ----------
+    return_importance
+        When ``True``, return ``(genes, importance_table)`` where the table is a
+        ``DataFrame`` with ``gene`` and ``importance`` columns sorted descending.
+        Provides the manual review the ranking otherwise gives no access to.
+        When fewer than two batches are present no classifier is fitted, and the
+        table carries ``NaN`` importances for every candidate.
+
+    Returns
+    -------
+    list of str, or (list of str, DataFrame)
+        The selected genes, and optionally the importance table.
     """
     _require_xgboost()
     n_candidates = min(max(n_features * candidate_multiplier, n_features), 10000)
@@ -171,7 +200,11 @@ def select_integration_features_xgb(
     )
     labels = adata.obs[batch_key].astype(str).to_numpy()
     if len(np.unique(labels)) < 2:
-        return candidates[:n_features]
+        selected = candidates[:n_features]
+        if return_importance:
+            table = pd.DataFrame({"gene": candidates, "importance": np.nan})
+            return selected, table
+        return selected
 
     encoder = LabelEncoder()
     y = encoder.fit_transform(labels)
@@ -187,8 +220,11 @@ def select_integration_features_xgb(
     )
     clf.fit(matrix, y)
     importance = clf.feature_importances_
-    order = np.argsort(importance)[::-1]
-    selected = [candidates[i] for i in order[: min(n_features, len(candidates))]]
+    table = pd.DataFrame({"gene": candidates, "importance": importance})
+    table = table.sort_values("importance", ascending=False, ignore_index=True)
+    selected = table["gene"].head(min(n_features, len(table))).tolist()
+    if return_importance:
+        return selected, table
     return selected
 
 

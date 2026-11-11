@@ -71,6 +71,33 @@
 
 ### B-1 xgb 整合特征选择用了"最像批次效应"的基因
 
+> **状态（0.5.1）**：已解决，采用方案③（不改行为，补文档 + 可复核返回）。
+>
+> **意图判定依据**：私有函数 docstring 已写明 "rank anchor genes by XGBoost
+> **batch-discrimination** importance"，公开包装也写 "rank by XGBoost
+> batch-discrimination importance"。所以"选区分批次的基因"是**已声明的意图**，
+> 代码与文档一致，不构成 bug。按本条自己的判据，走方案③。
+>
+> 但实测发现了比反了更严重的问题：**两个 method 的排名方向几乎相反**。
+> 构造一对 batch，其中 `BATCHONLY` 的方差全部来自批间差异：
+>
+> | method | BATCHONLY | 两个 10 基因集合的交集 |
+> |---|---|---|
+> | `seurat`（默认） | **未被选中** | 2 / 10 |
+> | `xgboost` | **排名第 1** | 2 / 10 |
+>
+> 而原 docstring 开头写 "Choose anchor genes for SCT integration (Seurat
+> `SelectIntegrationFeatures`)"，再把 xgboost 称为 "optional enhancement" ——
+> 读起来像一个方法的两种实现。实际拿两者比较整合结果，是在比较两个不同特征空间。
+>
+> 落地内容：docstring 明写两者不可比；标注 xgboost 为实验性（importance 样本内、
+> 无 CV；用批次判别基因做锚点可能按批次结构而非细胞身份匹配）；新增
+> `return_importance=True` 返回 `(genes, DataFrame)` 供人工复核。
+> 并且**把"方向相反"从散文变成断言**：`test_xgboost_ranks_the_batch_driven_gene_and_seurat_does_not`
+> 断言该基因在 xgboost 里排第一、在 seurat 里不被选中、两集合交集小于一半。已注入
+> 排序反转验证该测试会失败。
+>
+
 | 项 | 内容 |
 |---|---|
 | **现状** | `tl/integration/_xgboost_integration.py:160-190`：在**全部细胞**上训练批次分类器（无 CV、无留出），再按 gain importance **降序**取前 N 个基因作为 RPCA 整合特征。 |

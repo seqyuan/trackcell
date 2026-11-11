@@ -9,8 +9,11 @@ import numpy as np
 import pandas as pd
 from anndata import AnnData
 
+from ..._logging import get_logger
 from .._gene_utils import resolve_gene_alias
 from ._xgboost_integration import select_integration_features_xgb
+
+logger = get_logger(__name__)
 
 
 def _median_vf_rank(gene: str, vf_lists: Sequence[Sequence[str]]) -> float:
@@ -69,15 +72,44 @@ def select_integration_features(
     method: Literal["seurat", "xgboost"] = "seurat",
     layer: Optional[str] = None,
     seed: int = 0,
-) -> list[str]:
+    return_importance: bool = False,
+):
     """
-    Choose anchor genes for SCT integration (Seurat ``SelectIntegrationFeatures``).
+    Choose anchor genes for SCT integration.
 
-    Default (``method='seurat'``): genes most frequently selected as
-    ``VariableFeatures`` across per-batch SCT models, with Seurat tie-breaking.
+    The two ``method`` values answer **different questions** and their results are
+    not comparable. This is the most important thing to know about this function:
 
-    Optional enhancement (``method='xgboost'``): same prefilter, then rank
-    by XGBoost batch-discrimination importance on per-cell SCT residuals.
+    ``method='seurat'`` (default) — Seurat ``SelectIntegrationFeatures``: genes
+    most often selected as ``VariableFeatures`` across the per-batch SCT models,
+    with Seurat tie-breaking. Selects genes that vary *reproducibly within*
+    batches.
+
+    ``method='xgboost'`` — genes that best *separate* batches, ranked by gain
+    importance from a classifier trained on per-cell SCT residuals. On the same
+    input this ranking points in close to the opposite direction to the default:
+    a gene whose variance is purely batch-driven ranks high here and low under
+    ``'seurat'``, and vice versa. Running both and comparing the resulting
+    integrated embeddings therefore compares two different feature spaces, not two
+    implementations of one method.
+
+    ``'xgboost'`` is an experiment, not a Seurat equivalent. Its importances are
+    in-sample (no held-out fold, no cross-validation), and anchors found on
+    batch-discriminating features can match cells by batch structure rather than
+    by cell identity. ``'seurat'`` remains the supported path for reciprocal PCA.
+    Use ``return_importance=True`` to inspect the ranking it produces.
+
+    Parameters
+    ----------
+    return_importance
+        Only meaningful for ``method='xgboost'``. Return ``(genes, table)``, where
+        ``table`` is a ``DataFrame`` of ``gene`` / ``importance`` sorted
+        descending. For ``method='seurat'`` the flag is ignored and a plain list
+        is returned, because that method has no single importance score.
+
+    Returns
+    -------
+    list of str, or (list of str, DataFrame)
     """
     if batch_key not in adata.obs.columns:
         raise ValueError(f"batch_key '{batch_key}' not found in adata.obs.")
@@ -93,6 +125,14 @@ def select_integration_features(
             n_features=n_features,
             layer=layer,
             seed=seed,
+            return_importance=return_importance,
+        )
+
+    if return_importance and method == "seurat":
+        logger.warning(
+            "return_importance is only produced by method='xgboost'; method=%r has "
+            "no single importance score, returning a plain list.",
+            method,
         )
 
     uns = adata.uns.get(sct_key, {})

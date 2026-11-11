@@ -3,6 +3,31 @@ Changelog
 Version 0.5.1
 -------------
 
+**Documentation** — behavior unchanged:
+
+* ``tl.select_integration_features`` now states that its two ``method`` values
+  answer different questions and are not comparable. ``'seurat'`` (default)
+  selects genes that vary reproducibly *within* batches; ``'xgboost'`` selects
+  genes that *separate* batches. The docstring previously opened with "Seurat
+  ``SelectIntegrationFeatures``" and offered ``'xgboost'`` as an "optional
+  enhancement", which reads as two implementations of one method. They are not:
+  on a synthetic pair of batches, a gene whose only variance is a batch shift is
+  ranked **first** by ``'xgboost'`` and **not selected at all** by ``'seurat'``,
+  and the two 10-gene sets overlap by 2. That is now asserted by a test rather
+  than described in prose.
+
+  ``'xgboost'`` is documented as an experiment: importances are in-sample (no
+  held-out fold, no cross-validation), and anchors found on batch-discriminating
+  features can match cells by batch structure rather than cell identity.
+  ``'seurat'`` remains the supported path for reciprocal PCA.
+
+* ``select_integration_features(..., return_importance=True)`` returns
+  ``(genes, table)`` for ``method='xgboost'``, where ``table`` has ``gene`` and
+  ``importance`` sorted descending — the manual review the ranking previously
+  gave no access to. Ignored with a warning for ``'seurat'``, which has no single
+  importance score. When fewer than two batches are present no classifier is
+  fitted and the table carries ``NaN`` importances.
+
 **Fixed**:
 
 * ``read_sto_cellbin`` faked a 10x10 polygon for cells whose GEF border cannot

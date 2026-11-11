@@ -1,5 +1,7 @@
 """Tests for SCT RPCA integration."""
 
+import logging
+
 import numpy as np
 import pandas as pd
 import pytest
@@ -426,3 +428,141 @@ def test_integrate_pair_xgb_reconstructs_full_shift(monkeypatch):
     # Guard against the regression: the dropped-mean version equals the query
     # matrix untouched under a zero predictor.
     assert not np.allclose(out, data_query)
+
+
+# ---------------------------------------------------------------------------
+# B-1: the two `method` values rank in different directions, and say so
+# ---------------------------------------------------------------------------
+
+
+def _make_batch_driven_adata(seed: int = 7):
+    """120 cells, 2 batches, 40 genes, two purpose-built markers.
+
+    ``BATCHONLY`` differs *only* between batches. ``BIO`` varies within a batch,
+    which is what ``method='seurat'`` looks for. They pull in different
+    directions, which is the whole point of the test below.
+    """
+    rng = np.random.default_rng(seed)
+    n_per, n_genes = 60, 40
+    parts = []
+    for b, shift in enumerate([0.0, 30.0]):
+        lam = rng.uniform(1.0, 5.0, size=(n_per, n_genes))
+        lam[:, 0] = 1.0  # BATCHONLY
+        lam[:, 1] = rng.uniform(0.5, 25.0, size=n_per)  # BIO
+        if b == 1:
+            lam[:, 0] += shift
+        ad = AnnData(X=sps.csr_matrix(rng.poisson(lam).astype(float)))
+        ad.obs_names = [f"b{b}_c{i}" for i in range(n_per)]
+        ad.var_names = ["BATCHONLY", "BIO"] + [f"g{i}" for i in range(n_genes - 2)]
+        ad.obs["batch"] = f"B{b}"
+        parts.append(ad)
+
+    merged = parts[0].concatenate(parts[1], batch_key="batch")
+    merged.obs["batch"] = (
+        merged.obs["batch"].astype(str).str.replace("-.*", "", regex=True)
+    )
+    merged.layers["counts"] = merged.X.copy()
+    sctransform(
+        merged,
+        layer="counts",
+        batch_key="batch",
+        n_top_genes=30,
+        n_cells=40,
+        n_genes=40,
+        seed=1,
+    )
+    return merged
+
+
+@pytest.mark.skipif(not xgboost_available(), reason="xgboost not installed")
+def test_xgboost_ranks_the_batch_driven_gene_and_seurat_does_not():
+    """Pin the documented direction instead of asserting it in prose.
+
+    ``method='xgboost'`` selects genes that *separate* batches; ``'seurat'``
+    selects genes that vary *reproducibly within* them. A gene whose only
+    variance is a batch shift must therefore be picked by the first and missed by
+    the second. If this ever passes with the reverse outcome, the two methods have
+    silently become interchangeable and the docstring is wrong.
+    """
+    adata = _make_batch_driven_adata()
+
+    xgb_genes, table = select_integration_features(
+        adata,
+        batch_key="batch",
+        n_features=10,
+        method="xgboost",
+        return_importance=True,
+    )
+    seurat_genes = select_integration_features(
+        adata, batch_key="batch", n_features=10, method="seurat"
+    )
+
+    assert table["gene"].iloc[0] == "BATCHONLY", table.head().to_string()
+    assert "BATCHONLY" in xgb_genes
+    assert "BATCHONLY" not in seurat_genes
+    # "Not comparable" is a measurable claim, not a disclaimer.
+    overlap = set(xgb_genes) & set(seurat_genes)
+    assert len(overlap) < len(xgb_genes) // 2, f"the sets agree too much: {overlap}"
+
+
+@pytest.mark.skipif(not xgboost_available(), reason="xgboost not installed")
+def test_return_importance_gives_the_reviewable_table():
+    adata = _make_batch_driven_adata()
+
+    genes, table = select_integration_features(
+        adata, batch_key="batch", n_features=5, method="xgboost", return_importance=True
+    )
+
+    assert list(table.columns) == ["gene", "importance"]
+    assert table["importance"].is_monotonic_decreasing
+    assert table["gene"].head(len(genes)).tolist() == genes
+    assert np.isfinite(table["importance"]).all()
+
+
+def test_return_importance_is_ignored_for_seurat_with_a_warning(caplog):
+    adata = _make_batch_driven_adata()
+
+    with caplog.at_level(logging.WARNING, logger="trackcell"):
+        result = select_integration_features(
+            adata,
+            batch_key="batch",
+            n_features=5,
+            method="seurat",
+            return_importance=True,
+        )
+
+    assert isinstance(result, list), "seurat has no single importance score"
+    assert any("return_importance" in r.getMessage() for r in caplog.records)
+
+
+@pytest.mark.skipif(not xgboost_available(), reason="xgboost not installed")
+def test_single_batch_yields_nan_importance():
+    """No classifier is fitted, so the table must be explicitly empty of scores.
+
+    Built as a genuinely single-batch SCT run: relabelling the batches afterwards
+    leaves ``batch_models`` keyed by the old labels, which is a different (and
+    invalid) state.
+    """
+    rng = np.random.default_rng(11)
+    counts = rng.poisson(rng.uniform(1.0, 5.0, size=(40, 30))).astype(float)
+    adata = AnnData(X=sps.csr_matrix(counts))
+    adata.obs_names = [f"c{i}" for i in range(40)]
+    adata.var_names = [f"g{i}" for i in range(30)]
+    adata.obs["batch"] = "only"
+    adata.layers["counts"] = adata.X.copy()
+    sctransform(
+        adata,
+        layer="counts",
+        batch_key="batch",
+        n_top_genes=25,
+        n_cells=30,
+        n_genes=30,
+        seed=1,
+    )
+
+    genes, table = select_integration_features(
+        adata, batch_key="batch", n_features=5, method="xgboost", return_importance=True
+    )
+
+    assert len(genes) == 5
+    assert table["importance"].isna().all()
