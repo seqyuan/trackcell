@@ -1,0 +1,6 @@
+{
+  "microns_per_pixel": 0.3,
+  "tissue_hires_scalef": 0.5,
+  "tissue_lowres_scalef": 0.125,
+  "fiducial_diameter_fullres": 700.0
+}

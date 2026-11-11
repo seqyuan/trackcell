@@ -1,0 +1,284 @@
+{
+  "targets": [
+    {
+      "type": {
+        "descriptor": "gene"
+      },
+      "name": "EPCAM",
+      "gene_id": "ENSX000000"
+    },
+    {
+      "type": {
+        "descriptor": "gene"
+      },
+      "name": "KRT8",
+      "gene_id": "ENSX000001"
+    },
+    {
+      "type": {
+        "descriptor": "gene"
+      },
+      "name": "KRT18",
+      "gene_id": "ENSX000002"
+    },
+    {
+      "type": {
+        "descriptor": "gene"
+      },
+      "name": "KRT19",
+      "gene_id": "ENSX000003"
+    },
+    {
+      "type": {
+        "descriptor": "gene"
+      },
+      "name": "MKI67",
+      "gene_id": "ENSX000004"
+    },
+    {
+      "type": {
+        "descriptor": "gene"
+      },
+      "name": "TOP2A",
+      "gene_id": "ENSX000005"
+    },
+    {
+      "type": {
+        "descriptor": "gene"
+      },
+      "name": "PCNA",
+      "gene_id": "ENSX000006"
+    },
+    {
+      "type": {
+        "descriptor": "gene"
+      },
+      "name": "COL1A1",
+      "gene_id": "ENSX000007"
+    },
+    {
+      "type": {
+        "descriptor": "gene"
+      },
+      "name": "COL1A2",
+      "gene_id": "ENSX000008"
+    },
+    {
+      "type": {
+        "descriptor": "gene"
+      },
+      "name": "COL3A1",
+      "gene_id": "ENSX000009"
+    },
+    {
+      "type": {
+        "descriptor": "gene"
+      },
+      "name": "DCN",
+      "gene_id": "ENSX000010"
+    },
+    {
+      "type": {
+        "descriptor": "gene"
+      },
+      "name": "ACTA2",
+      "gene_id": "ENSX000011"
+    },
+    {
+      "type": {
+        "descriptor": "gene"
+      },
+      "name": "TAGLN",
+      "gene_id": "ENSX000012"
+    },
+    {
+      "type": {
+        "descriptor": "gene"
+      },
+      "name": "VIM",
+      "gene_id": "ENSX000013"
+    },
+    {
+      "type": {
+        "descriptor": "gene"
+      },
+      "name": "PTPRC",
+      "gene_id": "ENSX000014"
+    },
+    {
+      "type": {
+        "descriptor": "gene"
+      },
+      "name": "CD3D",
+      "gene_id": "ENSX000015"
+    },
+    {
+      "type": {
+        "descriptor": "gene"
+      },
+      "name": "CD3E",
+      "gene_id": "ENSX000016"
+    },
+    {
+      "type": {
+        "descriptor": "gene"
+      },
+      "name": "CD2",
+      "gene_id": "ENSX000017"
+    },
+    {
+      "type": {
+        "descriptor": "gene"
+      },
+      "name": "CD79A",
+      "gene_id": "ENSX000018"
+    },
+    {
+      "type": {
+        "descriptor": "gene"
+      },
+      "name": "MS4A1",
+      "gene_id": "ENSX000019"
+    },
+    {
+      "type": {
+        "descriptor": "gene"
+      },
+      "name": "CD37",
+      "gene_id": "ENSX000020"
+    },
+    {
+      "type": {
+        "descriptor": "gene"
+      },
+      "name": "LYZ",
+      "gene_id": "ENSX000021"
+    },
+    {
+      "type": {
+        "descriptor": "gene"
+      },
+      "name": "CD68",
+      "gene_id": "ENSX000022"
+    },
+    {
+      "type": {
+        "descriptor": "gene"
+      },
+      "name": "CD14",
+      "gene_id": "ENSX000023"
+    },
+    {
+      "type": {
+        "descriptor": "gene"
+      },
+      "name": "ACTB",
+      "gene_id": "ENSX000024"
+    },
+    {
+      "type": {
+        "descriptor": "gene"
+      },
+      "name": "GAPDH",
+      "gene_id": "ENSX000025"
+    },
+    {
+      "type": {
+        "descriptor": "gene"
+      },
+      "name": "B2M",
+      "gene_id": "ENSX000026"
+    },
+    {
+      "type": {
+        "descriptor": "gene"
+      },
+      "name": "TMSB4X",
+      "gene_id": "ENSX000027"
+    },
+    {
+      "type": {
+        "descriptor": "gene"
+      },
+      "name": "RPLP0",
+      "gene_id": "ENSX000028"
+    },
+    {
+      "type": {
+        "descriptor": "gene"
+      },
+      "name": "MALAT1",
+      "gene_id": "ENSX000029"
+    },
+    {
+      "type": {
+        "descriptor": "gene"
+      },
+      "name": "EEF1A1",
+      "gene_id": "ENSX000030"
+    },
+    {
+      "type": {
+        "descriptor": "gene"
+      },
+      "name": "RPL13A",
+      "gene_id": "ENSX000031"
+    },
+    {
+      "type": {
+        "descriptor": "gene"
+      },
+      "name": "RPS18",
+      "gene_id": "ENSX000032"
+    },
+    {
+      "type": {
+        "descriptor": "gene"
+      },
+      "name": "UBC",
+      "gene_id": "ENSX000033"
+    },
+    {
+      "type": {
+        "descriptor": "gene"
+      },
+      "name": "HSP90AA1",
+      "gene_id": "ENSX000034"
+    },
+    {
+      "type": {
+        "descriptor": "gene"
+      },
+      "name": "HSPA1A",
+      "gene_id": "ENSX000035"
+    },
+    {
+      "type": {
+        "descriptor": "gene"
+      },
+      "name": "FTL",
+      "gene_id": "ENSX000036"
+    },
+    {
+      "type": {
+        "descriptor": "gene"
+      },
+      "name": "FTH1",
+      "gene_id": "ENSX000037"
+    },
+    {
+      "type": {
+        "descriptor": "gene"
+      },
+      "name": "S100A9",
+      "gene_id": "ENSX000038"
+    },
+    {
+      "type": {
+        "descriptor": "gene"
+      },
+      "name": "CFL1",
+      "gene_id": "ENSX000039"
+    }
+  ]
+}

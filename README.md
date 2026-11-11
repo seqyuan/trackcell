@@ -3,6 +3,11 @@
 A Python package for processing and visualizing single-cell and spatial transcriptomics data.
 Supports 10x Visium HD (SpaceRanger), 10x Xenium Analyzer and 10x Atera outputs.
 
+> Using an AI assistant (Claude Code, Cursor, pi, Copilot)? There is a
+> ready-made capability map at [`skills/trackcell/`](skills/trackcell/SKILL.md)
+> — a need-indexed guide to all 71 public functions plus runnable recipes.
+> See [For AI assistants](#for-ai-assistants).
+
 ## Installation
 
 ```bash
@@ -567,6 +572,41 @@ tcl.tl.distance_to_nearest_centroids(
 )
 tcl.pl.spatial_cell(sub, color="distance_to_nearest_gcc", cmap="Reds")
 ```
+
+## For AI assistants
+
+Coding agents struggle with TrackCell for a specific reason: they default to
+scanpy plus hand-written NumPy, and never discover that this package already
+solves the problem. The repository therefore ships two AI-facing artifacts.
+
+### `skills/trackcell/` — capability map
+
+A [skill](https://docs.claude.com/en/docs/claude-code/skills) that agents load
+on demand. Install it once (symlink, so it tracks your checkout):
+
+```bash
+ln -s "$(pwd)/skills/trackcell" ~/.pi/agent/skills/trackcell          # pi
+ln -s "$(pwd)/skills/trackcell" ~/.claude/skills/trackcell            # Claude Code
+```
+
+| File | Contents |
+|---|---|
+| `SKILL.md` | Trigger conditions, routing, three must-know pitfalls, self-check snippet |
+| `references/capabilities.md` | Every public function indexed by **task**, not by module — plus a "don't hand-roll this" table |
+| `references/recipes.md` | 10 composed, runnable workflows |
+
+### `tests/data/` — tiny fixtures
+
+Three ~170 KB synthetic vendor bundles (`hd_cellseg_tiny`, `hd_bin_tiny`,
+`xenium_tiny`) let anyone — human or agent — run the full read → analyse → plot
+path with **no real data**. Deterministically generated:
+
+```bash
+python scripts/make_fixtures.py --check    # rebuild, read back, assert
+```
+
+See [`tests/data/README.md`](tests/data/README.md) for what each fixture proves.
+These are guarded against reader drift by `tests/test_fixture_contract.py`.
 
 ## Development
 

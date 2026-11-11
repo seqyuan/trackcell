@@ -1,0 +1,7 @@
+{
+  "run_name": "trackcell_tiny_xenium",
+  "region": "tiny",
+  "panel_tissue_type": "tissue",
+  "pixel_size": 0.2125,
+  "num_cells": 40
+}
