@@ -15,6 +15,13 @@ Version 0.5.1 (unreleased)
   ``uns['spatial'][sample]['metadata']['n_fallback_polygons']`` (per sample), and
   a ``RuntimeWarning`` naming the affected count.
 
+  The flag covers **every** fabrication path, which is more than the box it
+  started as: fewer than three usable vertices gives a 10x10 box, a
+  self-intersecting border gives a buffered convex hull, and fully coincident
+  vertices give a small disc. All three are valid, non-empty polygons that a
+  caller cannot tell from stored geometry, so the extractor reports which one it
+  used rather than the caller inferring it.
+
   (An earlier draft of this entry claimed it also fixed a latent
   ``wkt.dumps(None)`` crash. It did not: that branch is unreachable —
   ``MultiPoint(...).convex_hull`` always has ``.buffer``, and 3000 fuzzed border
@@ -53,12 +60,24 @@ Version 0.5.1 (unreleased)
   truncate the legend; a *missing* params dict now warns instead of drawing the
   unlabelled composite it was written to eliminate (``anndata.concat`` drops
   ``uns``, so that is reachable without hand-editing). The ``background`` colour
-  is now a legend entry, because those cells are visible in the figure.
+  becomes a legend entry, but only when some cell actually falls back to it.
 
-* ``pl._is_hex_color_series`` inspects the whole column instead of the first 100
-  values, so the raw-hex decision no longer depends on row order, and it accepts
-  ``#rgb`` / ``#rrggbbaa``. Previously a non-hex value at row 101 was invisible
-  while one at row 1 flipped the verdict for the whole column.
+* Colour columns are detected by one shared predicate, ``pl.plot._is_color_column``.
+  ``spatial_cell`` and ``pl.multigene_blend`` previously used different tests — a
+  strict hex check in the renderer, a permissive colour check in the new
+  function — so a column mixing ``#e41a1c`` with a named colour passed one gate
+  and failed the other. The result was drawn with the *categorical* palette: a
+  wrong figure instead of an error. ``background='white'``, legal for
+  ``tl.multigene_blend``, hit exactly that. ``_plot_raw_hex_colors`` also skipped
+  any group whose colour was not a ``#`` literal, silently dropping those cells;
+  colours are now normalised with ``to_hex`` instead. Detection inspects the whole
+  column (the old 100-row probe made the verdict depend on row order), accepts
+  ``#rgb`` / ``#rrggbbaa``, rejects non-string columns outright (``is_color_like``
+  accepts floats as greys), and keeps a vectorised path for the all-hex case.
+
+* ``read_sto._valid_border_offsets`` widens to ``int32`` before taking ``abs``.
+  ``np.abs`` on ``int16`` leaves ``abs(-32768) == -32768``, so the plausibility
+  guard added above passed precisely the corrupt value it existed to reject.
 
 * ``tl.remove_long_links`` no longer leaves neighbour-less rows at zero. Trimming
   could isolate a node that had neighbours at build time, and ``_row_normalize``

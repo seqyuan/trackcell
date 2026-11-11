@@ -106,8 +106,11 @@ _BORDER_MAX_OFFSET = 8192
 
 def _valid_border_offsets(border_offsets: np.ndarray) -> np.ndarray:
     """Strip sentinel padding and implausible values from a GEF cell border."""
-    dx = border_offsets[:, 0]
-    dy = border_offsets[:, 1]
+    # Widen before taking abs: ``np.abs`` on int16 leaves ``abs(-32768) ==
+    # -32768``, so the magnitude guard passed exactly the corrupt value it was
+    # added for.
+    dx = border_offsets[:, 0].astype(np.int32)
+    dy = border_offsets[:, 1].astype(np.int32)
     keep = (
         (dx != _BORDER_SENTINEL)
         & (dy != _BORDER_SENTINEL)
@@ -459,8 +462,8 @@ def read_sto_cellbin(
           geometry_is_fallback
         - ``.obsm['spatial']``: cell centroid coordinates
         - ``.obs['geometry']``: WKT strings of cell polygons
-        - ``.obs['geometry_is_fallback']``: True where the polygon is a
-          fabricated 10x10 box (see Notes)
+        - ``.obs['geometry_is_fallback']``: True where the polygon is
+          fabricated rather than read from the border (see Notes)
         - ``.uns['spatial'][sample]['geometries']``: GeoDataFrame with cell polygons
         - ``.uns['spatial'][sample]['images']``: tissue image (if found)
         - ``.uns['spatial'][sample]['scalefactors']`` / ``metadata``
@@ -496,12 +499,13 @@ def read_sto_cellbin(
     - The ``cellBorder`` dataset stores up to 32 (dx, dy) offset pairs
       relative to the cell centroid. Trailing slots (sentinel value 32767)
       are stripped during geometry construction.
-    - Cells whose border cannot form a polygon (all-sentinel, or fewer than
-      three surviving vertices) still receive a **fabricated 10x10 box** centred
-      on the centroid, because a ``None`` geometry would push a null check into
-      every downstream area/intersect/ROI path. Those boxes are real to code
-      that consumes them, so they are disclosed in
-      ``.obs['geometry_is_fallback']`` and counted in
+    - Cells whose border cannot form a polygon still receive a **fabricated**
+      geometry, because a ``None`` would push a null check into every downstream
+      area/intersect/ROI path. Which fabrication depends on the input: a 10x10
+      box when fewer than three vertices survive sentinel stripping, a buffered
+      convex hull when the border self-intersects, a small disc when every vertex
+      coincides. All of them are real to code that consumes them, so they are
+      disclosed in ``.obs['geometry_is_fallback']`` and counted in
       ``metadata['n_fallback_polygons']``, and a ``RuntimeWarning`` names the
       affected count. Filter on the flag when polygon area matters.
     - Expression matrix is built directly from the cell offset table
@@ -573,9 +577,11 @@ def read_sto_cellbin(
         if n_fallback:
             warnings.warn(
                 f"{n_fallback:,}/{n_cells:,} cells have no usable border in "
-                f"'{gef_path.name}' and were given a 10x10 fallback square. "
-                "Areas, intersects() and ROI selection will treat those squares "
-                "as real geometry. Flagged in "
+                f"'{gef_path.name}'; their polygons are fabricated (a 10x10 box "
+                "when vertices are missing, a buffered convex hull when the "
+                "border self-intersects, a small disc when all vertices "
+                "coincide). Areas, intersects() and ROI selection will treat "
+                "them as real geometry. Flagged in "
                 "adata.obs['geometry_is_fallback'].",
                 RuntimeWarning,
                 stacklevel=2,

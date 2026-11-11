@@ -378,14 +378,61 @@ def _resolve_categorical_map(adata, colors_to_plot, categorical) -> dict:
 _HEX_COLOR_RE = r"^#(?:[0-9a-fA-F]{3,4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$"
 
 
-def _is_hex_color_series(series: pd.Series) -> bool:
-    """Detect if a Series contains raw hex color strings (e.g., from multigene_blend).
+def _is_color_column(series: pd.Series) -> bool:
+    """True when every non-null value is a colour string matplotlib can parse.
 
-    The whole column is inspected. An earlier version probed only the first 100
-    values, which made the answer depend on row order: a non-hex value at
-    position 101 was invisible, and one at position 1 flipped the verdict for the
-    entire column. ``#rgb`` / ``#rrggbbaa`` were also rejected because the test
-    demanded exactly seven characters.
+    This is the single gate for "this column stores colours per cell, not
+    categories". It has to be shared: an earlier version had a strict hex test
+    here and a permissive colour test in ``pl.multigene_blend``, so a column of
+    ``#e41a1c`` plus ``white`` passed one gate, failed the other, and was drawn
+    with the categorical palette — a wrong figure instead of an error.
+
+    Numeric columns are rejected outright. ``matplotlib.colors.is_color_like``
+    accepts floats and small ints as greys, which would turn an ordinary integer
+    ``obs`` column into a per-cell colour column.
+
+    The dtype fast path and ``unique`` keep the cost off the hot path: a
+    million-row *categorical* column returns immediately, and a million-row
+    object column is de-duplicated before the regex-free parse.
+    """
+    from matplotlib.colors import is_color_like
+
+    non_null = series.dropna()
+    if len(non_null) == 0:
+        return False
+
+    if pd.api.types.is_categorical_dtype(non_null):
+        candidates = non_null.cat.categories
+    elif pd.api.types.is_object_dtype(non_null) or pd.api.types.is_string_dtype(
+        non_null
+    ):
+        candidates = pd.unique(non_null)
+    else:
+        return False
+
+    if not all(isinstance(v, str) for v in candidates):
+        return False
+
+    try:
+        # Fast path: the common case (a blend column) is all hex, which the
+        # vectorised regex settles without one Python call per distinct colour.
+        as_series = pd.Series(list(candidates), dtype=object)
+        if as_series.str.match(_HEX_COLOR_RE).all():
+            return True
+        # Slow path: ``tl.multigene_blend`` also accepts a named ``background``,
+        # so a legitimate column can be mostly hex plus one name.
+        return all(is_color_like(v) for v in candidates)
+    except Exception:
+        logger.debug("colour probe failed", exc_info=True)
+        return False
+
+
+def _is_hex_color_series(series: pd.Series) -> bool:
+    """True when every non-null value is a hex colour literal.
+
+    Kept for callers that need the narrower question; the plot gate uses
+    :func:`_is_color_column`. The whole column is inspected — the previous
+    100-row probe made the answer depend on row order.
     """
     non_null = series.dropna()
     if len(non_null) == 0:
@@ -394,27 +441,6 @@ def _is_hex_color_series(series: pd.Series) -> bool:
         return bool(non_null.astype(str).str.match(_HEX_COLOR_RE).all())
     except Exception:
         logger.debug("hex-color probe failed", exc_info=True)
-        return False
-
-
-def _is_color_like_series(series: pd.Series) -> bool:
-    """True when every non-null value is a colour string matplotlib can parse.
-
-    Stricter than :func:`_is_hex_color_series` on purpose: ``tl.multigene_blend``
-    accepts any matplotlib colour for ``background``, so a legitimate output
-    column can mix ``#e41a1c`` with ``white``. Requiring a string rules out
-    numeric columns, which ``is_color_like`` would otherwise accept as greys.
-    """
-    from matplotlib.colors import is_color_like
-
-    non_null = series.dropna()
-    if len(non_null) == 0:
-        return False
-    try:
-        values = pd.unique(non_null)
-        return all(isinstance(v, str) and is_color_like(v) for v in values)
-    except Exception:
-        logger.debug("colour probe failed", exc_info=True)
         return False
 
 
@@ -428,14 +454,20 @@ def _plot_raw_hex_colors(
     use_equal_aspect: bool = False,
 ):
     """Plot polygons with per-cell raw hex colors (from multigene_blend)."""
+    from matplotlib.colors import is_color_like, to_hex
+
     grouped = temp_gdf.groupby(plot_column, sort=False)
 
-    for hex_color, group in grouped:
-        if not isinstance(hex_color, str) or not hex_color.startswith("#"):
+    for group_colour, group in grouped:
+        # ``tl.multigene_blend`` accepts any matplotlib colour for
+        # ``background``, so a legitimate column can mix hex with a name such as
+        # ``white``. Skipping the non-hex groups silently dropped those cells
+        # from the figure; normalise instead.
+        if not (isinstance(group_colour, str) and is_color_like(group_colour)):
             continue
         plot_kw = {
             "ax": ax,
-            "color": hex_color,
+            "color": to_hex(group_colour),
             "edgecolor": edgecolor,
             "linewidth": linewidth,
             "alpha": alpha,
@@ -1543,8 +1575,9 @@ def spatial_cell(
             # ``_resolve_categorical_map`` — deciding from ``temp_gdf`` made the
             # same gene flip to a discrete legend inside one small panel.
             is_categorical = categorical_map[color_key]
-            # Detect raw hex color mode (from multigene_blend etc.)
-            raw_color = _is_hex_color_series(temp_gdf[plot_column])
+            # Per-cell colour column (multigene_blend etc.). Same predicate as
+            # ``pl.multigene_blend`` — see ``_is_color_column``.
+            raw_color = _is_color_column(temp_gdf[plot_column])
         else:
             raw_color = False
 
@@ -2245,7 +2278,7 @@ def multigene_blend(
         )
 
     column = adata.obs[key]
-    if not _is_color_like_series(column):
+    if not _is_color_column(column):
         raise ValueError(
             f"adata.obs['{key}'] is not a column of colour strings, so it was "
             "not produced by tl.multigene_blend. Use spatial_cell for ordinary "
@@ -2303,10 +2336,14 @@ def multigene_blend(
             for gene, color in zip(genes, colors)
         ]
         background = params.get("background")
-        if background:
-            handles.append(
-                Patch(facecolor=background, edgecolor="none", label="background")
-            )
+        if background and _is_color_column(pd.Series([background])):
+            # Only advertise the swatch when some cell actually falls back to it;
+            # otherwise the legend claims a colour that appears nowhere.
+            used = bool((column == background).any())
+            if used:
+                handles.append(
+                    Patch(facecolor=background, edgecolor="none", label="background")
+                )
         ax.legend(
             handles=handles,
             loc="center left",

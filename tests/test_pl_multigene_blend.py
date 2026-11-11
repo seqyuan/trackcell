@@ -57,7 +57,7 @@ def _legend_labels(ax) -> list[str]:
 def test_legend_labels_are_the_input_genes():
     ax = tcl.pl.multigene_blend(_blended(), show=False)
 
-    assert _legend_labels(ax) == [*GENES, "background"]
+    assert _legend_labels(ax) == GENES
     assert ax.get_legend().get_title().get_text() == "genes"
 
 
@@ -72,7 +72,7 @@ def test_legend_swatches_use_the_source_colors():
 
     expected = adata.uns["multigene_blend_params"]["colors"]
     patches = [h for h in ax.get_legend().legend_handles if isinstance(h, Patch)]
-    assert len(patches) == len(expected) + 1 == len(GENES) + 1  # + background
+    assert len(patches) == len(expected) == len(GENES)
 
 
 def test_spatial_cell_alone_produces_no_legend():
@@ -111,7 +111,7 @@ def test_expression_matrix_is_not_needed():
     ax = tcl.pl.multigene_blend(adata, show=False)
 
     assert adata.obs["multigene_blend"].to_list() == expected
-    assert _legend_labels(ax) == [*GENES, "background"]
+    assert _legend_labels(ax) == GENES
 
 
 def test_series_round_trip_from_inplace_false():
@@ -157,7 +157,7 @@ def test_passes_through_to_spatial_cell():
 def test_custom_key_and_legend_title():
     adata = _blended(key="blend2")
     ax = tcl.pl.multigene_blend(adata, key="blend2", show=False, legend_title=None)
-    assert _legend_labels(ax) == [*GENES, "background"]
+    assert _legend_labels(ax) == GENES
     assert ax.get_legend().get_title().get_text() == ""
 
 
@@ -244,3 +244,35 @@ def test_hex_detection_accepts_short_and_alpha_forms():
 
     for value in ("#fff", "#ffff", "#ffffff", "#ffffffff"):
         assert _is_hex_color_series(pd.Series([value] * 3)), value
+
+
+def test_rendered_facecolors_are_the_blends_not_the_categorical_palette():
+    """Assert what was actually drawn, not just the legend.
+
+    The first version of the background fix loosened the gate here but left
+    ``spatial_cell`` detecting raw-colour columns by strict hex, so
+    ``background='white'`` passed validation and was then repainted with the
+    default categorical palette — a wrong figure instead of the previous error.
+    A legend-only assertion could not see that.
+    """
+    import numpy as np
+
+    adata = _fixture()
+    adata.X.data[:] = 0
+    tcl.tl.multigene_blend(adata, genes=GENES, mode="blend", background="white")
+
+    ax = tcl.pl.multigene_blend(adata, show=False)
+
+    rgba = np.vstack([np.atleast_2d(p.get_facecolor()) for p in ax.collections])
+    unique = np.unique(np.round(rgba[:, :3], 3), axis=0)
+    # Every cell is background, so the single drawn colour must be white — not a
+    # palette colour such as tab10 blue.
+    assert len(unique) == 1, unique
+    assert np.allclose(unique[0], 1.0), unique
+
+
+def test_ordinary_blend_does_not_advertise_an_unused_background_swatch():
+    """A swatch for a colour that appears nowhere is its own small lie."""
+    ax = tcl.pl.multigene_blend(_blended(), show=False)
+
+    assert "background" not in _legend_labels(ax)
