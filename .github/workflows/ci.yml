@@ -33,11 +33,30 @@ jobs:
           virtualenvs-create: true
           virtualenvs-in-project: true
 
-      - name: Cache virtualenv
+      - name: Cache Poetry download cache
+        # The virtualenv itself is deliberately NOT cached any more. This repo has
+        # no ``poetry.lock``, so the dependency set is resolved fresh on every run;
+        # a restored ``.venv`` can therefore hold packages the current resolution
+        # no longer includes, and ``poetry install`` does not remove them. That is
+        # how a job goes green against a dependency set nobody chose — the 0.4.3
+        # investigation found CI testing igraph 0.11 while the maintainer ran
+        # 1.0.0, with the stale venv invisible in the log.
+        #
+        # Poetry's artifact cache is content-addressed, so caching it only makes
+        # downloads faster and can never change what gets installed. The cost is a
+        # slower install step; the benefit is that a green job means the resolved
+        # environment actually works.
+        #
+        # ``poetry.lock`` is in the key so that adding one later is picked up
+        # without editing this file again (hashFiles ignores missing paths).
         uses: actions/cache@v4
         with:
-          path: .venv
-          key: venv-${{ runner.os }}-${{ matrix.python-version }}-${{ hashFiles('pyproject.toml') }}
+          path: |
+            ~/.cache/pypoetry
+            ~/.cache/pip
+          key: deps-${{ runner.os }}-${{ matrix.python-version }}-${{ hashFiles('pyproject.toml', 'poetry.lock') }}
+          restore-keys: |
+            deps-${{ runner.os }}-${{ matrix.python-version }}-
 
       - name: Validate pyproject
         run: poetry check

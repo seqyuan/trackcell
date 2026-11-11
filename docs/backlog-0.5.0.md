@@ -162,6 +162,12 @@
 
 ### C-2 `poetry.lock`
 
+> **状态（0.5.1）**：已解决，选「不提交 lock」方向。但没去 hash 解析结果——那需要在安装前先解析，
+> 反而多一步。改为**不缓存 `.venv`**，只缓存内容寻址的 Poetry 包缓存（`~/.cache/pypoetry`）。
+> 这样「陈旧 venv」这一类问题从根上不存在，而下载仍然走缓存；`hashFiles` 也纳入了 `poetry.lock`，
+> 将来加 lock 无需再改 CI。代价是 install 步骤变慢，已写在该步骤的注释里。
+> `poetry install --sync` 被否决：Poetry 2.2 已把它标记为 deprecated。
+
 | 项 | 内容 |
 |---|---|
 | **现状** | 仓库无 `poetry.lock`（`git ls-files | grep lock` 为空）。CI 每次现解析依赖，cache key 只 hash `pyproject.toml`，所以恢复出的 `.venv` 与新解析结果可能不一致——"昨天绿今天红"不可复现。 |
