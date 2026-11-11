@@ -31,8 +31,21 @@ Version 0.5.1 (unreleased)
   from a degree-1 cell survive.
 
   Consequence worth knowing: an isolated cell's long edge is now trimmed, which
-  can leave a zero-degree row. What the neighbourhood features should report for
-  such a cell is a separate open question (backlog B-2 ②).
+  leaves a zero-degree row. ``remove_long_links`` now gives such a row a self loop
+  of weight 1.0 (see below), so the two changes are consistent.
+
+* ``tl.remove_long_links`` no longer leaves neighbour-less rows at zero. Trimming
+  could isolate a node that had neighbours at build time, and ``_row_normalize``
+  cannot normalise an empty row, so ``weights @ X`` then reported a context of
+  zero for those cells — which downstream PCA reads as "expresses nothing" and
+  clustering turns into an artificial cluster. Such rows now receive a self loop
+  of weight 1.0, i.e. context = own expression.
+
+  This is not a new convention: ``build_spatial_weights`` already emits
+  ``(i, i, 1.0)`` for a cell with no usable neighbour, so both paths agree.
+  ``NaN`` was the alternative and was rejected — it propagates silently through
+  PCA and leaves the caller to decide when to drop rows. The number of repaired
+  cells is logged at ``INFO`` on the ``trackcell`` logger.
 
 * ``read_xenium_cellseg`` no longer writes progress to stdout. It used
   ``log = print if verbose else noop``, which broke the rule the 0.4.0 changelog

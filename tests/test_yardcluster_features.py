@@ -10,6 +10,7 @@ from scipy import sparse as sps
 from trackcell.tl._spatial_graph import (
     _row_normalize,
     build_spatial_weights,
+    compute_neighborhood_mean,
     compute_neighborhood_multi_hop,
     remove_long_links,
 )
@@ -445,3 +446,67 @@ def test_remove_long_links_keeps_explicit_self_loops():
     assert trimmed[0, 0] > 0.0
     assert trimmed[1, 1] > 0.0
     assert trimmed[2, 2] > 0.0
+
+
+def _leaf_graph():
+    """4 cells: 0/2/3 clustered, cell 1 alone 100 units away (only edge: 1->0)."""
+    coords = np.array([[0.0, 0.0], [100.0, 0.0], [1.0, 0.0], [0.0, 1.0]])
+    adjacency = np.array(
+        [
+            [0.0, 1.0, 1.0, 1.0],
+            [1.0, 0.0, 0.0, 0.0],
+            [1.0, 0.0, 0.0, 1.0],
+            [1.0, 0.0, 1.0, 0.0],
+        ]
+    )
+    return coords, _row_normalize(sps.csr_matrix(adjacency))
+
+
+def test_remove_long_links_leaves_no_zero_row_sums():
+    """A dangling row would feed zeros into ``weights @ X``."""
+    coords, w = _leaf_graph()
+    trimmed = remove_long_links(coords, w, distance_percentile=50.0).toarray()
+
+    assert np.allclose(trimmed.sum(axis=1), 1.0)
+
+
+def test_trimmed_away_cell_context_becomes_its_own_expression():
+    """Isolating a cell must not silently zero its neighbourhood features.
+
+    ``build_spatial_weights`` already gives a neighbour-less cell ``(i, i, 1.0)``
+    — context = own expression. Trimming used to break that invariant: the row
+    normalised to nothing, so ``compute_neighborhood_mean`` reported zeros and
+    downstream PCA read the cell as "expresses nothing".
+    """
+    coords, w = _leaf_graph()
+    trimmed = remove_long_links(coords, w, distance_percentile=50.0)
+
+    rng = np.random.default_rng(0)
+    X = rng.random((4, 5))
+    M = compute_neighborhood_mean(X, trimmed)
+
+    assert np.allclose(M[1], X[1]), "isolated cell's context is not its own expression"
+    assert np.all(np.abs(M) > 0), "some cell still has an all-zero context"
+
+
+def test_remove_long_links_adds_no_self_loops_when_nothing_is_isolated():
+    """The self loop is a repair, not a new global convention."""
+    coords = np.array([[0.0, 0.0], [1.0, 0.0], [0.0, 1.0], [1.0, 1.0]])
+    w = build_spatial_weights(coords, k=3)
+    trimmed = remove_long_links(coords, w, distance_percentile=99.9).toarray()
+
+    assert np.allclose(np.diag(trimmed), 0.0)
+    assert np.allclose(trimmed.sum(axis=1), 1.0)
+
+
+def test_isolated_cell_fallback_matches_the_graph_builder_convention():
+    """Same fallback as ``build_spatial_weights`` gives a single-cell batch."""
+    from trackcell.tl._spatial_graph import build_spatial_weights
+
+    # A batch with one cell: the builder's own "no neighbour" branch.
+    solo = build_spatial_weights(np.array([[0.0, 0.0]]), k=5).toarray()
+    assert solo[0, 0] == 1.0
+
+    coords, w = _leaf_graph()
+    trimmed = remove_long_links(coords, w, distance_percentile=50.0).toarray()
+    assert trimmed[1, 1] == solo[0, 0]

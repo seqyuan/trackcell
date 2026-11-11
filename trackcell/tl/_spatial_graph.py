@@ -9,6 +9,10 @@ import scipy.sparse as sps
 from scipy.spatial import cKDTree
 from typing import Optional, Union
 
+from .._logging import get_logger
+
+logger = get_logger(__name__)
+
 ArrayLike = Union[np.ndarray, sps.spmatrix]
 
 
@@ -405,6 +409,41 @@ def expr_k_neighbors(n_obs: int, k_expr: Optional[int] = None) -> int:
     return max(15, int(np.floor(np.log2(n_obs))))
 
 
+def _self_loops_for_dangling_rows(weights: sps.csr_matrix) -> sps.csr_matrix:
+    """Give neighbour-less rows a self loop of weight 1.0.
+
+    This is not a new convention: :func:`build_spatial_weights` already emits
+    ``(i, i, 1.0)`` for a cell with no usable neighbour (it only reaches that
+    branch for a single-cell batch, but the intent is explicit). Trimming can
+    isolate a node that *did* have neighbours at build time, and
+    ``_row_normalize`` cannot normalise an empty row, so those cells ended up
+    with an all-zero weight row. ``weights @ X`` then reported a context of
+    zero, which downstream PCA reads as "this cell expresses nothing" and
+    clustering turns into an artificial cluster. A self loop makes the cell's
+    context its own expression, which is what the graph builder would have
+    chosen.
+
+    ``NaN`` was the alternative and was rejected: it propagates silently through
+    PCA and leaves the caller to decide when to drop rows.
+    """
+    csr = weights.tocsr()
+    row_sums = np.asarray(csr.sum(axis=1)).ravel()
+    dangling = np.flatnonzero(row_sums == 0)
+    if dangling.size == 0:
+        return csr
+
+    loops = sps.csr_matrix(
+        (np.ones(dangling.size), (dangling, dangling)), shape=csr.shape
+    )
+    logger.info(
+        "remove_long_links: %s/%s cells lost every edge and fell back to a self "
+        "loop (context = own expression)",
+        f"{dangling.size:,}",
+        f"{csr.shape[0]:,}",
+    )
+    return (csr + loops).tocsr()
+
+
 def _row_normalize(mat: sps.csr_matrix) -> sps.csr_matrix:
     """Return a copy of ``mat`` with each row normalized to sum to 1."""
     mat = mat.tocsr().astype(np.float64)
@@ -486,7 +525,11 @@ def remove_long_links(
     Returns
     -------
     scipy.sparse.csr_matrix
-        A new row-normalized weight matrix.
+        A new row-normalized weight matrix. Every row sums to 1: a cell whose
+        edges are all trimmed away receives a self loop of weight 1.0, so its
+        neighborhood context becomes its own expression rather than zeros.
+        ``build_spatial_weights`` uses the same fallback for a neighbour-less
+        cell, so the two paths agree.
     """
     coords = np.asarray(coords, dtype=np.float64)
     weights = weights.tocsr()
@@ -517,4 +560,4 @@ def remove_long_links(
     trimmed = sps.csr_matrix(
         (coo.data[keep], (rows[keep], cols[keep])), shape=weights.shape
     )
-    return _row_normalize(trimmed)
+    return _self_loops_for_dangling_rows(_row_normalize(trimmed))
