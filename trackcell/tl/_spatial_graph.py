@@ -536,22 +536,31 @@ def remove_long_links(
     coo = weights.tocoo()
     rows, cols = coo.row, coo.col
     if rows.size == 0:
-        return weights.copy()
+        # No edges at all. Every row is dangling, so the repair below is the
+        # only thing that keeps the documented "every row sums to 1" guarantee.
+        return _self_loops_for_dangling_rows(weights.copy())
 
     edge_d = np.linalg.norm(coords[rows] - coords[cols], axis=1)
-    # Self loops are identified by position, not by weight. The previous test
-    # (``data >= 1 - 1e-12``) assumed self loops are the only entries that can
-    # reach weight 1.0 after row normalisation, but a row with exactly one
-    # neighbour normalises that genuine edge to 1.0 as well — and
-    # ``build_spatial_weights`` emits no self loops at all (verified: the
-    # diagonal is zero). The heuristic therefore excluded real edges, so
-    # degree-1 cells — tissue edges, anything isolated by a previous trim — had
-    # their single (often longest) edge kept out of the percentile sample and
-    # exempt from trimming.
+    # Self loops are identified by position, not by weight.
+    #
+    # ``data >= 1 - 1e-12`` was a heuristic for "this is a self loop", and it is
+    # genuinely ambiguous: ``build_spatial_weights`` does write ``(i, i, 1.0)``
+    # for a cell with no usable neighbour, so a weight of 1.0 can be a self loop
+    # — but a row with exactly one real neighbour also normalises that edge to
+    # 1.0. The weight test therefore could not separate the two, and treated the
+    # degree-1 edge as a self loop: excluded from the percentile sample and
+    # exempt from trimming. Those are tissue-edge cells, and their single edge
+    # is usually the longest one — the one this function exists to remove.
+    #
+    # Position separates them exactly. (An earlier version of this comment
+    # claimed ``build_spatial_weights`` emits no self loops at all; that is
+    # false — it does, for single-cell batches. The heuristic was not wrong
+    # about self loops, it was wrong about degree-1 edges.)
     is_self = coo.row == coo.col
     real = ~is_self
     if not np.any(real):
-        return weights.copy()
+        # Nothing but self loops and/or empty rows; still repair the empty ones.
+        return _self_loops_for_dangling_rows(weights.copy())
 
     threshold = float(np.percentile(edge_d[real], distance_percentile))
     keep = np.ones_like(coo.data, dtype=bool)

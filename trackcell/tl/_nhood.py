@@ -149,6 +149,24 @@ def connected_components(
     return adata if copy else None
 
 
+def _without_self_loops(adj: sps.csr_matrix) -> sps.csr_matrix:
+    """Drop the diagonal of a spatial graph.
+
+    Self loops in ``obsp`` are not spatial links. ``build_spatial_weights``
+    writes ``(i, i, 1.0)`` for a cell with no usable neighbour, and
+    ``remove_long_links`` does the same for cells whose edges were all trimmed,
+    so that such a cell's neighbourhood context is its own expression rather
+    than zero. Counting those entries as observed links inflates the diagonal of
+    the observed matrix while the configuration-model null only halves it (one
+    self loop is counted once, not twice), which can flip the sign of the
+    same-cluster enrichment. Removing the diagonal keeps both sides comparable.
+    """
+    out = adj.tocsr().copy()
+    out.setdiag(0.0)
+    out.eliminate_zeros()
+    return out
+
+
 def _observed_n_links(
     adj: sps.csr_matrix,
     labels: pd.Series,
@@ -241,7 +259,7 @@ def nhood_enrichment(
     if cluster_key not in adata.obs.columns:
         raise ValueError(f"cluster_key '{cluster_key}' not in adata.obs.")
 
-    adj = adata.obsp[connectivity_key].tocsr().astype(np.float64)
+    adj = _without_self_loops(adata.obsp[connectivity_key].tocsr().astype(np.float64))
     labels = adata.obs[cluster_key].astype("category")
 
     observed = _observed_n_links(adj, labels, symmetric=symmetric)
@@ -398,7 +416,11 @@ def diff_nhood_enrichment(
     )
 
     obs_diff = _diff_enrichment(
-        adj, labels, condition_groups, conditions, log_fold_change=log_fold_change
+        _without_self_loops(adj),
+        labels,
+        condition_groups,
+        conditions,
+        log_fold_change=log_fold_change,
     )
 
     result_key = f"{condition_groups[0]}_{condition_groups[1]}"
@@ -427,7 +449,7 @@ def diff_nhood_enrichment(
                 libraries.isin(group1).astype(int).astype(str)
             )
             perm_diff = _diff_enrichment(
-                adj,
+                _without_self_loops(adj),
                 labels,
                 ("1", "0"),
                 permuted_cond,

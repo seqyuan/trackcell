@@ -18,6 +18,7 @@ matplotlib.use("Agg")
 from pathlib import Path
 
 import matplotlib.pyplot as plt
+import pandas as pd
 import pytest
 from matplotlib.patches import Patch
 
@@ -56,7 +57,7 @@ def _legend_labels(ax) -> list[str]:
 def test_legend_labels_are_the_input_genes():
     ax = tcl.pl.multigene_blend(_blended(), show=False)
 
-    assert _legend_labels(ax) == GENES
+    assert _legend_labels(ax) == [*GENES, "background"]
     assert ax.get_legend().get_title().get_text() == "genes"
 
 
@@ -71,7 +72,7 @@ def test_legend_swatches_use_the_source_colors():
 
     expected = adata.uns["multigene_blend_params"]["colors"]
     patches = [h for h in ax.get_legend().legend_handles if isinstance(h, Patch)]
-    assert len(patches) == len(expected) == len(GENES)
+    assert len(patches) == len(expected) + 1 == len(GENES) + 1  # + background
 
 
 def test_spatial_cell_alone_produces_no_legend():
@@ -110,7 +111,7 @@ def test_expression_matrix_is_not_needed():
     ax = tcl.pl.multigene_blend(adata, show=False)
 
     assert adata.obs["multigene_blend"].to_list() == expected
-    assert _legend_labels(ax) == GENES
+    assert _legend_labels(ax) == [*GENES, "background"]
 
 
 def test_series_round_trip_from_inplace_false():
@@ -136,7 +137,7 @@ def test_missing_column_raises_keyerror():
 def test_non_hex_column_raises_valueerror():
     adata = _fixture()
     adata.obs["label"] = adata.obs["classification"].astype(str)
-    with pytest.raises(ValueError, match="not a column of hex colour strings"):
+    with pytest.raises(ValueError, match="not a column of colour strings"):
         tcl.pl.multigene_blend(adata, key="label", show=False)
 
 
@@ -156,7 +157,7 @@ def test_passes_through_to_spatial_cell():
 def test_custom_key_and_legend_title():
     adata = _blended(key="blend2")
     ax = tcl.pl.multigene_blend(adata, key="blend2", show=False, legend_title=None)
-    assert _legend_labels(ax) == GENES
+    assert _legend_labels(ax) == [*GENES, "background"]
     assert ax.get_legend().get_title().get_text() == ""
 
 
@@ -165,3 +166,81 @@ def test_returns_the_axes_it_was_given():
     returned = tcl.pl.multigene_blend(_blended(), show=False, ax=ax)
     assert returned is ax
     plt.close(fig)
+
+
+# ── defects found by review ─────────────────────────────────────────────────
+
+
+def test_background_colour_appears_in_the_legend():
+    """A colour visible in the figure must be explained.
+
+    ``tl.multigene_blend`` paints cells with zero total expression in
+    ``background``. Those cells are drawn, so a legend that omits the colour is
+    the same defect as having no legend, one step smaller.
+    """
+    adata = _fixture()
+    adata.X.data[:] = 0  # every cell falls back to the background colour
+    tcl.tl.multigene_blend(adata, genes=GENES, mode="blend")
+
+    ax = tcl.pl.multigene_blend(adata, show=False)
+
+    assert _legend_labels(ax) == [*GENES, "background"]
+
+
+def test_named_background_colour_is_accepted():
+    """``tl`` accepts any matplotlib colour for ``background``, so ``pl`` must too.
+
+    Previously the column was validated as strict 7-character hex, so
+    ``background='white'`` produced output that ``pl.multigene_blend`` then
+    rejected as "not produced by tl.multigene_blend".
+    """
+    adata = _fixture()
+    adata.X.data[:] = 0
+    tcl.tl.multigene_blend(adata, genes=GENES, mode="blend", background="white")
+
+    ax = tcl.pl.multigene_blend(adata, show=False)
+
+    assert _legend_labels(ax) == [*GENES, "background"]
+
+
+def test_mismatched_genes_and_colours_raise_instead_of_truncating():
+    """``zip`` would silently under-report which genes were blended."""
+    adata = _blended()
+    adata.uns["multigene_blend_params"]["colors"] = ["#ff0000"]
+
+    with pytest.raises(ValueError, match="1 colours"):
+        tcl.pl.multigene_blend(adata, show=False)
+
+
+def test_missing_params_warn_instead_of_silently_dropping_the_legend():
+    """``anndata.concat`` drops ``uns``, so this is reachable without hand-editing.
+
+    Drawing the unlabelled composite silently would reproduce the exact defect
+    the function exists to remove.
+    """
+    adata = _blended()
+    del adata.uns["multigene_blend_params"]
+
+    with pytest.warns(RuntimeWarning, match="legend cannot be drawn"):
+        ax = tcl.pl.multigene_blend(adata, show=False)
+
+    assert ax.get_legend() is None
+
+
+def test_hex_detection_does_not_depend_on_row_order():
+    """The old probe sampled the first 100 values, so this answered by position."""
+    from trackcell.pl.plot import _is_hex_color_series
+
+    good = ["#ff0000"] * 100
+    for bad_at in (0, 99, 100, 150):
+        values = good + ["#00ff00"] * 80
+        values[bad_at] = "not-a-color"
+        assert not _is_hex_color_series(pd.Series(values)), f"missed at {bad_at}"
+    assert _is_hex_color_series(pd.Series(good))
+
+
+def test_hex_detection_accepts_short_and_alpha_forms():
+    from trackcell.pl.plot import _is_hex_color_series
+
+    for value in ("#fff", "#ffff", "#ffffff", "#ffffffff"):
+        assert _is_hex_color_series(pd.Series([value] * 3)), value

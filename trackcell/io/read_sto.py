@@ -96,10 +96,23 @@ def _fallback_square(cell_x: float, cell_y: float, half: float = 5.0) -> Polygon
     )
 
 
+#: A real cell-border offset is tens of pixels. The sentinel is ``int16`` max,
+#: so anything at that magnitude is padding or corruption — never geometry.
+#: A slot with one coordinate at the sentinel and the other plausible is corrupt,
+#: and the old ``|`` mask kept it: a single ``(32766, 3)`` slot produced a
+#: polygon spanning 32 866 px. Both coordinates must be real for a slot to count.
+_BORDER_MAX_OFFSET = 8192
+
+
 def _valid_border_offsets(border_offsets: np.ndarray) -> np.ndarray:
-    """Strip trailing sentinel padding from a GEF cell-border array."""
-    keep = (border_offsets[:, 0] != _BORDER_SENTINEL) | (
-        border_offsets[:, 1] != _BORDER_SENTINEL
+    """Strip sentinel padding and implausible values from a GEF cell border."""
+    dx = border_offsets[:, 0]
+    dy = border_offsets[:, 1]
+    keep = (
+        (dx != _BORDER_SENTINEL)
+        & (dy != _BORDER_SENTINEL)
+        & (np.abs(dx) < _BORDER_MAX_OFFSET)
+        & (np.abs(dy) < _BORDER_MAX_OFFSET)
     )
     return border_offsets[keep]
 
@@ -108,7 +121,7 @@ def _extract_polygon_from_relative_offsets(
     border_offsets: np.ndarray,
     cell_x: int,
     cell_y: int,
-) -> Optional[Polygon]:
+) -> tuple[Optional[Polygon], bool]:
     """
     Convert relative cell border offsets to a Shapely Polygon.
 
@@ -127,16 +140,22 @@ def _extract_polygon_from_relative_offsets(
 
     Returns
     -------
-    Polygon or None
-        Shapely Polygon in image pixel coordinates, or None if the polygon
-        has fewer than 3 valid vertices.
+    (Polygon or None, bool)
+        The polygon in image pixel coordinates, and whether it was
+        **fabricated** rather than derived from the stored border. Three paths
+        fabricate: fewer than three usable vertices (a 10x10 box), a
+        self-intersecting border such as a bowtie (convex hull, buffered), and
+        fully coincident vertices (a radius-1 disc, not a box). Only this
+        function can tell them apart afterwards, because the results are all
+        valid, non-empty polygons — which is why the flag is produced here
+        rather than inferred by the caller.
     """
     # Strip trailing sentinel entries
     valid_offsets = _valid_border_offsets(border_offsets)
 
     if len(valid_offsets) < 3:
         # Not enough points for a polygon; use a small square around centroid.
-        return _fallback_square(cell_x, cell_y)
+        return _fallback_square(cell_x, cell_y), True
 
     # Convert offsets + centroid → absolute coordinates
     abs_coords = valid_offsets.astype(np.float64)
@@ -145,15 +164,16 @@ def _extract_polygon_from_relative_offsets(
 
     poly = Polygon(abs_coords)
     if not poly.is_valid or poly.is_empty:
-        # Fallback: convex hull of points → buffer to ensure polygon
+        # A self-intersecting or fully degenerate border. The convex hull is a
+        # repair, not the stored outline, so it counts as fabricated.
         from shapely.geometry import MultiPoint
 
         hull = MultiPoint(abs_coords).convex_hull
         if hasattr(hull, "buffer"):
-            return hull.buffer(1.0)
-        return None
+            return hull.buffer(1.0), True
+        return None, True
 
-    return poly
+    return poly, False
 
 
 def _build_expression_matrix_from_cell_exp(
@@ -536,23 +556,15 @@ def read_sto_cellbin(
                 is_fallback[i] = True
                 continue
 
-            poly = _extract_polygon_from_relative_offsets(
+            poly, fabricated = _extract_polygon_from_relative_offsets(
                 offsets, cells_x[i], cells_y[i]
             )
-            too_few_vertices = len(_valid_border_offsets(offsets)) < 3
+            is_fallback[i] = fabricated
             if poly is None:
-                # Unreachable for well-formed hulls, but the old code stored the
-                # ``None`` and crashed later in ``wkt.dumps``. Substituting the
-                # documented fallback keeps the array rectangular and is what
-                # ``geometry_is_fallback`` exists to disclose.
+                # Unreachable in practice (``convex_hull`` always has
+                # ``.buffer``), but a None here would reach ``wkt.dumps`` and
+                # raise. Kept as belt-and-braces, not as a fix for a live bug.
                 poly = _fallback_square(cells_x[i], cells_y[i])
-                is_fallback[i] = True
-            else:
-                # ``_extract_polygon_from_relative_offsets`` fabricates the same
-                # 10x10 square when fewer than three vertices survive sentinel
-                # stripping, so that is a fallback too — the fabricated box is
-                # indistinguishable from a real cell otherwise.
-                is_fallback[i] = too_few_vertices
             polygons[i] = poly
 
         n_fallback = int(is_fallback.sum())

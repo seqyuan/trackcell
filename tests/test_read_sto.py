@@ -507,3 +507,53 @@ def test_mixed_borders_warn_with_the_affected_count(tmp_path):
     # Flagged cells still carry *a* geometry, so downstream code never sees None.
     assert len(adata.uns["spatial"]["s"]["geometries"]) == 3
     assert adata.obs["geometry"].notna().all()
+
+
+def _border(vertices) -> np.ndarray:
+    """Pack explicit (dx, dy) offsets into a 32-slot border array."""
+    offsets = np.full((N_BORDER_SLOTS, 2), BORDER_SENTINEL, dtype=np.int16)
+    for i, (dx, dy) in enumerate(vertices):
+        offsets[i] = (dx, dy)
+    return offsets
+
+
+@pytest.mark.parametrize(
+    "name,vertices,fabricated",
+    [
+        ("real_square", [(-4, -4), (4, -4), (4, 4), (-4, 4)], False),
+        ("two_vertices", [(-4, -4), (4, -4)], True),
+        ("bowtie", [(-4, -4), (4, 4), (4, -4), (-4, 4)], True),
+        ("coincident", [(0, 0)] * 32, True),
+        ("half_sentinel", [(-4, -4), (4, -4), (BORDER_SENTINEL - 1, 3)], True),
+        ("all_sentinel", [(BORDER_SENTINEL, BORDER_SENTINEL)] * 32, True),
+    ],
+)
+def test_every_fabrication_path_is_flagged(name, vertices, fabricated, tmp_path):
+    """Three different repairs all yield valid, non-empty polygons.
+
+    A caller cannot tell a repaired outline from a stored one by inspecting the
+    polygon, so the flag has to be decided where the repair happens:
+
+    * fewer than three usable vertices -> 10x10 box;
+    * a self-intersecting border (bowtie) -> convex hull, buffered;
+    * fully coincident vertices -> a radius-1 disc, not even the documented box;
+    * a half-sentinel slot -> the old ``|`` mask kept it as a real vertex and
+      produced a polygon spanning 32 866 px.
+    """
+    gef = write_cellbin_gef(
+        tmp_path / f"B_{name}.cellbin.gef",
+        cells=(("A", 100, 200),),
+        expressions=(((0, 5),),),
+        borders=[_border(vertices)],
+    )
+
+    adata = read_sto_cellbin(gef, sample="s")
+
+    flagged = adata.obs["geometry_is_fallback"].tolist()
+    assert flagged == [fabricated], f"{name}: flag disagrees with repair"
+    assert adata.uns["spatial"]["s"]["metadata"]["n_fallback_polygons"] == int(
+        fabricated
+    )
+    # Either way the array stays rectangular and carries no None geometry.
+    assert adata.obs["geometry"].notna().all()
+    assert len(adata.uns["spatial"]["s"]["geometries"]) == 1

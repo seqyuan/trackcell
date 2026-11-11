@@ -374,18 +374,47 @@ def _resolve_categorical_map(adata, colors_to_plot, categorical) -> dict:
     return resolved
 
 
+#: Hex colours matplotlib accepts: ``#rgb``, ``#rgba``, ``#rrggbb``, ``#rrggbbaa``.
+_HEX_COLOR_RE = r"^#(?:[0-9a-fA-F]{3,4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$"
+
+
 def _is_hex_color_series(series: pd.Series) -> bool:
-    """Detect if a Series contains raw hex color strings (e.g., from multigene_blend)."""
+    """Detect if a Series contains raw hex color strings (e.g., from multigene_blend).
+
+    The whole column is inspected. An earlier version probed only the first 100
+    values, which made the answer depend on row order: a non-hex value at
+    position 101 was invisible, and one at position 1 flipped the verdict for the
+    entire column. ``#rgb`` / ``#rrggbbaa`` were also rejected because the test
+    demanded exactly seven characters.
+    """
     non_null = series.dropna()
     if len(non_null) == 0:
         return False
-    sample = non_null.iloc[:100] if len(non_null) > 100 else non_null
     try:
-        return all(
-            isinstance(v, str) and v.startswith("#") and len(v) == 7 for v in sample
-        )
+        return bool(non_null.astype(str).str.match(_HEX_COLOR_RE).all())
     except Exception:
         logger.debug("hex-color probe failed", exc_info=True)
+        return False
+
+
+def _is_color_like_series(series: pd.Series) -> bool:
+    """True when every non-null value is a colour string matplotlib can parse.
+
+    Stricter than :func:`_is_hex_color_series` on purpose: ``tl.multigene_blend``
+    accepts any matplotlib colour for ``background``, so a legitimate output
+    column can mix ``#e41a1c`` with ``white``. Requiring a string rules out
+    numeric columns, which ``is_color_like`` would otherwise accept as greys.
+    """
+    from matplotlib.colors import is_color_like
+
+    non_null = series.dropna()
+    if len(non_null) == 0:
+        return False
+    try:
+        values = pd.unique(non_null)
+        return all(isinstance(v, str) and is_color_like(v) for v in values)
+    except Exception:
+        logger.debug("colour probe failed", exc_info=True)
         return False
 
 
@@ -2216,9 +2245,9 @@ def multigene_blend(
         )
 
     column = adata.obs[key]
-    if not _is_hex_color_series(column):
+    if not _is_color_like_series(column):
         raise ValueError(
-            f"adata.obs['{key}'] is not a column of hex colour strings, so it was "
+            f"adata.obs['{key}'] is not a column of colour strings, so it was "
             "not produced by tl.multigene_blend. Use spatial_cell for ordinary "
             "columns."
         )
@@ -2235,8 +2264,30 @@ def multigene_blend(
     )
 
     params = adata.uns.get(f"{key}_params") or {}
-    genes = params.get("genes") or []
-    colors = params.get("colors") or []
+    genes = list(params.get("genes") or [])
+    colors = list(params.get("colors") or [])
+
+    if legend and genes and len(colors) != len(genes):
+        # ``zip`` would silently truncate, producing a legend that under-reports
+        # which genes were blended. Fail instead.
+        raise ValueError(
+            f"adata.uns['{key}_params'] has {len(genes)} genes but {len(colors)} "
+            "colours; the gene-to-colour mapping is damaged and any legend drawn "
+            "from it would be wrong."
+        )
+
+    if legend and not genes:
+        # Reachable without anyone editing files: ``anndata.concat`` drops ``uns``,
+        # so blending per sample then concatenating leaves the column but not the
+        # mapping. Silently drawing the unlabelled composite would reproduce
+        # exactly the problem this function exists to solve.
+        warnings.warn(
+            f"adata.uns['{key}_params'] is missing, so the gene-to-colour legend "
+            "cannot be drawn (anndata.concat drops uns; blend after concatenating, "
+            "or re-run tl.multigene_blend). The composite itself is still drawn.",
+            RuntimeWarning,
+            stacklevel=2,
+        )
 
     if legend and genes and colors:
         from matplotlib.patches import Patch
@@ -2244,11 +2295,18 @@ def multigene_blend(
         # The legend describes the *source* colours, not the per-cell blends:
         # one entry per input gene, which is the only interpretation that helps
         # a reader. A legend over the blended hex values would list thousands of
-        # indistinguishable swatches.
+        # indistinguishable swatches. The ``background`` colour is added too —
+        # those cells are visible in the figure, so leaving them unexplained is
+        # the same defect one step smaller.
         handles = [
             Patch(facecolor=color, edgecolor="none", label=gene)
             for gene, color in zip(genes, colors)
         ]
+        background = params.get("background")
+        if background:
+            handles.append(
+                Patch(facecolor=background, edgecolor="none", label="background")
+            )
         ax.legend(
             handles=handles,
             loc="center left",

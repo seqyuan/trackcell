@@ -15,10 +15,11 @@ Version 0.5.1 (unreleased)
   ``uns['spatial'][sample]['metadata']['n_fallback_polygons']`` (per sample), and
   a ``RuntimeWarning`` naming the affected count.
 
-  Also fixes a latent crash on the same path: when
-  ``_extract_polygon_from_relative_offsets`` returned ``None``, the ``None`` was
-  stored and ``wkt.dumps(None)`` raised ``AttributeError`` later. That case now
-  receives the documented fallback box instead.
+  (An earlier draft of this entry claimed it also fixed a latent
+  ``wkt.dumps(None)`` crash. It did not: that branch is unreachable —
+  ``MultiPoint(...).convex_hull`` always has ``.buffer``, and 3000 fuzzed border
+  arrays never produced ``None``. The substitution is kept as belt-and-braces,
+  but it fixes nothing and the claim is withdrawn.)
 
 * ``tl.remove_long_links`` exempted the wrong edges from trimming. Self loops
   were identified by weight (``data >= 1 - 1e-12``), on the assumption that only
@@ -33,6 +34,31 @@ Version 0.5.1 (unreleased)
   Consequence worth knowing: an isolated cell's long edge is now trimmed, which
   leaves a zero-degree row. ``remove_long_links`` now gives such a row a self loop
   of weight 1.0 (see below), so the two changes are consistent.
+
+* ``tl.nhood_enrichment`` / ``tl.diff_nhood_enrichment`` no longer count self
+  loops as spatial links. The diagonal of a spatial graph holds repair entries
+  (``build_spatial_weights`` for a neighbour-less cell, ``remove_long_links`` for
+  a cell whose edges were all trimmed), and those were added to the observed
+  same-cluster count while the configuration-model null halves the diagonal for
+  the undirected convention — one self loop counted once, then halved as though
+  it had been counted twice. On a 4-cell example the ``A,A`` enrichment moved
+  from ``-0.167`` to ``+0.5``: the sign flipped.
+
+* ``tl.remove_long_links`` honours its documented "every row sums to 1" on the
+  early-return paths too. An all-empty graph used to come back with every row at
+  zero — the exact zero-context state the repair exists to remove.
+
+* ``pl.multigene_blend`` no longer fails quietly. A ``uns['<key>_params']`` whose
+  ``colors`` and ``genes`` disagree now raises instead of letting ``zip``
+  truncate the legend; a *missing* params dict now warns instead of drawing the
+  unlabelled composite it was written to eliminate (``anndata.concat`` drops
+  ``uns``, so that is reachable without hand-editing). The ``background`` colour
+  is now a legend entry, because those cells are visible in the figure.
+
+* ``pl._is_hex_color_series`` inspects the whole column instead of the first 100
+  values, so the raw-hex decision no longer depends on row order, and it accepts
+  ``#rgb`` / ``#rrggbbaa``. Previously a non-hex value at row 101 was invisible
+  while one at row 1 flipped the verdict for the whole column.
 
 * ``tl.remove_long_links`` no longer leaves neighbour-less rows at zero. Trimming
   could isolate a node that had neighbours at build time, and ``_row_normalize``
