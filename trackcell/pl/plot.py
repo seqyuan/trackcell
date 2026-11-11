@@ -427,23 +427,6 @@ def _is_color_column(series: pd.Series) -> bool:
         return False
 
 
-def _is_hex_color_series(series: pd.Series) -> bool:
-    """True when every non-null value is a hex colour literal.
-
-    Kept for callers that need the narrower question; the plot gate uses
-    :func:`_is_color_column`. The whole column is inspected — the previous
-    100-row probe made the answer depend on row order.
-    """
-    non_null = series.dropna()
-    if len(non_null) == 0:
-        return False
-    try:
-        return bool(non_null.astype(str).str.match(_HEX_COLOR_RE).all())
-    except Exception:
-        logger.debug("hex-color probe failed", exc_info=True)
-        return False
-
-
 def _plot_raw_hex_colors(
     ax: plt.Axes,
     temp_gdf: gpd.GeoDataFrame,
@@ -772,35 +755,6 @@ def _infer_square_size(adata, library_id, coords, binsize=None):
     return 1.0
 
 
-def _draw_background_only(
-    ax, spatial_info, img_key, x_min, y_min, x_max, y_max, xlabel, ylabel, invert_y=True
-):
-    img, img_extent = _process_background_image(
-        spatial_info, img_key, (x_min, y_min, x_max, y_max)
-    )
-    if img is not None and img_extent is not None:
-        ax.imshow(img, extent=img_extent, origin="upper", alpha=1.0)
-        ax.set_xlim(img_extent[0], img_extent[1])
-        if invert_y:
-            ax.set_ylim(img_extent[2], img_extent[3])
-        else:
-            ax.set_ylim(img_extent[3], img_extent[2])
-    else:
-        ax.set_xlim(x_min, x_max)
-        if invert_y:
-            ax.set_ylim(y_max, y_min)
-        else:
-            ax.set_ylim(y_min, y_max)
-    ax.set_aspect("equal")
-    if invert_y:
-        ax.invert_yaxis()
-    if xlabel is not None:
-        ax.set_xlabel(xlabel)
-    if ylabel is not None:
-        ax.set_ylabel(ylabel)
-    ax.tick_params(axis="both", which="major", labelsize=10)
-
-
 def _plot_squarebin_values(
     ax,
     coords,
@@ -954,6 +908,98 @@ def _plot_squarebin_values(
         sm.set_array([])
         plt.colorbar(sm, ax=ax, fraction=0.046, pad=0.04)
     return None
+
+
+def _finish_background_panel(
+    ax,
+    *,
+    img_extent,
+    bounds,
+    xlabel,
+    ylabel,
+    invert_y,
+):
+    """Frame a panel that has no data layer: image and axes only.
+
+    Extracted from ``spatial_cell`` (C-1), which carried this in a 40-line inline
+    branch. Note what it deliberately does **not** do: ``invert_yaxis()`` is never
+    called. ``set_ylim(h, 0)`` with ``origin='upper'`` already yields image
+    convention, and for Cartesian view the caller pre-flips the image with
+    ``img[::-1]`` — inverting here would flip the panel twice. An obsolete
+    ``_draw_background_only`` did invert, which is why it was deleted rather than
+    reused.
+    """
+    x_min, y_min, x_max, y_max = bounds
+
+    if img_extent is not None:
+        ax.set_xlim(img_extent[0], img_extent[1])
+        if invert_y:
+            ax.set_ylim(img_extent[2], img_extent[3])
+        else:
+            ax.set_ylim(img_extent[3], img_extent[2])
+    else:
+        ax.set_xlim(x_min, x_max)
+        if invert_y:
+            ax.set_ylim(y_max, y_min)
+        else:
+            ax.set_ylim(y_min, y_max)
+
+    ax.set_aspect("equal")
+
+    if xlabel is not None:
+        ax.set_xlabel(xlabel)
+    if ylabel is not None:
+        ax.set_ylabel(ylabel)
+
+    # Always show ticks when there is no data layer: they are the only content.
+    ax.tick_params(axis="both", which="major", labelsize=10)
+
+
+def _finish_panel_axes(
+    ax,
+    *,
+    bounds,
+    color_key,
+    xlabel,
+    ylabel,
+    invert_y,
+    show_ticks,
+):
+    """Aspect, padded limits, labels and tick visibility for a plotted panel.
+
+    Extracted from ``spatial_cell`` (C-1). Frame, title and scale bar stay in the
+    caller because they are not geometry: ``frameon`` also applies to the
+    background-only branch above, and the title only exists when there is a key.
+    """
+    x_min, y_min, x_max, y_max = bounds
+
+    ax.set_aspect("equal")
+    if invert_y:
+        ax.invert_yaxis()  # Match image coordinates
+
+    # 5% padding so markers on the boundary are not clipped.
+    x_range = x_max - x_min
+    y_range = y_max - y_min
+    x_padding = x_range * 0.05 if x_range > 0 else 1
+    y_padding = y_range * 0.05 if y_range > 0 else 1
+
+    ax.set_xlim(x_min - x_padding, x_max + x_padding)
+    if invert_y:
+        ax.set_ylim(y_max + y_padding, y_min - y_padding)  # Inverted for y-axis
+    else:
+        ax.set_ylim(y_min - y_padding, y_max + y_padding)
+
+    if xlabel is not None:
+        ax.set_xlabel(xlabel)
+    if ylabel is not None:
+        ax.set_ylabel(ylabel)
+
+    if color_key is None:
+        # No data layer, so coordinates are all there is to show.
+        ax.tick_params(axis="both", which="major", labelsize=10)
+    elif not show_ticks:
+        ax.set_xticks([])
+        ax.set_yticks([])
 
 
 def spatial_cell(
@@ -1364,37 +1410,15 @@ def spatial_cell(
 
         # If color is None, skip geometry plotting and only show HE image
         if color_key is None:
-            # Set axis limits based on image extent or data coordinates
-            if img_extent is not None:
-                current_ax.set_xlim(img_extent[0], img_extent[1])
-                if invert_y:
-                    current_ax.set_ylim(img_extent[2], img_extent[3])
-                else:
-                    current_ax.set_ylim(img_extent[3], img_extent[2])
-            else:
-                # Fallback to data coordinates
-                current_ax.set_xlim(x_min, x_max)
-                if invert_y:
-                    current_ax.set_ylim(y_max, y_min)
-                else:
-                    current_ax.set_ylim(y_min, y_max)
-
-            # Set axis properties
-            current_ax.set_aspect("equal")
-            # invert_yaxis() is intentionally NOT called here:
-            # set_ylim(h, 0) with origin='upper' already produces image convention;
-            # for Cartesian (invert_y=False) the image was pre-flipped via img[::-1].
-
-            # Set axis labels
-            if xlabel is not None:
-                current_ax.set_xlabel(xlabel)
-            if ylabel is not None:
-                current_ax.set_ylabel(ylabel)
-
-            # Always show ticks when color is None
-            current_ax.tick_params(axis="both", which="major", labelsize=10)
+            _finish_background_panel(
+                current_ax,
+                img_extent=img_extent,
+                bounds=(x_min, y_min, x_max, y_max),
+                xlabel=xlabel,
+                ylabel=ylabel,
+                invert_y=invert_y,
+            )
             _apply_frameon(current_ax, frameon)
-
             _maybe_add_scale_bar(current_ax, scalebar, adata, library_id)
             axes_list.append(current_ax)
             continue  # Skip to next color or finish
@@ -1787,40 +1811,15 @@ def spatial_cell(
                 legend=legend,
             )
 
-        # Set axis properties
-        current_ax.set_aspect("equal")
-        if invert_y:
-            current_ax.invert_yaxis()  # Match image coordinates
-
-        # Set axis limits based on actual data range
-        # Add small padding (5% of range) for better visualization
-        x_range = x_max - x_min
-        y_range = y_max - y_min
-        x_padding = x_range * 0.05 if x_range > 0 else 1
-        y_padding = y_range * 0.05 if y_range > 0 else 1
-
-        current_ax.set_xlim(x_min - x_padding, x_max + x_padding)
-        if invert_y:
-            current_ax.set_ylim(
-                y_max + y_padding, y_min - y_padding
-            )  # Inverted for y-axis
-        else:
-            current_ax.set_ylim(y_min - y_padding, y_max + y_padding)
-
-        # Set axis labels
-        if xlabel is not None:
-            current_ax.set_xlabel(xlabel)
-        if ylabel is not None:
-            current_ax.set_ylabel(ylabel)
-
-        # Control ticks visibility
-        # If color is None, always show ticks to display coordinates
-        if color_key is None:
-            # When color=None, show ticks and labels by default
-            current_ax.tick_params(axis="both", which="major", labelsize=10)
-        elif not show_ticks:
-            current_ax.set_xticks([])
-            current_ax.set_yticks([])
+        _finish_panel_axes(
+            current_ax,
+            bounds=(x_min, y_min, x_max, y_max),
+            color_key=color_key,
+            xlabel=xlabel,
+            ylabel=ylabel,
+            invert_y=invert_y,
+            show_ticks=show_ticks,
+        )
         _apply_frameon(current_ax, frameon)
 
         if color_key:

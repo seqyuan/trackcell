@@ -3,6 +3,38 @@ Changelog
 Version 0.6.0 (unreleased)
 ---------------------------
 
+**Internal** — no behaviour change:
+
+* ``spatial_cell`` (884 lines) loses two stages and two dead functions. The
+  extraction is verified by ``scripts/render_snapshots.py``, which fingerprints
+  what 15 scenarios actually draw — collection count, face colours, collection
+  alpha, edge colours, linewidths, z-order, path counts, axis limits, labels,
+  legend entries, image alpha — and which was checked to detect a
+  ``0.8 -> 0.79`` alpha change in 12 of 15 scenarios before being trusted.
+
+  ``_finish_background_panel`` and ``_finish_panel_axes`` now name what was
+  inline; ``spatial_cell`` is 837 lines and ``pl/plot.py`` coverage went from
+  68% to 71%.
+
+  Two dead functions removed. ``_draw_background_only`` was **not** reusable: it
+  calls ``invert_yaxis()`` while the live path carries a comment that it must not,
+  because ``set_ylim(h, 0)`` with ``origin='upper'`` already gives image
+  convention — reusing it would have flipped every background-only panel.
+  ``_is_hex_color_series`` became unreferenced when the two colour predicates were
+  unified; keeping it "for callers" when there are none is how a module grows two
+  answers to one question again.
+
+  The remaining C-1 work — splitting the per-panel core into fill / edges / legend
+  — is not done. Those stages are interdependent through ~20 locals and are the
+  risky half; see ``docs/backlog-0.5.0.md`` C-1 for the plan and the measured
+  starting point.
+
+* ``tests/test_render_smoke.py`` asserts the structural facts of every rendering
+  path, so a refactor that drops a branch or loses the legend fails in CI. The
+  fingerprint script stays a local tool: its hashes depend on the matplotlib and
+  freetype builds, so storing them in the repository would fail on any
+  environment change.
+
 **Breaking** — one module path again:
 
 * ``trackcell/tl/spatial_cluster.py`` → ``trackcell/tl/_cluster.py``. This is the

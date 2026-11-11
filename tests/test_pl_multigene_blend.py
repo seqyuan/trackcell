@@ -227,23 +227,23 @@ def test_missing_params_warn_instead_of_silently_dropping_the_legend():
     assert ax.get_legend() is None
 
 
-def test_hex_detection_does_not_depend_on_row_order():
+def test_colour_detection_does_not_depend_on_row_order():
     """The old probe sampled the first 100 values, so this answered by position."""
-    from trackcell.pl.plot import _is_hex_color_series
+    from trackcell.pl.plot import _is_color_column
 
     good = ["#ff0000"] * 100
     for bad_at in (0, 99, 100, 150):
         values = good + ["#00ff00"] * 80
         values[bad_at] = "not-a-color"
-        assert not _is_hex_color_series(pd.Series(values)), f"missed at {bad_at}"
-    assert _is_hex_color_series(pd.Series(good))
+        assert not _is_color_column(pd.Series(values)), f"missed at {bad_at}"
+    assert _is_color_column(pd.Series(good))
 
 
-def test_hex_detection_accepts_short_and_alpha_forms():
-    from trackcell.pl.plot import _is_hex_color_series
+def test_colour_detection_accepts_short_and_alpha_hex_forms():
+    from trackcell.pl.plot import _is_color_column
 
     for value in ("#fff", "#ffff", "#ffffff", "#ffffffff"):
-        assert _is_hex_color_series(pd.Series([value] * 3)), value
+        assert _is_color_column(pd.Series([value] * 3)), value
 
 
 def test_rendered_facecolors_are_the_blends_not_the_categorical_palette():

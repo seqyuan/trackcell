@@ -188,6 +188,35 @@
 
 ### C-1 上帝函数
 
+> **状态（0.6.0，未发布）：部分完成。**
+>
+> **前置条件①已满足，且不需要 5 h**：实测 `pl/plot.py` 覆盖率是 **68%**，不是本条写的 46%
+> ——那个数字在这几轮补测试后已过期。所以「先花 4-6 h 抬到 60%」这一步是多余的。
+>
+> 已完成：
+> - 死代码清理两处。`_draw_background_only` **确认不可复用**：它调
+>   `invert_yaxis()`，而活跃代码有注释明确说明故意不调（`origin='upper'` +
+>   `set_ylim(h,0)` 已是图像坐标，再 invert 会双重翻转）。它是修过 bug 之后遗留的
+>   旧版本，复用会静默改变渲染结果。`_is_hex_color_series` 在两个判定统一后已无生产调用。
+> - 抽出 `_finish_background_panel` / `_finish_panel_axes` 两个阶段：
+>   `spatial_cell` 884 → 837 行，`plot.py` 覆盖率 68% → 71%。
+>
+> **方法（值得记录）**：拆分前先写 `scripts/render_snapshots.py`，对 15 个场景记录
+> 真正被画出来的东西（collection 数、facecolor、集合级 alpha、edgecolor、linewidth、
+> zorder、path 数、轴范围、标签、图例、图片 alpha）。护栏本身也验证过：注入
+> `alpha 0.8 → 0.79` 后 12/15 场景报差异才敢用。基线取自拆分前代码，对比结果
+> **15/15 完全一致**。
+>
+> 过程中修掉护栏自身的两个缺陷：① `get_facecolor()` 不含集合级 alpha，最初的指纹
+> 漏掉了 alpha 变化；② `spines_visible` 是误导字段——`frameon=False` 走
+> `ax.axis("off")`，各 spine 的 `get_visible()` 仍为真，该字段会对不可见的框架报 True，
+> 已改为 `axis_on`。
+>
+> **未完成**：每面板核心（选细胞 / 几何准备 / 配色 / 绘制 fill+edges / legend）的拆分。
+> 这些阶段通过约 20 个局部变量相互依赖，是本条里风险最高的一半，需要单独的会话。
+> 下一步建议：先抽出「选细胞」与「几何准备」两段纯函数（输入 adata+mask → 输出
+> GeoDataFrame），再用同一套快照验证；`_draw_fill`/`_draw_edges` 放到最后。
+
 | 项 | 内容 |
 |---|---|
 | **现状** | `pl/plot.py:734 spatial_cell`：**834 行、27 个参数、约 126 个分支节点**；`pl/plot.py:1557 spatial_squarebin`：217 行 / 28 参数；`tl/spatial_cluster.py:1017 spatial_cluster`：46 参数。`pl/plot.py` 文件本身 2450 行。报告还指出 `_draw_background_only` 定义后从未被调用、`_create_axes` 有不可达分支、`spatial_cell` 把 5 个现成 helper 全部内联重写了一遍。 |
