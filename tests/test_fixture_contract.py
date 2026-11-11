@@ -52,44 +52,116 @@ def test_fixture_contract():
     assert not failures, "fixture contract drifted:\n  - " + "\n  - ".join(failures)
 
 
+def _snapshot(root: Path) -> dict[str, tuple[str, object]]:
+    """Map relative path to a *content* fingerprint.
+
+    Bytes are only used where the serializer is genuinely stable. Parquet is
+    not: pyarrow's writer changes its byte layout between versions, so hashing
+    the file turns this test into an assertion about pyarrow rather than about
+    the fixtures. The first CI run failed exactly that way — ``hd_bin_tiny`` and
+    ``xenium_tiny`` are the two bundles containing ``.parquet``, and they were
+    the two reported as stale while the parquet-free bundle passed.
+
+    HDF5 and PNG get the same treatment for the same reason: their encoders are
+    versioned too, so their bytes are not a property of this repository.
+    """
+    import hashlib
+
+    import h5py
+    import imageio.v3 as iio
+    import numpy as np
+    import pandas as pd
+
+    snapshot: dict[str, tuple[str, object]] = {}
+    for path in sorted(root.rglob("*")):
+        if not path.is_file():
+            continue
+        rel = str(path.relative_to(root))
+
+        if path.suffix == ".parquet":
+            snapshot[rel] = ("frame", pd.read_parquet(path))
+        elif path.suffix == ".png":
+            snapshot[rel] = ("image", np.asarray(iio.imread(path)))
+        elif path.suffix == ".h5":
+            datasets: dict[str, np.ndarray] = {}
+
+            def collect(name, obj):
+                if isinstance(obj, h5py.Dataset):
+                    datasets[name] = obj[()]
+
+            with h5py.File(path, "r") as handle:
+                handle.visititems(collect)
+            snapshot[rel] = ("hdf5", datasets)
+        else:
+            snapshot[rel] = ("bytes", hashlib.sha256(path.read_bytes()).hexdigest())
+    return snapshot
+
+
+def _assert_same_fixture(
+    name: str,
+    compare: dict[str, tuple[str, object]],
+    reference: dict[str, tuple[str, object]],
+) -> None:
+    """Compare two snapshots and report the first meaningful difference."""
+    import numpy as np
+    import pandas as pd
+
+    assert set(compare) == set(reference), (
+        f"{name}: file set changed; only in one side: "
+        f"{sorted(set(compare) ^ set(reference))}"
+    )
+    for rel in sorted(compare):
+        kind_c, value_c = compare[rel]
+        kind_r, value_r = reference[rel]
+        assert kind_c == kind_r, f"{name}/{rel}: fingerprint kind {kind_c} != {kind_r}"
+
+        if kind_c == "bytes":
+            assert value_c == value_r, f"{name}/{rel}: file bytes differ"
+        elif kind_c == "frame":
+            # ``check_dtype=False``: the contract is the data, not the storage
+            # width pyarrow happened to choose.
+            pd.testing.assert_frame_equal(value_c, value_r, check_dtype=False)
+        elif kind_c == "image":
+            assert np.array_equal(value_c, value_r), f"{name}/{rel}: pixels differ"
+        else:
+            assert set(value_c) == set(
+                value_r
+            ), f"{name}/{rel}: HDF5 dataset set differs"
+            for key in value_c:
+                assert np.array_equal(
+                    value_c[key], value_r[key]
+                ), f"{name}/{rel}: HDF5 dataset {key!r} differs"
+
+
 def test_fixture_builders_are_deterministic(tmp_path, monkeypatch):
-    """Rebuilding must reproduce byte-identical files.
+    """Rebuilding must reproduce identical *content*.
 
     Without this, ``tests/data`` becomes a set of unreviewable binary blobs: a
     regeneration would produce a diff nobody can audit, and the committed copy
     would drift from what the script actually emits.
     """
-    import hashlib
-
     make_fixtures = _load_make_fixtures()
     monkeypatch.setattr(make_fixtures, "DATA", tmp_path)
 
-    def digest(root: Path) -> dict[str, str]:
-        return {
-            str(p.relative_to(root)): hashlib.sha256(p.read_bytes()).hexdigest()
-            for p in sorted(root.rglob("*"))
-            if p.is_file()
-        }
-
-    first: dict[str, dict[str, str]] = {}
+    first: dict[str, dict[str, tuple[str, object]]] = {}
     for name, builder in make_fixtures.BUILDERS.items():
         builder(tmp_path / name)
-        first[name] = digest(tmp_path / name)
+        first[name] = _snapshot(tmp_path / name)
 
     for name, builder in make_fixtures.BUILDERS.items():
         builder(tmp_path / name)
-        assert (
-            digest(tmp_path / name) == first[name]
-        ), f"{name} is not reproducible: rebuilding changed file contents"
+        _assert_same_fixture(
+            f"{name} (rebuild)", _snapshot(tmp_path / name), first[name]
+        )
 
-    # And the committed copy must match what the script produces.
-    committed = {
-        name: digest(FIXTURE_ROOT / name)
-        for name in make_fixtures.BUILDERS
-        if (FIXTURE_ROOT / name).exists()
-    }
-    stale = [name for name in committed if committed[name] != first[name]]
-    assert not stale, (
-        "tests/data is out of date with scripts/make_fixtures.py for: "
-        f"{stale}. Re-run: python scripts/make_fixtures.py"
-    )
+    # The committed copy must match what the script produces today. This is the
+    # assertion that catches a stale fixture after a reader change.
+    for name in make_fixtures.BUILDERS:
+        committed_dir = FIXTURE_ROOT / name
+        if not committed_dir.exists():
+            continue
+        _assert_same_fixture(
+            f"{name} (committed vs regenerated)",
+            _snapshot(committed_dir),
+            first[name],
+        )

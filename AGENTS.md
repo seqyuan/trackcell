@@ -85,9 +85,11 @@ python scripts/make_fixtures.py --check
 **规则：**
 
 - **不要手改 `tests/data/` 下的文件。** 改 `scripts/make_fixtures.py`，重建，两个一起提交。
-- 生成是**逐字节可复现**的（固定 seed，PNG 也一致）。
-  `tests/test_fixture_contract.py` 会同时校验「重建结果稳定」和「已提交副本与脚本产出一致」，
-  任一不满足即失败。
+- 生成是**逐内容可复现**的（固定 seed），但**不逐字节**：pyarrow / HDF5 / libpng
+  的编码跨版本会变。`tests/test_fixture_contract.py` 按内容比较（parquet 当 dataframe、
+  PNG 当像素、HDF5 当 dataset），同时校验「重建稳定」和「已提交副本与脚本产出一致」。
+- 换 pyarrow 版本重新生成会在 parquet 上产生无意义的二进制 diff。
+  **只在 builder 本身改动时才重跑脚本。**
 - 读取语义变更（比如某个 key 从 `uns` 挪到 `obsm`）会让 `--check` 失败——这是**故意的**，
   它就是在捕捉 reader 与 fixture 之间的漂移。
 - 总量保持在 500 KB 以内。PNG 是主要开销，底图用平滑上采样而非逐像素噪声。

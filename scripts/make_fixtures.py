@@ -10,8 +10,15 @@ total) and shaped like real platform output, so every reader, subsampler,
 distance function and polygon plotter can be exercised in seconds.
 
 Everything is deterministically generated from a fixed seed, so re-running this
-script must reproduce byte-identical files (PNG included — verified by hashing
-the tree before and after a rebuild).
+script reproduces identical *content*. It does not reproduce identical *bytes*,
+and should not be expected to: pyarrow, HDF5 and libpng all change their output
+encoding between versions. Pinning any of them to keep a hash stable would make
+the fixture an assertion about that library instead of about trackcell.
+
+Practical consequence: regenerating with a different pyarrow version will show
+binary diffs in ``tests/data/**/*.parquet`` even though nothing meaningful
+changed. **Only re-run this script when the builders themselves change** — there
+is no reason to regenerate otherwise.
 
 Why not reuse ``tests/conftest.py``'s writers?
 ----------------------------------------------
