@@ -1,5 +1,36 @@
 Changelog
 
+Version 0.5.0 (unreleased)
+----------------------------
+
+**Breaking** — the two module paths below are gone. Neither was ever part of the
+documented API, but both were reachable in 0.4.x, so this is called out.
+
+* ``trackcell/tl/sctransform.py`` → ``trackcell/tl/_sct_entry.py``
+* ``trackcell/io/read_atera.py`` → ``trackcell/io/_atera.py``
+
+  Both files defined a function with the same name as the module. Binding that
+  function in the package ``__init__`` overwrote the submodule attribute, so
+  ``import trackcell.tl.sctransform as m`` returned a **function** rather than the
+  module, while ``sys.modules`` held the module. ``inspect``, ``mock.patch`` and
+  any ``import a.b as c`` therefore acted on a different object than requested,
+  and the resulting ``AttributeError`` pointed nowhere near the cause.
+
+  The public API is unchanged: ``tcl.tl.sctransform(...)`` and
+  ``tcl.io.read_atera(...)`` are still callable functions, and
+  ``inspect.getsource`` on them still returns real source. What changes is that
+  ``import trackcell.tl.sctransform`` and
+  ``from trackcell.tl.sctransform import sctransform`` now raise
+  ``ModuleNotFoundError`` — a loud failure instead of a silently wrong object.
+
+  Migration: import from the package, not the module path.
+  ``from trackcell.tl import sctransform`` / ``from trackcell.io import read_atera``.
+  Private helpers move with the file (``from trackcell.io._atera import _subset_cells``).
+
+  A `sys.modules` alias was considered and rejected: ``import a.b as c`` prefers the
+  parent-package attribute, which is the function, so an alias would leave the bug
+  intact. No compatibility shim is provided for the same reason.
+
 Version 0.4.9
 -------------
 

@@ -7,7 +7,7 @@ import pandas as pd
 import pytest
 from anndata import AnnData
 
-from trackcell.io.read_atera import _attach_cell_groups
+from trackcell.io._atera import _attach_cell_groups
 
 
 def _adata(barcodes):

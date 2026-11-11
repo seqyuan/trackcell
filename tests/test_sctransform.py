@@ -6,7 +6,7 @@ import pytest
 import scipy.sparse as sps
 from anndata import AnnData
 
-from trackcell.tl.sctransform import sctransform
+from trackcell.tl._sct_entry import sctransform
 
 
 def _make_count_adata(

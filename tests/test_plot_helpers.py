@@ -431,7 +431,7 @@ def test_spatial_cell_uses_uns_colors_stored_as_dict():
 
 def test_spatial_cell_color_cell_group_picks_up_atera_palette(tmp_path):
     """End-to-end: Atera's own palette + ``color="cell_group"`` needs no palette=."""
-    from trackcell.io.read_atera import _attach_cell_groups
+    from trackcell.io._atera import _attach_cell_groups
 
     labels = ["Tumour", "Stroma", "Tumour"]
     adata = _categorical_adata(labels)

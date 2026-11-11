@@ -86,7 +86,7 @@ def test_materialize_and_resolve_r_vst_exports(tmp_path: Path):
 )
 def test_patch_r_sct_scale_data():
     from trackcell.benchmark.rpca.data import BATCH_KEY, load_merged_adata_native
-    from trackcell.tl.sctransform import sctransform
+    from trackcell.tl._sct_entry import sctransform
 
     adata = load_merged_adata_native(benchmark_root=RPCA_BENCHMARK_ROOT)
     sctransform(

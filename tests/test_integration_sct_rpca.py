@@ -15,7 +15,7 @@ from trackcell.tl.integration.sample_tree import (
     build_sample_tree,
     count_anchor_similarity,
 )
-from trackcell.tl.sctransform import sctransform
+from trackcell.tl._sct_entry import sctransform
 
 
 def _make_batch_adata(n_cells=(40, 35), n_genes=80, seed=0) -> AnnData:

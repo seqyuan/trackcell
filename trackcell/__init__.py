@@ -51,8 +51,10 @@ Footguns
   Skipping this silently misplaces every polygon downstream.
 * Coordinates are not uniformly metric; pass ``radius_unit='um'`` rather than
   treating a pixel count as a distance.
-* ``tl.sctransform`` and ``io.read_atera`` are functions that shadow same-named
-  modules. Never write ``import trackcell.tl.sctransform as m``.
+* Before 0.5.0, ``tl.sctransform`` and ``io.read_atera`` shadowed same-named
+  modules, so ``import trackcell.tl.sctransform as m`` handed back a *function*.
+  The modules are now ``tl._sct_entry`` and ``io._atera``, and those paths fail
+  loudly. Use ``tcl.tl.sctransform(...)`` or ``from trackcell.tl import sctransform``.
 * Optional features need extras: ``[clustering]``, ``[integration]``, ``[sct]``,
   ``[ml]``, ``[interactive]``.
 

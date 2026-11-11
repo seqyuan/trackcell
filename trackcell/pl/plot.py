@@ -2503,7 +2503,7 @@ def atera_qc_summary(
     -------
     numpy.ndarray of ``matplotlib.axes.Axes``
     """
-    from ..io.read_atera import atera_cell_qc
+    from ..io._atera import atera_cell_qc
 
     if qc is None:
         qc = atera_cell_qc(adata)

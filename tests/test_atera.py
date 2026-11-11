@@ -744,7 +744,7 @@ def test_subset_cells_reindexes_compact_boundaries(official_bundle):
     mask[:2] = True
     # ``tcl.io.read_atera`` is the function, not the module (same shadowing as
     # tl.sctransform), so import the helper from the module path directly.
-    from trackcell.io.read_atera import _subset_cells
+    from trackcell.io._atera import _subset_cells
 
     sub = _subset_cells(adata, mask)
 

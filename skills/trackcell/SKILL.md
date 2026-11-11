@@ -56,8 +56,10 @@ import trackcell as tcl     # 惯例缩写 tcl
 
 ## 已知陷阱
 
-- 0.5.0 之前 `tcl.tl.sctransform` 与 `tcl.io.read_atera` 是**函数**，遮蔽了同名模块。
-  不要写 `import trackcell.tl.sctransform as m`——拿到的是函数。用 `tcl.tl.sctransform(...)`。
+- 0.5.0 起深路径 `trackcell.tl.sctransform` / `trackcell.io.read_atera` **不存在**
+  （模块改名为 `_sct_entry` / `_atera`）。用 `tcl.tl.sctransform(...)`，
+  或 `from trackcell.tl import sctransform`。写 `import trackcell.tl.sctransform as m` 会
+  抛 `ModuleNotFoundError` —— 这是故意的，比 0.4.x 静默给你一个函数要好。
 - `tcl.pl.select_regions` 需要 ipympl：先执行 `%matplotlib widget`，否则控件不响应。
 - `tcl.tl.hd_labeldist` 的 `coordinate_system='auto'` 是启发式，要求可复现就显式传 `'fullres'` 或 `'hires'`。
 

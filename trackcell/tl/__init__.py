@@ -22,7 +22,7 @@ from ._autores import (
     sweep_resolutions,
 )
 from ._spatial_graph import remove_long_links
-from .sctransform import pack_sct_model, sctransform
+from ._sct_entry import pack_sct_model, sctransform
 from .integration import (
     integrate_rpca,
     integrate_sct_rpca,

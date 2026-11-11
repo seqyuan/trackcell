@@ -32,8 +32,26 @@
 | **提案** | 把两个门面模块改名：`tl/sctransform.py` → `tl/_sct_entry.py`，`io/read_atera.py` → `io/_atera.py`。`__init__` 里的函数绑定不变，公开 API 名字（`tcl.tl.sctransform(...)`、`tcl.io.read_atera(...)`）完全不变。 |
 | **破坏性** | **是**。`from trackcell.tl.sctransform import sctransform` 和 `from trackcell.io.read_atera import read_atera` 会失效。这两种写法在 0.4.x 可用，需在 changelog 的 breaking 段点名。 |
 | **需要你决定** | 这两种深路径导入你愿意直接砍掉，还是加一个 0.5.x 过渡期的 `sys.modules` 别名？ |
-| **验收标准** | `import trackcell.tl.sctransform as m; assert inspect.ismodule(m)`；`mock.patch("trackcell.tl.sctransform.vst")` 可用；`tcl.tl.sctransform(...)` 行为不变（现有 24 条 sctransform 测试全绿即证明）。 |
+| **验收标准** | ~~`import trackcell.tl.sctransform as m; assert inspect.ismodule(m)`~~ —— **见下方「实测修正」，此标准不可达**。可达的标准是：`import trackcell.tl.sctransform` 与 `from trackcell.tl.sctransform import sctransform` 抛 `ModuleNotFoundError`（**响亮失败**）；`tcl.tl.sctransform(...)` / `tcl.io.read_atera(...)` 仍是可调用函数且 `inspect.getsource` 可达；`trackcell/tl/_sct_entry.py`、`trackcell/io/_atera.py` 作为模块可正常 import。 |
 | **工时** | 2 h（含改名、改 import、changelog breaking 段） |
+
+#### 实测修正（2026-11，0.5.0 分支上验证）
+
+**1. 原验收标准不可达。** 公开 API 要求 `tcl.tl.sctransform` 是函数，因此该属性永远不可能是模块，`inspect.ismodule(trackcell.tl.sctransform)` 无论改不改名都是 `False`。改名后同名模块直接不存在，`import` 阶段就抛 `ModuleNotFoundError`。
+
+所以 A-1 的真实价值**不是「让它变成模块」，而是「让静默给错对象变成响亮报错」**——两者都对 agent 友好，后者才是可交付的。最小复现（`pkg/sub/mod.py` 定义同名函数 `mod`）：
+
+| 状态 | `pkg.sub.mod` 属性 | `import pkg.sub.mod as m` | `from pkg.sub.mod import mod` |
+|---|---|---|---|
+| 改名前 | `function` | **function（静默给错）** | OK |
+| 改名后 | `function` | `ModuleNotFoundError` | `ModuleNotFoundError` |
+| 让模块可调用（`__class__` 改成 `ModuleType` 子类） | 模块且可调用 | 模块 ✓ | OK |
+
+**2. 「可调用模块」方案已否决。** 它确实能让 `inspect.ismodule` 为真、`mock.patch("…sctransform.vst")` 可用、`signature()` 正确，但 `pickle.dumps` 抛 `TypeError: cannot pickle '_CallableModule' object`。而 `tl/sctransform.py` 自己就用 joblib `Parallel`，把公开函数变成不可 pickle 的对象是真实回归。不值得为满足一条写错的验收标准引入这种魔法。
+
+**3. `sys.modules` 过渡别名已否决。** `import a.b as c` 解析时**优先取父包属性**（属性存在就用属性，取不到才回落 `sys.modules`）。父包属性是函数，所以加别名之后 `import trackcell.tl.sctransform as m` 照旧拿到函数——**别名修不了这个 bug**，只会让旧写法继续悄悄生效。因此硬切：不留 shim 模块，不留别名。
+
+**4. 改名会漏掉函数内延迟导入。** 第一次跑测试挂的是 `trackcell/pl/plot.py:2506` 的 `from ..io.read_atera import atera_cell_qc`——它不在模块顶层，任何按行 grep 都发现不了。为此加了 `tests/test_module_paths.py`：用 AST 扫 `trackcell/ tests/ scripts/` 下每个文件的真实 import 语句（不 grep 文本，所以 docstring 里的警示文字不误伤），并断言旧路径确实抛 `ModuleNotFoundError`。已注入违规验证过它会失败。
 
 ### A-2 API 边界：`io` 里放 QC，`tl` 里放绘图
 

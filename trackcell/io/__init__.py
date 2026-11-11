@@ -16,7 +16,7 @@ from .convert_annohdcell import (
 )
 from .serialize import flatten_geometries, restore_geometries, save_h5ad
 from .read_sto import read_sto_cellbin, read_sto_bin
-from .read_atera import (
+from ._atera import (
     add_wkt_geometry,
     atera_cell_qc,
     atera_info,

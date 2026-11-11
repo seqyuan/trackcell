@@ -11,7 +11,7 @@ from typing import Literal, Optional, Sequence
 import numpy as np
 from anndata import AnnData
 
-from ..sctransform import sctransform
+from .._sct_entry import sctransform
 from .prep_sct import prep_sct_integration
 from .select_features import select_integration_features
 from .sct_parity import seurat_sct_clip_range

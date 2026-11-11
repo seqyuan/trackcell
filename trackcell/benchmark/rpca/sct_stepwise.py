@@ -26,7 +26,7 @@ from trackcell.tl._sctransform_v2 import resolve_min_variance
 from trackcell.tl.integration.prep_sct import prep_sct_integration
 from trackcell.tl.integration.sct_parity import seurat_sct_clip_range
 from trackcell.tl.integration.select_features import select_integration_features
-from trackcell.tl.sctransform import sctransform
+from trackcell.tl._sct_entry import sctransform
 
 
 def _load_r_batch_sct(
