@@ -438,41 +438,52 @@ def _plot_raw_hex_colors(
     alpha: float = 1.0,
     use_equal_aspect: bool = False,
 ):
-    """Plot polygons with per-cell raw hex colors (from multigene_blend)."""
+    """Plot polygons with per-cell raw hex colors (from multigene_blend).
+
+    One ``PatchCollection`` carries all per-row facecolors. The previous
+    implementation grouped by unique colour and called ``geopandas.plot`` once
+    per group: a typical blend has one colour per cell, so 600 cells meant 600
+    collections (≈49 s) and 5,000 cells effectively never finished. A single
+    collection draws in well under a second at that size.
+    """
     from matplotlib.colors import is_color_like, to_hex
 
-    grouped = temp_gdf.groupby(plot_column, sort=False)
-
-    for group_colour, group in grouped:
+    colors = []
+    for value in temp_gdf[plot_column]:
         # ``tl.multigene_blend`` accepts any matplotlib colour for
         # ``background``, so a legitimate column can mix hex with a name such as
-        # ``white``. Skipping the non-hex groups silently dropped those cells
-        # from the figure; normalise instead.
-        if not (isinstance(group_colour, str) and is_color_like(group_colour)):
-            continue
-        plot_kw = {
-            "ax": ax,
-            "color": to_hex(group_colour),
-            "edgecolor": edgecolor,
-            "linewidth": linewidth,
-            "alpha": alpha,
-        }
-        if use_equal_aspect:
+        # ``white``. Normalise instead of dropping those cells.
+        if isinstance(value, str) and is_color_like(value):
+            colors.append(to_hex(value))
+        else:
+            colors.append("none")
+
+    if not any(colour != "none" for colour in colors):
+        return
+
+    plot_kw = {
+        "ax": ax,
+        "color": colors,
+        "edgecolor": edgecolor,
+        "linewidth": linewidth,
+        "alpha": alpha,
+    }
+    if use_equal_aspect:
+        plot_kw["aspect"] = "equal"
+    try:
+        temp_gdf.plot(**plot_kw)
+    except ValueError as e:
+        if "aspect must be finite and positive" in str(e) and not use_equal_aspect:
             plot_kw["aspect"] = "equal"
-        try:
-            group.plot(**plot_kw)
-        except ValueError as e:
-            if "aspect must be finite and positive" in str(e) and not use_equal_aspect:
-                plot_kw["aspect"] = "equal"
-                try:
-                    group.plot(**plot_kw)
-                except Exception:
-                    logger.warning(
-                        "failed to draw geometry group after aspect fallback",
-                        exc_info=True,
-                    )
-            else:
-                pass
+            try:
+                temp_gdf.plot(**plot_kw)
+            except Exception:
+                logger.warning(
+                    "failed to draw geometry group after aspect fallback",
+                    exc_info=True,
+                )
+        else:
+            pass
 
 
 def _resolve_library_id(adata, library_id: Optional[str] = None) -> str:
@@ -1689,7 +1700,7 @@ def spatial_cell(
 
             if raw_color:
                 # ── Raw hex color mode (multi-gene blend) ──
-                # Group by unique hex colors and plot each group
+                # One PatchCollection carries every per-cell colour.
                 _plot_raw_hex_colors(
                     ax=current_ax,
                     temp_gdf=temp_gdf,
@@ -2297,7 +2308,7 @@ def multigene_blend(
         **kwargs,
     )
 
-    params = adata.uns.get(f"{key}_params") or {}
+    params = _as_uns_mapping(adata.uns.get(f"{key}_params")) or {}
     genes = list(params.get("genes") or [])
     colors = list(params.get("colors") or [])
 

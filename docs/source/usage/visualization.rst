@@ -282,6 +282,14 @@ is normalized (percentile-clipped to [0, 1]), then blended as:
 
 Zero-expression cells get the ``background`` color (default ``#e0e0e0``).
 
+The weights sum to 1, so the colour encodes **relative composition**, not
+expression level: a cell with one UMI of gene A and a cell with 1,000 UMIs of
+gene A get the same colour when no other gene is expressed. Use
+``mode='facet'`` or a single-gene plot when intensity matters. Genes expressed
+in fewer cells than the upper percentile tail (e.g. 3 cells in 1,000 at
+``vmax_percentile=99``) fall back to the observed maximum instead of being
+dropped.
+
 Mode 2: Faceted Subplots (``mode='facet'``)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 

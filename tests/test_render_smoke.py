@@ -82,9 +82,16 @@ def test_background_only_panel_has_no_collections(fingerprints):
     assert panel["xticks_shown"] is True
 
 
-def test_raw_hex_column_gets_one_collection_per_colour(fingerprints):
+def test_raw_hex_column_uses_one_collection_with_many_colours(fingerprints):
+    """Raw per-cell colours must not be collapsed into a categorical palette.
+
+    One collection carries all facecolors. Grouping by unique colour made a
+    typical blend (one colour per cell) create one collection per cell: 600
+    cells took ~49 s and 5,000 cells effectively never finished.
+    """
     panel = fingerprints["raw_hex"][0]
-    assert panel["collections"] > 3, "raw hex collapsed into a categorical palette"
+    assert panel["collections"] == 1
+    assert panel["unique_facecolors"] > 3
 
 
 def test_two_colour_request_produces_two_panels(fingerprints):

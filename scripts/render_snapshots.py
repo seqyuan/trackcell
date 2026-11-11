@@ -48,12 +48,15 @@ def _round(values, digits: int = 4):
 def _fingerprint_axes(ax) -> dict:
     """Everything a reader would notice about the rendered panel."""
     collection_faces = []
+    collection_face_counts = []
     paths = 0
     collection_style = []
     for coll in ax.collections:
         try:
             face = np.atleast_2d(coll.get_facecolor())
-            collection_faces.append(_round(np.unique(np.round(face, 4), axis=0)))
+            unique_faces = np.unique(np.round(face, 4), axis=0)
+            collection_faces.append(_round(unique_faces))
+            collection_face_counts.append(int(len(unique_faces)))
         except Exception:  # noqa: BLE001 - a collection may have no colours
             pass
         try:
@@ -96,6 +99,7 @@ def _fingerprint_axes(ax) -> dict:
     # ``axis_on`` below.
     return {
         "collections": len(ax.collections),
+        "unique_facecolors": sum(collection_face_counts),
         "paths": paths,
         "faces_hash": hashlib.sha256(
             json.dumps(collection_faces, sort_keys=True).encode()
